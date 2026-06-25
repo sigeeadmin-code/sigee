@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard'
 import Planteles from './pages/Planteles'
 import Docentes from './pages/Docentes'
 import ModuloEnConstruccion from './pages/ModuloEnConstruccion'
+import Usuarios from './pages/Usuarios'
 
 const TODOS = ['super_admin','admin_plantel','docente','alumno','padre']
 const ADMIN = ['super_admin','admin_plantel']
@@ -42,7 +43,7 @@ export default function App() {
             <Route path="horarios" element={<Modulo roles={TODOS} titulo="Horarios" icono="ti-calendar-time" desc="Grilla semanal por curso. Tabla: horarios." />} />
             <Route path="periodos" element={<Modulo roles={ADMIN} titulo="Períodos Académicos" icono="ti-calendar-event" desc="Apertura y cierre de períodos. Tabla: periodos_academicos." />} />
             <Route path="asistencia" element={<Modulo roles={DOC_UP} titulo="Asistencia" icono="ti-checklist" desc="Control diario con notificación WhatsApp. Tabla: asistencia (presente, justificada, observacion)." />} />
-            <Route path="usuarios" element={<Modulo roles={SUPER} titulo="Usuarios" icono="ti-user-cog" desc="Gestión de usuarios. Roles: super_admin, admin_plantel, docente, alumno, padre. Tabla: profiles." />} />
+            <Route path="usuarios" element={<ProtectedRoute roles={SUPER}><Usuarios /></ProtectedRoute>} />
             <Route path="reportes" element={<Modulo roles={ADMIN} titulo="Reportes" icono="ti-report" desc="Planteles por provincia, nómina docente, calificaciones y asistencia en tiempo real." />} />
             <Route path="configuracion" element={<Modulo roles={SUPER} titulo="Configuración" icono="ti-settings" desc="Configuración general: año lectivo, nota mínima, planteles activos." />} />
           </Route>
