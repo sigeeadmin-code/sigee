@@ -5,12 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SIGEE — Sistema de Gestión Educativa Ecuatoriana</title>
     <meta name="description" content="Sistema de Gestión Educativa Ecuatoriana — SIGEE" />
+        <!-- GitHub Pages SPA redirect -->
+    <script>
+      (function(l) {
+        if (l.search[1] === '/' ) {
+          var decoded = l.search.slice(1).split('&').map(function(s) { 
+            return s.replace(/~and~/g, '&')
+          }).join('?');
+          window.history.replaceState(null, null, l.pathname.slice(0, -1) + decoded + l.hash);
+        }
+      }(window.location))
+    </script>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='16' fill='%230F2B5B'/><text y='.9em' font-size='70' x='12'>🎓</text></svg>" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" />
-    <script type="module" crossorigin src="/assets/index-Crmg9Vm1.js"></script>
+    <script type="module" crossorigin src="/sigee/assets/index-Crmg9Vm1.js"></script>
   </head>
   <body>
     <div id="root"></div>
