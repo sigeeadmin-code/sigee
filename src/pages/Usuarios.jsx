@@ -35,6 +35,7 @@ export default function Usuarios() {
   const [rolFilter, setRolFilter] = useState('')
   const [selectedRol, setSelectedRol] = useState('docente')
   const [showPass, setShowPass] = useState(false)
+  const [editingId, setEditingId] = useState(null)
   const [form, setForm] = useState({ nombre:'', email:'', password:'', cedula:'', telefono:'', estado:'activo' })
 
   useEffect(()=>{ loadUsers() },[])
@@ -84,6 +85,39 @@ export default function Usuarios() {
       showMsg('error', e.message, 'form')
     }
     setSaving(false)
+  }
+
+  const handleEdit = (u) => {
+    setEditingId(u.id)
+    setSelectedRol(u.rol)
+    setForm({ nombre: u.nombre_completo||'', email: u.email||'', password:'', cedula: u.cedula||'', telefono: u.telefono||'', estado: u.estado||'activo' })
+    setTab('nuevo')
+    setFormAlert(null)
+  }
+
+  const handleUpdate = async () => {
+    if (!form.nombre.trim()) return showMsg('error','Nombre requerido','form')
+    const updates = { nombre_completo: form.nombre.trim(), rol: selectedRol, estado: form.estado, cedula: form.cedula||null, telefono: form.telefono||null }
+    const { error } = await supabase.from('profiles').update(updates).eq('id', editingId)
+    if (error) return showMsg('error', error.message, 'form')
+    // Cambiar contraseña si se ingresó una nueva
+    if (form.password && form.password.length >= 8) {
+      const { error: e2 } = await supabase.rpc('reset_user_password', { p_user_id: editingId, p_password: form.password })
+      if (e2) return showMsg('error', 'Perfil actualizado pero error al cambiar contraseña: '+e2.message, 'form')
+    }
+    showMsg('ok', `✅ Usuario "${form.nombre}" actualizado correctamente`, 'form')
+    setEditingId(null)
+    setForm({ nombre:'', email:'', password:'', cedula:'', telefono:'', estado:'activo' })
+    await loadUsers()
+    setTimeout(()=>setTab('lista'), 1500)
+  }
+
+  const handleDelete = async (u) => {
+    if (!window.confirm(`¿Eliminar el usuario "${u.nombre_completo}" (${u.email})? Esta acción no se puede deshacer.`)) return
+    const { error } = await supabase.from('profiles').delete().eq('id', u.id)
+    if (error) return showMsg('error', error.message)
+    showMsg('ok', `Usuario "${u.nombre_completo}" eliminado`)
+    await loadUsers()
   }
 
   const toggleStatus = async (id, current) => {
@@ -206,9 +240,17 @@ export default function Usuarios() {
                       </td>
                       <td style={{padding:'9px 12px'}}>
                         <div style={{display:'flex',gap:4}}>
+                          <button onClick={()=>handleEdit(u)} title="Editar usuario"
+                            style={{width:26,height:26,borderRadius:5,border:'0.5px solid #E5E7EB',background:'#F9FAFB',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:'#0F2B5B'}}>
+                            <i className="ti ti-edit" style={{fontSize:12}}/>
+                          </button>
                           <button onClick={()=>toggleStatus(u.id,u.estado)} title={u.estado==='activo'?'Suspender':'Activar'}
                             style={{width:26,height:26,borderRadius:5,border:'0.5px solid #E5E7EB',background:'#F9FAFB',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:'#6B7280'}}>
                             <i className={`ti ti-${u.estado==='activo'?'ban':'circle-check'}`} style={{fontSize:12}}/>
+                          </button>
+                          <button onClick={()=>handleDelete(u)} title="Eliminar usuario"
+                            style={{width:26,height:26,borderRadius:5,border:'0.5px solid rgba(220,38,38,.2)',background:'rgba(220,38,38,.04)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:'#DC2626'}}>
+                            <i className="ti ti-trash" style={{fontSize:12}}/>
                           </button>
                         </div>
                       </td>
@@ -226,7 +268,7 @@ export default function Usuarios() {
         <div style={{background:'#fff',border:'0.5px solid #E5E7EB',borderRadius:12,overflow:'hidden'}}>
           <div style={{padding:'12px 16px',borderBottom:'0.5px solid #F3F4F6'}}>
             <span style={{fontSize:12,fontWeight:600,color:'#0F2B5B',display:'flex',alignItems:'center',gap:5}}>
-              <i className="ti ti-user-plus"/>Crear nuevo usuario
+              <i className={`ti ti-${editingId?'edit':'user-plus'}`}/>{editingId?'Editar usuario':'Crear nuevo usuario'}
             </span>
           </div>
           <div style={{padding:18}}>
@@ -276,13 +318,13 @@ export default function Usuarios() {
               ))}
               <div style={{gridColumn:'span 2'}}>
                 <div style={{fontSize:10,fontWeight:600,color:'#9CA3AF',textTransform:'uppercase',letterSpacing:'.4px',marginBottom:4}}>Email <span style={{color:'#DC2626'}}>*</span></div>
-                <input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="correo@institución.edu.ec"
+                <input type="email" value={form.email} onChange={e=>!editingId&&setForm({...form,email:e.target.value})} placeholder="correo@institución.edu.ec" readOnly={!!editingId}
                   style={{width:'100%',height:34,border:'0.5px solid #E5E7EB',borderRadius:7,padding:'0 10px',fontSize:12,background:'#F9FAFB',boxSizing:'border-box'}}/>
               </div>
               <div>
                 <div style={{fontSize:10,fontWeight:600,color:'#9CA3AF',textTransform:'uppercase',letterSpacing:'.4px',marginBottom:4}}>Contraseña <span style={{color:'#DC2626'}}>*</span></div>
                 <div style={{position:'relative'}}>
-                  <input type={showPass?'text':'password'} value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Mínimo 8 caracteres"
+                  <input type={showPass?'text':'password'} value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder={editingId?"Nueva contraseña (dejar vacío para no cambiar)":"Mínimo 8 caracteres"}
                     style={{width:'100%',height:34,border:'0.5px solid #E5E7EB',borderRadius:7,padding:'0 32px 0 10px',fontSize:12,background:'#F9FAFB',boxSizing:'border-box'}}/>
                   <button type="button" onClick={()=>setShowPass(!showPass)}
                     style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',border:'none',background:'none',cursor:'pointer',color:'#9CA3AF'}}>
@@ -308,10 +350,10 @@ export default function Usuarios() {
             <Alert data={formAlert}/>
 
             <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-              <button onClick={()=>setTab('lista')} style={{height:34,padding:'0 16px',border:'0.5px solid #E5E7EB',borderRadius:7,background:'#fff',fontSize:12,cursor:'pointer'}}>Cancelar</button>
-              <button onClick={handleCreate} disabled={saving}
+              <button onClick={()=>{setTab('lista');setEditingId(null);setForm({nombre:'',email:'',password:'',cedula:'',telefono:'',estado:'activo'})}} style={{height:34,padding:'0 16px',border:'0.5px solid #E5E7EB',borderRadius:7,background:'#fff',fontSize:12,cursor:'pointer'}}>{editingId?'Cancelar edición':'Cancelar'}</button>
+              <button onClick={editingId?handleUpdate:handleCreate} disabled={saving}
                 style={{height:34,padding:'0 18px',background:saving?'#6B7280':'#0F2B5B',border:'none',borderRadius:7,color:'#fff',fontSize:12,fontWeight:500,cursor:saving?'not-allowed':'pointer',display:'flex',alignItems:'center',gap:5}}>
-                <i className={`ti ti-${saving?'loader':'user-plus'}`} style={{fontSize:13}}/>{saving?'Creando…':'Crear usuario'}
+                <i className={`ti ti-${saving?'loader':(editingId?'device-floppy':'user-plus')}`} style={{fontSize:13}}/>{saving?(editingId?'Actualizando…':'Creando…'):(editingId?'Guardar cambios':'Crear usuario')}
               </button>
             </div>
           </div>
