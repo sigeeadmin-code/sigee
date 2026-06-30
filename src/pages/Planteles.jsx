@@ -7,7 +7,7 @@ const SC = { Fiscal:'#2563eb', Fiscomisional:'#7c3aed', Particular:'#ea580c', Mu
 
 const FIELDS = [
   {g:'Identificación', f:[
-    ['amie','Código AMIE',1],['nombre','Nombre del plantel',2],
+    ['codigo_amie','Código AMIE',1],['nombre','Nombre del plantel',2],
     ['provincia','Provincia',1],['canton','Cantón',1],['parroquia','Parroquia',1],
   ]},
   {g:'Ubicación administrativa', f:[
@@ -62,13 +62,13 @@ function FichaPlantel({ plantel, onClose, onEdit, hermanos }) {
       <div style={{background:'#fff',borderRadius:16,maxWidth:880,width:'100%',maxHeight:'90vh',overflowY:'auto',boxShadow:'0 24px 64px rgba(0,0,0,.3)'}} onClick={e=>e.stopPropagation()}>
         {/* HERO */}
         <div style={{background:'linear-gradient(135deg,#0F2B5B,#1e3a8a)',borderRadius:'16px 16px 0 0',padding:28,position:'relative',overflow:'hidden',color:'#fff'}}>
-          <div style={{position:'absolute',top:-10,right:20,fontSize:120,fontWeight:900,opacity:.06,fontFamily:'monospace',pointerEvents:'none'}}>{r.amie}</div>
+          <div style={{position:'absolute',top:-10,right:20,fontSize:120,fontWeight:900,opacity:.06,fontFamily:'monospace',pointerEvents:'none'}}>{r.codigo_amie}</div>
           <button onClick={onClose} style={{position:'absolute',top:14,right:14,width:30,height:30,borderRadius:8,border:'none',background:'rgba(255,255,255,.12)',color:'#fff',cursor:'pointer',fontSize:16,zIndex:2}}>✕</button>
           <div style={{position:'relative',display:'flex',gap:18,alignItems:'flex-start',flexWrap:'wrap'}}>
             <div style={{flexShrink:0,width:72,height:72,borderRadius:12,background:'rgba(255,255,255,.1)',border:'2px dashed rgba(255,255,255,.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:30}}>🏫</div>
             <div style={{flex:1,minWidth:200}}>
               <div style={{fontSize:10,letterSpacing:'.14em',textTransform:'uppercase',opacity:.5,marginBottom:6}}>SIGEE · Ficha de Plantel</div>
-              <div style={{fontSize:34,fontWeight:900,color:'#93c5fd',fontFamily:'monospace',lineHeight:1}}>{r.amie}</div>
+              <div style={{fontSize:34,fontWeight:900,color:'#93c5fd',fontFamily:'monospace',lineHeight:1}}>{r.codigo_amie}</div>
               <div style={{fontSize:18,fontWeight:700,marginTop:8,lineHeight:1.3}}>{r.nombre}</div>
               <div style={{marginTop:10,display:'flex',gap:7,flexWrap:'wrap'}}>
                 <span style={{background:'rgba(255,255,255,.1)',borderRadius:20,padding:'4px 11px',fontSize:11,color:'rgba(255,255,255,.8)'}}>📍 {r.parroquia}, {r.canton}</span>
@@ -136,7 +136,7 @@ function FichaPlantel({ plantel, onClose, onEdit, hermanos }) {
             <div style={{marginBottom:16}}>
               <div style={{fontSize:11,fontWeight:600,color:'#0F2B5B',marginBottom:8}}>Otros planteles en {r.canton}</div>
               <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                {hermanos.map(h=><AmieChip key={h.id} amie={h.amie} onClick={()=>{}}/>)}
+                {hermanos.map(h=><AmieChip key={h.id} amie={h.codigo_amie} onClick={()=>{}}/>)}
               </div>
             </div>
           )}
@@ -181,7 +181,7 @@ function FieldInput(props) {
   } else {
     inputEl = React.createElement('input', {
       type: isNumber ? 'number' : 'text', value: val, onChange: handleChange,
-      style: { width:'100%', height:32, border:'0.5px solid #E5E7EB', borderRadius:6, padding:'0 8px', fontSize:12, background:'#F9FAFB', boxSizing:'border-box', fontFamily: id==='amie' ? 'monospace' : 'inherit' }
+      style: { width:'100%', height:32, border:'0.5px solid #E5E7EB', borderRadius:6, padding:'0 8px', fontSize:12, background:'#F9FAFB', boxSizing:'border-box', fontFamily: id==='codigo_amie' ? 'monospace' : 'inherit' }
     })
   }
 
@@ -218,7 +218,7 @@ function EditModal({ plantel, onClose, onSaved }) {
   const [err, setErr] = useState('')
 
   const handleSave = async () => {
-    const amieVal = (form.amie || '').trim()
+    const amieVal = (form.codigo_amie || '').trim()
     const nombreVal = (form.nombre || '').trim()
     if (!amieVal || !nombreVal) { setErr('Código AMIE y nombre son obligatorios'); return }
     setSaving(true)
@@ -239,7 +239,7 @@ function EditModal({ plantel, onClose, onSaved }) {
         <div style={{padding:'16px 20px',borderBottom:'0.5px solid #F3F4F6',display:'flex',alignItems:'center',justifyContent:'space-between',position:'sticky',top:0,background:'#fff',zIndex:1}}>
           <span style={{fontSize:14,fontWeight:700,color:'#0F2B5B'}}>
             <i className="ti ti-edit" style={{marginRight:6}}></i>
-            Editar Plantel - {plantel.amie}
+            Editar Plantel - {plantel.codigo_amie}
           </span>
           <button onClick={onClose} style={{border:'none',background:'none',fontSize:18,cursor:'pointer',color:'#9CA3AF'}}>X</button>
         </div>
@@ -284,7 +284,7 @@ export default function Planteles() {
 
   const filtered = data.filter(p =>
     !search || p.nombre?.toLowerCase().includes(search.toLowerCase()) ||
-    p.amie?.includes(search) || p.provincia?.toLowerCase().includes(search.toLowerCase())
+    p.codigo_amie?.includes(search) || p.provincia?.toLowerCase().includes(search.toLowerCase())
   )
 
   const hermanos = ficha ? data.filter(p => p.canton===ficha.canton && p.id!==ficha.id)
@@ -317,7 +317,7 @@ export default function Planteles() {
                 <tr><td colSpan={6} style={{textAlign:'center',padding:28,color:'#9CA3AF'}}>Cargando desde Supabase…</td></tr>
               ):filtered.map((p,i)=>(
                 <tr key={p.id} style={{borderBottom:'0.5px solid #F9FAFB'}}>
-                  <td style={{padding:'9px 12px'}}><AmieChip amie={p.amie} onClick={()=>setFicha(p)}/></td>
+                  <td style={{padding:'9px 12px'}}><AmieChip amie={p.codigo_amie} onClick={()=>setFicha(p)}/></td>
                   <td style={{padding:'9px 12px',fontWeight:500,maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.nombre}</td>
                   <td style={{padding:'9px 12px',color:'#6B7280'}}>{p.provincia}</td>
                   <td style={{padding:'9px 12px',color:'#6B7280'}}>{p.canton}</td>
