@@ -150,9 +150,13 @@ export default function Usuarios() {
     msg('ok',`Estado → ${ns}`)
   }
 
-  const plantelesFiltered = planteles.filter(p =>
-    !plantelSearch || p.codigo_amie?.includes(plantelSearch) || p.nombre?.toLowerCase().includes(plantelSearch.toLowerCase())
-  ).slice(0,8)
+  const plantelesFiltered = plantelSearch.length >= 1
+    ? planteles.filter(p =>
+        p.codigo_amie?.toLowerCase().includes(plantelSearch.toLowerCase()) ||
+        p.nombre?.toLowerCase().includes(plantelSearch.toLowerCase()) ||
+        p.provincia?.toLowerCase().includes(plantelSearch.toLowerCase())
+      ).slice(0, 12)
+    : planteles.slice(0, 6)
 
   const stats = { total:users.length, activos:users.filter(u=>u.estado==='activo').length, admins:users.filter(u=>['super_admin','admin_plantel'].includes(u.rol)).length, docentes:users.filter(u=>u.rol==='docente').length }
 
@@ -343,13 +347,24 @@ export default function Usuarios() {
                       <i className="ti ti-search" style={{position:'absolute',left:9,top:'50%',transform:'translateY(-50%)',color:'#9CA3AF',fontSize:13}}/>
                       <input value={plantelSearch} onChange={e=>{setPlantelSearch(e.target.value);setShowPlantelDrop(true)}}
                         onFocus={()=>setShowPlantelDrop(true)}
-                        placeholder="Escribe código AMIE o nombre del plantel..."
-                        style={{width:'100%',height:34,border:'0.5px solid #E5E7EB',borderRadius:7,padding:'0 10px 0 30px',fontSize:12,background:'#F9FAFB',boxSizing:'border-box'}}/>
+                        placeholder="Buscar por código AMIE, nombre o provincia..."
+                        style={{width:'100%',height:38,border:`1.5px solid ${showPlantelDrop?'#0F2B5B':'#E5E7EB'}`,borderRadius:7,padding:'0 10px 0 32px',fontSize:12,background:'#fff',boxSizing:'border-box',outline:'none'}}/>
                     </div>
-                    {showPlantelDrop && plantelesFiltered.length>0 && (
-                      <div style={{position:'absolute',left:0,right:0,top:36,background:'#fff',border:'0.5px solid #E5E7EB',borderRadius:8,zIndex:100,boxShadow:'0 4px 12px rgba(0,0,0,.1)',maxHeight:220,overflowY:'auto'}}>
-                        <div style={{padding:'6px 10px',fontSize:10,color:'#9CA3AF',borderBottom:'0.5px solid #F3F4F6'}}>
-                          Mostrando {plantelesFiltered.length} de {planteles.length} planteles
+                    {showPlantelDrop && (
+                      <div style={{position:'absolute',left:0,right:0,top:40,background:'#fff',border:'1px solid #0F2B5B',borderRadius:8,zIndex:200,boxShadow:'0 8px 24px rgba(0,0,0,.12)',maxHeight:280,overflowY:'auto'}}>
+                        <div style={{padding:'7px 12px',fontSize:10,color:'#6B7280',borderBottom:'0.5px solid #F3F4F6',background:'#F9FAFB',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                          <span><strong style={{color:'#0F2B5B'}}>{plantelesFiltered.length}</strong> de {planteles.length} planteles {plantelSearch?'encontrados':'(escribe para filtrar)'}</span>
+                          <span style={{fontFamily:'monospace',fontSize:9,color:'#9CA3AF'}}>709 planteles disponibles</span>
+                        </div>
+                        <div onMouseDown={()=>{setSelectedPlantel(null);setPlantelSearch('');setShowPlantelDrop(false)}}
+                          style={{padding:'9px 12px',cursor:'pointer',borderBottom:'0.5px solid #F9FAFB',display:'flex',alignItems:'center',gap:10,fontSize:12,background:'#FFFBEB'}}
+                          onMouseOver={e=>e.currentTarget.style.background='#FEF3C7'}
+                          onMouseOut={e=>e.currentTarget.style.background='#FFFBEB'}>
+                          <span style={{fontFamily:'monospace',fontSize:11,fontWeight:700,background:'#FEF3C7',color:'#D97706',border:'0.5px solid #FDE68A',borderRadius:5,padding:'2px 7px',flexShrink:0}}>BASE</span>
+                          <div>
+                            <div style={{fontWeight:500,fontSize:12,color:'#D97706'}}>Sin plantel asignado — Docente base</div>
+                            <div style={{fontSize:10,color:'#9CA3AF'}}>El usuario no queda asignado a ningún plantel</div>
+                          </div>
                         </div>
                         {plantelesFiltered.map(p=>(
                           <div key={p.id} onMouseDown={()=>{setSelectedPlantel(p);setPlantelSearch('');setShowPlantelDrop(false)}}
