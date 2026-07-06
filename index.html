@@ -1147,7 +1147,236 @@ document.addEventListener('DOMContentLoaded', function(){
     .catch(function(e){ console.warn('[SIGEE] saveUser edge:', e); });
   };
 
-  console.log('[SIGEE] Sync adapter v7 activo — todos los módulos conectados a Supabase');
+  
+/* ══════════════════════════════════════════════════════
+   SIGEE PATCH v8 — 4 mejoras funcionales
+   ══════════════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', function(){
+
+  /* ─────────────────────────────────────────────────────
+     FIX 1: Desvinculación individual de docente
+     Agrega botón "Desvincular" en la tabla de docentes
+     ───────────────────────────────────────────────────── */
+  window.desvincularDocente = function(id){
+    var d = S.docentes.find(function(x){ return x.id===id; });
+    if(!d) return;
+    if(!confirm('¿Desvincular a '+d.nombre+' del plantel '+d.amie+'?\n\nEl docente pasará a la base sin asignar.')) return;
+    d.desvinculado = true;
+    d.amie_anterior = d.amie;
+    d.plantel_anterior = d.plantel;
+    d.amie = null;
+    d.plantel = '';
+    try{ save(); }catch(e){}
+    /* Sincronizar con Supabase */
+    _supaPATCH('docentes','cedula=eq.'+d.cedula,{amie:null,plantel:null,activo:false})
+      .then(function(){ console.log('[SIGEE] Docente desvinculado en Supabase:', d.cedula); })
+      .catch(function(e){ console.warn('[SIGEE] desvincular Supabase:', e); });
+    try{ renderDoc(); }catch(e){}
+    alert('✅ '+d.nombre+' desvinculado del plantel.');
+  };
+
+  /* ─────────────────────────────────────────────────────
+     FIX 2: Admin plantel — AMIE automático al crear docente
+     Bloquea el campo AMIE y lo asigna automáticamente
+     ───────────────────────────────────────────────────── */
+  var _origOpenNewDocente = window.openNewDocente;
+  window.openNewDocente = function(){
+    if(typeof _origOpenNewDocente==='function') _origOpenNewDocente();
+    /* Si el usuario es admin_plantel, asignar AMIE automáticamente */
+    if(S.me && S.me.role==='admin_plantel' && S.me.amie_id){
+      window._caNewAmie = S.me.amie_id;
+      /* Buscar y bloquear el campo AMIE en el modal */
+      setTimeout(function(){
+        var campos = ['dEAmie','docAmie','newDocAmie','inputAmie'];
+        for(var i=0;i<campos.length;i++){
+          var el = document.getElementById(campos[i]);
+          if(el){
+            el.value = S.me.amie_id;
+            el.readOnly = true;
+            el.style.background = '#f3f4f6';
+            el.style.color = '#6b7280';
+            el.title = 'AMIE asignado automáticamente';
+          }
+        }
+        /* Ocultar selector de AMIE si existe */
+        var selAmie = document.getElementById('dEAmieSelect');
+        if(selAmie){ selAmie.style.display='none'; }
+        console.log('[SIGEE] AMIE fijado automáticamente:', S.me.amie_id);
+      }, 200);
+    }
+  };
+
+  /* Interceptar saveDocente para admin_plantel */
+  var _origSaveDocente2 = window.saveDocente;
+  window.saveDocente = function(){
+    if(S.me && S.me.role==='admin_plantel' && S.me.amie_id){
+      window._caNewAmie = S.me.amie_id;
+    }
+    if(typeof _origSaveDocente2==='function') _origSaveDocente2();
+    /* Sincronizar con Supabase */
+    setTimeout(function(){
+      var cedula = (document.getElementById('dECed')?.value||'').trim();
+      if(!cedula) return;
+      var doc = S.docentes.find(function(d){ return d.cedula===cedula && !d.desvinculado; });
+      if(!doc) return;
+      var payload = {
+        nombre:doc.nombre, cedula:doc.cedula,
+        amie:doc.amie||null, plantel:doc.plantel||null,
+        situacion:doc.situacion, funcion:doc.funcion,
+        especialidad:doc.especialidad, area:doc.area,
+        categoria:doc.categoria||null,
+        rmu:parseFloat(doc.rmu)||0,
+        fecha_ingreso:doc.fecha_ingreso||null, activo:true
+      };
+      _supaGET('docentes','cedula=eq.'+cedula+'&select=id').then(function(rows){
+        if(rows&&rows.length>0) return _supaPATCH('docentes','cedula=eq.'+cedula,payload);
+        else return _supaPOST('docentes',payload);
+      }).then(function(){ console.log('[SIGEE] Docente Supabase OK:', cedula); })
+      .catch(function(e){ console.warn('[SIGEE] saveDocente Supabase:', e); });
+    }, 400);
+  };
+
+  /* ─────────────────────────────────────────────────────
+     FIX 3: 2 recreos configurables en horario
+     ───────────────────────────────────────────────────── */
+  /* Config de recreos por defecto si no existe */
+  if(!S.configHorario) S.configHorario = { recreo1: 2, recreo2: 5 };
+
+  /* Inyectar controles de 2 recreos en el panel de horario */
+  var horarioConfig = document.getElementById('horarioConfig') ||
+                      document.getElementById('sgConfig') ||
+                      document.querySelector('.sg-config');
+  if(horarioConfig){
+    var recreoDiv = document.createElement('div');
+    recreoDiv.id = 'sigeeRecreosConfig';
+    recreoDiv.style.cssText = 'display:flex;gap:16px;align-items:center;padding:10px 0;border-top:1px solid var(--lineD);margin-top:8px;flex-wrap:wrap';
+    recreoDiv.innerHTML =
+      '<span style="font-size:12px;font-weight:600;color:var(--ink)">⏰ Recreos:</span>'+
+      '<label style="display:flex;align-items:center;gap:6px;font-size:12px">'+
+        'Recreo 1 — después del bloque'+
+        '<input id="recreo1Blq" type="number" min="1" max="10" value="'+(S.configHorario.recreo1||2)+'"'+
+        ' style="width:48px;border:1px solid var(--line);border-radius:4px;padding:2px 6px;font-size:12px"'+
+        ' onchange="S.configHorario.recreo1=+this.value;save();if(typeof renderHorario==='function')renderHorario()">'+
+      '</label>'+
+      '<label style="display:flex;align-items:center;gap:6px;font-size:12px">'+
+        'Recreo 2 — después del bloque'+
+        '<input id="recreo2Blq" type="number" min="1" max="10" value="'+(S.configHorario.recreo2||5)+'"'+
+        ' style="width:48px;border:1px solid var(--line);border-radius:4px;padding:2px 6px;font-size:12px"'+
+        ' onchange="S.configHorario.recreo2=+this.value;save();if(typeof renderHorario==='function')renderHorario()">'+
+      '</label>'+
+      '<button onclick="guardarConfigRecreos()" class="btn btn-primary btn-sm">💾 Guardar recreos</button>';
+    horarioConfig.appendChild(recreoDiv);
+  }
+
+  window.guardarConfigRecreos = function(){
+    var r1 = +document.getElementById('recreo1Blq').value;
+    var r2 = +document.getElementById('recreo2Blq').value;
+    if(r1>=r2){ alert('El recreo 2 debe ser después del recreo 1'); return; }
+    if(!S.configHorario) S.configHorario={};
+    S.configHorario.recreo1 = r1;
+    S.configHorario.recreo2 = r2;
+    try{ save(); }catch(e){}
+    alert('✅ Recreos guardados: Recreo 1 después del bloque '+r1+', Recreo 2 después del bloque '+r2);
+    try{ if(typeof renderHorario==='function') renderHorario(); }catch(e){}
+  };
+
+  /* ─────────────────────────────────────────────────────
+     FIX 4: Creación automática de acceso docente/alumno
+     Al activar password, también crear usuario en Supabase
+     ───────────────────────────────────────────────────── */
+  var _origActivarPassword = window.activarPassword;
+  window.activarPassword = function(tipo, id){
+    if(typeof _origActivarPassword==='function') _origActivarPassword(tipo, id);
+    /* Después de activar en localStorage, crear en Supabase */
+    setTimeout(function(){
+      var rec;
+      if(tipo==='docente')        rec = S.docentes.find(function(x){ return x.id===id; });
+      else if(tipo==='estudiante') rec = S.estudiantes.find(function(x){ return x.id===id; });
+      else if(tipo==='administrativo') rec = S.administrativos.find(function(x){ return x.id===id; });
+      if(!rec||!rec.password_activa) return;
+
+      /* El email para Supabase */
+      var email = rec.email || (rec.cedula ? rec.cedula+'@sigee.edu.ec' : null);
+      var pass  = rec.cedula || ('sigee'+Math.random().toString(36).slice(2,8));
+      var nombre = rec.nombre || '';
+      var rolMap = {docente:'docente', estudiante:'alumno', administrativo:'admin_plantel'};
+      var nivelMap = {docente:4, estudiante:4, administrativo:4};
+
+      if(!email) return;
+
+      /* Verificar si ya existe en Supabase */
+      _supaGET('profiles','email=eq.'+encodeURIComponent(email)+'&select=id')
+        .then(function(rows){
+          if(rows&&rows.length>0){
+            console.log('[SIGEE] Usuario ya existe en Supabase:', email);
+            return;
+          }
+          /* Crear en Supabase via Edge Function */
+          return fetch(EDGE_CREAR_USER,{
+            method:'POST',
+            headers:{'Content-Type':'application/json','apikey':SUPA_KEY},
+            body:JSON.stringify({
+              email:   email,
+              password: pass,
+              nombre:  nombre,
+              rol:     rolMap[tipo]||'consultor',
+              nivel:   nivelMap[tipo]||4,
+              estado:  'activo',
+              amie_id: rec.amie||null
+            })
+          })
+          .then(function(r){ return r.json(); })
+          .then(function(res){
+            if(res&&res.ok){
+              console.log('[SIGEE] ✅ Acceso creado en Supabase:', email, '/', pass);
+              /* Guardar email generado en el registro local */
+              if(!rec.email) { rec.email=email; try{save();}catch(e){} }
+              alert('✅ Acceso creado en Supabase\nEmail: '+email+'\nContraseña: '+pass+'\n\n⚠️ Guarda estas credenciales.');
+            } else {
+              console.warn('[SIGEE] Error creando acceso:', res.error||JSON.stringify(res));
+            }
+          });
+        })
+        .catch(function(e){ console.warn('[SIGEE] activarPassword Supabase:', e); });
+    }, 500);
+  };
+
+  /* ─────────────────────────────────────────────────────
+     FIX 5: Botón desvincular en tabla de docentes
+     ───────────────────────────────────────────────────── */
+  var _origRenderDoc = window.renderDoc;
+  window.renderDoc = function(){
+    if(typeof _origRenderDoc==='function') _origRenderDoc();
+    /* Agregar botones de desvinculación a las filas después del render */
+    setTimeout(function(){
+      var rows = document.querySelectorAll('#dBody tr');
+      rows.forEach(function(tr){
+        var btnDiv = tr.querySelector('td:last-child div');
+        if(!btnDiv) return;
+        /* Evitar duplicados */
+        if(btnDiv.querySelector('.btn-desvinc')) return;
+        /* Obtener id del docente desde los botones existentes */
+        var existBtn = btnDiv.querySelector('button[onclick*="openDocente"]');
+        if(!existBtn) return;
+        var match = existBtn.getAttribute('onclick').match(/'([^']+)'/);
+        if(!match) return;
+        var docId = match[1];
+        var doc = S.docentes ? S.docentes.find(function(d){ return d.id===docId; }) : null;
+        if(!doc||doc.desvinculado) return;
+        var btn = document.createElement('button');
+        btn.className='btn btn-warning btn-xs btn-desvinc';
+        btn.title='Desvincular del plantel';
+        btn.textContent='📤';
+        btn.onclick=function(){ desvincularDocente(docId); };
+        btnDiv.appendChild(btn);
+      });
+    }, 300);
+  };
+
+  console.log('[SIGEE] Patch v8 — desvinculación, AMIE automático, recreos, acceso auto');
+});
+
+console.log('[SIGEE] Sync adapter v7 activo — todos los módulos conectados a Supabase');
 });
 
 </script>
