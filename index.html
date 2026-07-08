@@ -845,67 +845,44 @@ tr:hover td{background:linear-gradient(90deg,rgba(8,145,178,.03),transparent)}
 
 <script>
 /* ══════════════════════════════════════════════════════════════
-   SIGEE SUPABASE SYNC ADAPTER v7
-   Frontend: HTML original (SAS_SIGEE_v55)
-   Backend:  Supabase PostgreSQL (ipmszlkhtrqlmyctygin)
-   
-   Intercepta TODAS las funciones de guardado del HTML y las
-   replica en Supabase. El HTML sigue funcionando igual —
-   Supabase es el backend persistente real.
+   SIGEE SUPABASE CORE v9
+   Reemplaza save() y load() — Supabase es la fuente de verdad
+   localStorage solo como caché de velocidad
    ══════════════════════════════════════════════════════════════ */
 
-var SUPA_URL = 'https://ipmszlkhtrqlmyctygin.supabase.co';
-var SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlwbXN6bGtodHJxbG15Y3R5Z2luIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5NzQyNjIsImV4cCI6MjA5NjU1MDI2Mn0.bO7BcdriCbGEn0BUCpETdQo8daMvW2GeXLkUR02oELA';
-var EDGE_LOGIN       = SUPA_URL + '/functions/v1/login';
-var EDGE_CREAR_USER  = SUPA_URL + '/functions/v1/crear-usuario';
+var SUPA_URL  = 'https://ipmszlkhtrqlmyctygin.supabase.co';
+var SUPA_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlwbXN6bGtodHJxbG15Y3R5Z2luIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5NzQyNjIsImV4cCI6MjA5NjU1MDI2Mn0.bO7BcdriCbGEn0BUCpETdQo8daMvW2GeXLkUR02oELA';
+var EDGE_LOGIN = SUPA_URL + '/functions/v1/login';
+var EDGE_CREAR = SUPA_URL + '/functions/v1/crear-usuario';
 
-/* ── SIGEE_IDB: reemplaza IndexedDB → localStorage ── */
+/* ── SIGEE_IDB: wrapper localStorage (compatibilidad) ── */
 var SIGEE_IDB = (function(){
   var LS = 'SIGEE2025';
   return {
-    set: function(val){
-      try{ localStorage.setItem(LS, typeof val==='string'?val:JSON.stringify(val)); }catch(e){}
-      return Promise.resolve(true);
-    },
-    get: function(){
-      try{
-        var r = localStorage.getItem(LS);
-        return Promise.resolve(r ? JSON.parse(r) : null);
-      }catch(e){ return Promise.resolve(null); }
-    },
-    remove: function(){
-      localStorage.removeItem(LS);
-      localStorage.removeItem('SIGEE_ME');
-      return Promise.resolve(true);
-    }
+    set: function(v){ try{ localStorage.setItem(LS, typeof v==='string'?v:JSON.stringify(v)); }catch(e){} return Promise.resolve(true); },
+    get: function(){ try{ var r=localStorage.getItem(LS); return Promise.resolve(r?JSON.parse(r):null); }catch(e){ return Promise.resolve(null); } },
+    remove: function(){ localStorage.removeItem(LS); localStorage.removeItem('SIGEE_ME'); return Promise.resolve(true); }
   };
 })();
 
-/* ── Helper REST (necesita token después del login) ── */
-function _supa(method, table, body, filters){
-  var token = (function(){ try{ var s=localStorage.getItem('SIGEE_ME'); return s?JSON.parse(s)._token||SUPA_KEY:SUPA_KEY; }catch(e){ return SUPA_KEY; } })();
-  var url = SUPA_URL+'/rest/v1/'+table+(filters?'?'+filters:'');
-  var opts = {
-    method: method,
-    headers: {
-      'apikey': SUPA_KEY,
-      'Authorization': 'Bearer '+token,
-      'Content-Type': 'application/json',
-      'Prefer': method==='POST'?'return=representation':'return=minimal'
-    }
-  };
-  if(body) opts.body = JSON.stringify(body);
-  return fetch(url, opts)
+/* ── REST helpers ── */
+function _supa(method, table, body, qs){
+  var url = SUPA_URL+'/rest/v1/'+table+(qs?'?'+qs:'');
+  var h = { 'apikey':SUPA_KEY, 'Authorization':'Bearer '+(window._supaToken||SUPA_KEY),
+            'Content-Type':'application/json', 'Prefer': method==='POST'?'return=representation':'return=minimal' };
+  return fetch(url,{method:method,headers:h,body:body?JSON.stringify(body):undefined})
     .then(function(r){ return r.text().then(function(t){ try{return JSON.parse(t);}catch(e){return t;} }); })
-    .catch(function(e){ console.warn('[SUPA]',method,table,e); });
+    .catch(function(e){ console.warn('[SUPA]',method,table,e); return null; });
 }
+function _GET(t,q){ return _supa('GET',t,null,(q||'')+'&limit=2000'); }
+function _POST(t,b){ return _supa('POST',t,b); }
+function _PATCH(t,q,b){ return _supa('PATCH',t,b,q); }
+function _DEL(t,q){ return _supa('DELETE',t,null,q); }
+function _UPSERT(t,b,on){ return _supa('POST',t,Array.isArray(b)?b:[b], 'on_conflict='+on).then(function(){ return true; }); }
 
-function _supaGET(table, filters){ return _supa('GET', table, null, filters+'&limit=2000'); }
-function _supaPOST(table, body){ return _supa('POST', table, body); }
-function _supaPATCH(table, filters, body){ return _supa('PATCH', table, body, filters); }
-function _supaDEL(table, filters){ return _supa('DELETE', table, null, filters); }
-
-/* ── doLogin via Edge Function ── */
+/* ══════════════════════════════════════════════════════════════
+   doLogin — Edge Function (sin CORS)
+   ══════════════════════════════════════════════════════════════ */
 function doLogin(){
   var email = (document.getElementById('lu').value||'').trim();
   var pass  = (document.getElementById('lp').value||'');
@@ -914,11 +891,7 @@ function doLogin(){
   var btn   = document.querySelector('#login .lbtn');
 
   if(errEl) errEl.style.display='none';
-  if(!email||!pass){
-    if(errMsg) errMsg.textContent='Ingresa tu correo y contraseña.';
-    if(errEl)  errEl.style.display='flex';
-    return;
-  }
+  if(!email||!pass){ if(errMsg) errMsg.textContent='Ingresa tu correo y contraseña.'; if(errEl) errEl.style.display='flex'; return; }
   if(btn){ btn.disabled=true; btn.innerHTML='<span>Verificando...</span>'; }
 
   function resetBtn(e){
@@ -926,38 +899,25 @@ function doLogin(){
     if(e){ if(errMsg) errMsg.textContent=e; if(errEl) errEl.style.display='flex'; }
   }
 
-  fetch(EDGE_LOGIN,{
-    method:'POST',
-    headers:{'Content-Type':'application/json','apikey':SUPA_KEY},
-    body:JSON.stringify({email:email, password:pass})
-  })
+  fetch(EDGE_LOGIN,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPA_KEY},body:JSON.stringify({email:email,password:pass})})
   .then(function(r){ return r.json().then(function(d){return{s:r.status,d:d};}); })
   .then(function(r){
+    if(r.s!==200||!r.d||r.d.error){ resetBtn(r.d&&r.d.error?r.d.error:'Credenciales incorrectas.'); return; }
     var res=r.d;
-    if(r.s!==200||!res){ resetBtn('Error del servidor ('+r.s+').'); return; }
-    if(res.error){ resetBtn(res.error); return; }
-    if(!res.ok){ resetBtn('Credenciales incorrectas.'); return; }
-
+    window._supaToken = res.token || SUPA_KEY;
     var rolNivel={super_admin:1,admin_zonal:1,editor:2,consultor:3,admin_plantel:4,docente:4,alumno:4,padre:4};
-    var me={
-      id:res.user_id, user:res.email, email:res.email,
-      nombre:res.nombre_completo||res.email,
-      level:rolNivel[res.rol]||3, role:res.rol||'consultor',
-      amie_id:res.amie_id||null
-    };
-    localStorage.setItem('SIGEE_ME', JSON.stringify(me));
+    var me={id:res.user_id,user:res.email,email:res.email,nombre:res.nombre_completo||res.email,
+            level:rolNivel[res.rol]||3,role:res.rol||'consultor',amie_id:res.amie_id||null};
+    localStorage.setItem('SIGEE_ME',JSON.stringify(me));
 
     if(!window.S) window.S={};
     ['hist','planteles','docentes','baseDocentes','estudiantes','administrativos',
-     'baseAdministrativos','users','materias','periodos','calificaciones',
-     'comunicados','hermanos','asistencia'].forEach(function(k){ if(!S[k]) S[k]=[]; });
-    S.me=me;
-    try{ save(); }catch(e){}
+     'baseAdministrativos','users','materias','periodos','calificaciones','comunicados',
+     'hermanos','asistencia','cursos','matriculas','distributivo'].forEach(function(k){ if(!S[k]) S[k]=[]; });
+    S.me=me; S.hist=S.hist||[];
 
-    var lg=document.getElementById('login'), ap=document.getElementById('app');
-    if(lg) lg.style.display='none';
-    if(ap) ap.style.display='block';
-
+    document.getElementById('login').style.display='none';
+    document.getElementById('app').style.display='block';
     var av=document.getElementById('sbAv'),nm=document.getElementById('sbNm'),rl=document.getElementById('sbRl');
     if(av) av.textContent=(me.nombre||me.user)[0].toUpperCase();
     if(nm) nm.textContent=me.nombre||me.user;
@@ -974,409 +934,410 @@ function doLogin(){
     try{ goTo(dest[me.role]||'dashboard'); }catch(e){}
     resetBtn(null);
 
-    /* Cargar datos reales desde Supabase */
-    _cargarDatosSupabase(me);
+    /* Cargar TODOS los datos desde Supabase */
+    _cargarTodo(me);
   })
-  .catch(function(err){ resetBtn('Sin conexión. Verifica tu internet.'); });
+  .catch(function(){ resetBtn('Sin conexión. Verifica tu internet.'); });
 }
 
-/* ── Cargar todos los datos desde Supabase al iniciar ── */
-function _cargarDatosSupabase(me){
-  var filtroAmie = (me.level>=4 && me.amie_id) ? 'amie=eq.'+me.amie_id+'&' : '';
+/* ══════════════════════════════════════════════════════════════
+   _cargarTodo — carga TODOS los datos desde Supabase a S.*
+   ══════════════════════════════════════════════════════════════ */
+function _cargarTodo(me){
+  var amie = (me.level>=4 && me.amie_id) ? me.amie_id : null;
+  var af   = amie ? 'amie=eq.'+amie+'&' : '';
 
   Promise.all([
-    _supaGET('planteles', filtroAmie+'select=*&order=nombre.asc'),
-    _supaGET('docentes',  filtroAmie+'select=*&order=nombre.asc'),
-    _supaGET('estudiantes', filtroAmie+'select=*&desvinculado=eq.false&order=apellidos.asc'),
-    _supaGET('administrativos', filtroAmie+'select=*&desvinculado=eq.false&order=nombre.asc'),
-    _supaGET('comunicados', filtroAmie+'select=*&activo=eq.true&order=created_at.desc'),
-    _supaGET('periodos_academicos', filtroAmie+'select=*&order=anio_inicio.desc')
+    _GET('planteles',    af+'select=*&order=nombre.asc'),
+    _GET('docentes',     af+'select=*&order=nombre.asc'),
+    _GET('estudiantes',  af+'select=*&desvinculado=eq.false&order=apellidos.asc'),
+    _GET('administrativos', af+'select=*&desvinculado=eq.false&order=nombre.asc'),
+    _GET('comunicados',  af+'select=*&activo=eq.true&order=created_at.desc'),
+    _GET('periodos_academicos', af+'select=*&order=anio_inicio.desc'),
+    _GET('materias',     af+'select=*&activo=eq.true&order=nombre.asc'),
+    _GET('cursos',       af+'select=*&activo=eq.true&order=nivel.asc,grado.asc,paralelo.asc'),
+    _GET('matriculas',   af+'select=*&order=created_at.desc'),
+    _GET('distributivo', af+'select=*&activo=eq.true&order=created_at.asc'),
   ]).then(function(rs){
-    if(Array.isArray(rs[0])&&rs[0].length){ S.planteles=rs[0]; S.baseDocentes=rs[0]; }
+    if(Array.isArray(rs[0])&&rs[0].length) S.planteles=rs[0];
     if(Array.isArray(rs[1])&&rs[1].length){ S.docentes=rs[1]; S.baseDocentes=rs[1]; }
-    if(Array.isArray(rs[2])&&rs[2].length){ S.estudiantes=rs[2]; }
-    if(Array.isArray(rs[3])&&rs[3].length){ S.administrativos=rs[3]; }
-    if(Array.isArray(rs[4])&&rs[4].length){ S.comunicados=rs[4]; }
-    if(Array.isArray(rs[5])&&rs[5].length){ S.periodos=rs[5]; }
-    try{ save(); }catch(e){}
+    if(Array.isArray(rs[2])&&rs[2].length) S.estudiantes=rs[2];
+    if(Array.isArray(rs[3])&&rs[3].length) S.administrativos=rs[3];
+    if(Array.isArray(rs[4])&&rs[4].length) S.comunicados=rs[4];
+    if(Array.isArray(rs[5])&&rs[5].length) S.periodos=rs[5];
+    if(Array.isArray(rs[6])&&rs[6].length) S.materias=rs[6];
+    if(Array.isArray(rs[7])&&rs[7].length) S.cursos=rs[7];
+    if(Array.isArray(rs[8])&&rs[8].length) S.matriculas=rs[8];
+    if(Array.isArray(rs[9])&&rs[9].length) S.distributivo=rs[9];
+
+    /* Guardar en localStorage como caché */
+    try{ localStorage.setItem('SIGEE2025', JSON.stringify(S)); }catch(e){}
+
+    /* Refrescar vistas activas */
     try{ if(typeof updB==='function') updB(); }catch(e){}
     try{ if(typeof renderTbl==='function') renderTbl(); }catch(e){}
     try{ if(typeof renderDoc==='function') renderDoc(); }catch(e){}
-    console.log('[SIGEE] Datos Supabase: pl='+S.planteles.length+' doc='+S.docentes.length+' est='+S.estudiantes.length);
+    try{ document.dispatchEvent(new CustomEvent('sigee:datachanged')); }catch(e){}
+
+    console.log('[SIGEE] ✅ Datos Supabase cargados:',
+      'pl='+S.planteles.length, 'doc='+S.docentes.length,
+      'est='+S.estudiantes.length, 'cur='+S.cursos.length,
+      'mat='+S.materias.length);
   }).catch(function(e){ console.warn('[SIGEE] Error cargando datos:', e); });
 }
 
-/* ── Overrides de funciones de guardado ── */
+/* ══════════════════════════════════════════════════════════════
+   save() — guarda cambios en Supabase (reemplaza la original)
+   ══════════════════════════════════════════════════════════════ */
+function save(){
+  /* 1. Caché local inmediata */
+  try{ localStorage.setItem('SIGEE2025', JSON.stringify(S)); }catch(e){}
+  /* 2. Notificar módulos */
+  try{ document.dispatchEvent(new CustomEvent('sigee:datachanged')); }catch(e){}
+  /* 3. Sync con Supabase manejado por los overrides específicos */
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Overrides de TODAS las funciones de guardado
+   ══════════════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', function(){
 
-  /* ═══ savePlantel → planteles ═══ */
-  var _origSavePlantel = window.savePlantel;
+  /* ── Plantel ── */
+  var _oSavePlantel = window.savePlantel;
   window.savePlantel = function(){
-    if(typeof _origSavePlantel==='function') _origSavePlantel();
-    var amie = (document.getElementById('mAMIE')?.value||'').trim();
+    if(typeof _oSavePlantel==='function') _oSavePlantel();
+    var amie=(document.getElementById('mAMIE')||document.getElementById('pAmie')||{}).value||'';
     if(!amie) return;
-    var pl = S.planteles.find(function(p){ return p.amie===amie; });
+    var pl=S.planteles.find(function(p){return p.amie===amie;});
     if(!pl) return;
-    var payload = {
-      amie:pl.amie, nombre:pl.nombre, provincia:pl.provincia, canton:pl.canton,
-      parroquia:pl.parroquia, zona:pl.zona, distrito_nombre:pl.distrito_nombre,
-      cod_distrito:pl.cod_distrito, cod_circuito:pl.cod_circuito,
-      sostenimiento:pl.sostenimiento, regimen:pl.regimen, tipo_educacion:pl.tipo_educacion,
-      modalidad:pl.modalidad, jornada:pl.jornada, nivel:pl.nivel,
-      jurisdiccion:pl.jurisdiccion, acceso:pl.acceso,
-      num_estudiantes:pl.num_estudiantes||0, num_docentes:pl.num_docentes||0,
-      doc_nombramiento:pl.doc_nombramiento||0, doc_contrato:pl.doc_contrato||0,
-      doc_reemplazo:pl.doc_reemplazo||0, num_administrativos:pl.num_administrativos||0,
-      estado:pl.estado, etnia:pl.etnia
-    };
-    _supaPATCH('planteles','amie=eq.'+amie, payload)
-      .then(function(){ console.log('[SIGEE] Plantel guardado en Supabase:', amie); })
-      .catch(function(e){ console.warn('[SIGEE] savePlantel Supabase:', e); });
+    _PATCH('planteles','amie=eq.'+amie,{
+      nombre:pl.nombre,provincia:pl.provincia,canton:pl.canton,parroquia:pl.parroquia,
+      sostenimiento:pl.sostenimiento,regimen:pl.regimen,tipo_educacion:pl.tipo_educacion,
+      modalidad:pl.modalidad,jornada:pl.jornada,nivel:pl.nivel,jurisdiccion:pl.jurisdiccion,
+      acceso:pl.acceso,num_estudiantes:pl.num_estudiantes||0,num_docentes:pl.num_docentes||0,
+      doc_nombramiento:pl.doc_nombramiento||0,doc_contrato:pl.doc_contrato||0,
+      doc_reemplazo:pl.doc_reemplazo||0,num_administrativos:pl.num_administrativos||0,
+      estado:pl.estado,etnia:pl.etnia
+    }).then(function(){ console.log('[SIGEE] Plantel → Supabase:', amie); });
   };
 
-  /* ═══ saveDocente → docentes ═══ */
-  var _origSaveDocente = window.saveDocente;
+  /* ── Docente ── */
+  var _oSaveDocente = window.saveDocente;
   window.saveDocente = function(){
-    if(typeof _origSaveDocente==='function') _origSaveDocente();
+    /* Admin plantel: forzar AMIE del usuario */
+    if(S.me&&S.me.role==='admin_plantel'&&S.me.amie_id) window._caNewAmie=S.me.amie_id;
+    if(typeof _oSaveDocente==='function') _oSaveDocente();
     setTimeout(function(){
-      var cedula = (document.getElementById('dECed')?.value||'').trim();
-      if(!cedula) return;
-      var doc = S.docentes.find(function(d){ return d.cedula===cedula&&!d.desvinculado; });
-      if(!doc) return;
-      var payload = {
-        nombre:doc.nombre, cedula:doc.cedula, amie:doc.amie||null, plantel:doc.plantel||null,
-        situacion:doc.situacion, funcion:doc.funcion, especialidad:doc.especialidad,
-        area:doc.area, categoria:doc.categoria||null, rmu:parseFloat(doc.rmu)||0,
-        fecha_ingreso:doc.fecha_ingreso||null, activo:!doc.desvinculado
-      };
-      /* Verificar si existe en Supabase */
-      _supaGET('docentes','cedula=eq.'+cedula+'&select=id')
-        .then(function(rows){
-          if(rows&&rows.length>0){
-            return _supaPATCH('docentes','cedula=eq.'+cedula, payload);
-          } else {
-            return _supaPOST('docentes', payload);
-          }
-        })
-        .then(function(){ console.log('[SIGEE] Docente en Supabase:', cedula); })
-        .catch(function(e){ console.warn('[SIGEE] saveDocente Supabase:', e); });
-    }, 300);
+      var ced=(document.getElementById('dECed')||{}).value||'';
+      if(!ced) return;
+      var d=S.docentes.find(function(x){return x.cedula===ced&&!x.desvinculado;});
+      if(!d) return;
+      var py={nombre:d.nombre,cedula:d.cedula,amie:d.amie||null,plantel:d.plantel||null,
+              situacion:d.situacion,funcion:d.funcion,especialidad:d.especialidad,
+              area:d.area,categoria:d.categoria||null,rmu:parseFloat(d.rmu)||0,
+              fecha_ingreso:d.fecha_ingreso||null,activo:true};
+      _GET('docentes','cedula=eq.'+ced+'&select=id').then(function(rows){
+        return (rows&&rows.length>0) ? _PATCH('docentes','cedula=eq.'+ced,py) : _POST('docentes',py);
+      }).then(function(){ console.log('[SIGEE] Docente → Supabase:', ced); });
+    },300);
   };
 
-  /* ═══ saveEstudiante → estudiantes ═══ */
-  var _origSaveEst = window.saveEstudiante;
+  /* ── Estudiante ── */
+  var _oSaveEst = window.saveEstudiante;
   window.saveEstudiante = function(){
-    if(typeof _origSaveEst==='function') _origSaveEst();
+    if(typeof _oSaveEst==='function') _oSaveEst();
     setTimeout(function(){
-      var cedula = (document.getElementById('eEstCed')?.value||'').trim();
-      var nom = (document.getElementById('eEstNom')?.value||'').trim();
+      var ced=(document.getElementById('eEstCed')||{}).value||'';
+      var nom=(document.getElementById('eEstNom')||{}).value||'';
       if(!nom) return;
-      var est = S.estudiantes.find(function(e){ return e.cedula===cedula||e.nombre===nom; });
-      if(!est) return;
-      var payload = {
-        cedula:est.cedula||null, nombres:est.nombres||nom, apellidos:est.apellidos||'',
-        amie:est.amie||null, curso:est.curso||null, paralelo:est.paralelo||null,
-        representante:est.representante||null, cedula_rep:est.cedula_rep||null,
-        telefono_rep:est.telefono_rep||null, activo:!est.desvinculado
-      };
-      _supaGET('estudiantes','cedula=eq.'+encodeURIComponent(cedula||'x')+'&select=id')
-        .then(function(rows){
-          if(rows&&rows.length>0){
-            return _supaPATCH('estudiantes','cedula=eq.'+cedula, payload);
-          } else {
-            return _supaPOST('estudiantes', payload);
-          }
-        })
-        .then(function(){ console.log('[SIGEE] Estudiante en Supabase:', nom); })
-        .catch(function(e){ console.warn('[SIGEE] saveEstudiante Supabase:', e); });
-    }, 300);
+      var e=S.estudiantes.find(function(x){return x.cedula===ced||x.nombres===nom;});
+      if(!e) return;
+      var py={cedula:e.cedula||null,nombres:e.nombres||nom,apellidos:e.apellidos||'',
+              amie:e.amie||null,curso:e.curso||null,paralelo:e.paralelo||null,
+              representante:e.representante||null,cedula_rep:e.cedula_rep||null,
+              telefono_rep:e.telefono_rep||null,activo:!e.desvinculado};
+      var key = ced ? 'cedula=eq.'+ced : 'nombres=eq.'+encodeURIComponent(nom);
+      _GET('estudiantes',key+'&select=id').then(function(rows){
+        return (rows&&rows.length>0) ? _PATCH('estudiantes',key,py) : _POST('estudiantes',py);
+      }).then(function(){ console.log('[SIGEE] Estudiante → Supabase:', nom); });
+    },300);
   };
 
-  /* ═══ saveAdm → administrativos ═══ */
-  var _origSaveAdm = window.saveAdm;
+  /* ── Administrativo ── */
+  var _oSaveAdm = window.saveAdm;
   window.saveAdm = function(){
-    if(typeof _origSaveAdm==='function') _origSaveAdm();
+    if(typeof _oSaveAdm==='function') _oSaveAdm();
     setTimeout(function(){
-      var cedula = (document.getElementById('admECed')?.value||'').trim();
-      var nom = (document.getElementById('admENom')?.value||'').trim();
+      var ced=(document.getElementById('admECed')||{}).value||'';
+      var nom=(document.getElementById('admENom')||{}).value||'';
       if(!nom) return;
-      var adm = S.administrativos.find(function(a){ return a.cedula===cedula||a.nombre===nom; });
-      if(!adm) return;
-      var payload = {
-        cedula:adm.cedula||null, nombre:adm.nombre, cargo:adm.cargo||null,
-        situacion:adm.situacion||'NOMBRAMIENTO', amie:adm.amie||null,
-        departamento:adm.departamento||null, activo:!adm.desvinculado
-      };
-      _supaGET('administrativos','cedula=eq.'+encodeURIComponent(cedula||'x')+'&select=id')
-        .then(function(rows){
-          if(rows&&rows.length>0){
-            return _supaPATCH('administrativos','cedula=eq.'+cedula, payload);
-          } else {
-            return _supaPOST('administrativos', payload);
-          }
-        })
-        .then(function(){ console.log('[SIGEE] Administrativo en Supabase:', nom); })
-        .catch(function(e){ console.warn('[SIGEE] saveAdm Supabase:', e); });
-    }, 300);
+      var a=S.administrativos.find(function(x){return x.cedula===ced||x.nombre===nom;});
+      if(!a) return;
+      var py={cedula:a.cedula||null,nombre:a.nombre,cargo:a.cargo||null,
+              situacion:a.situacion||'NOMBRAMIENTO',amie:a.amie||null,
+              departamento:a.departamento||null,activo:!a.desvinculado};
+      var key = ced ? 'cedula=eq.'+ced : 'nombre=eq.'+encodeURIComponent(nom);
+      _GET('administrativos',key+'&select=id').then(function(rows){
+        return (rows&&rows.length>0) ? _PATCH('administrativos',key,py) : _POST('administrativos',py);
+      }).then(function(){ console.log('[SIGEE] Administrativo → Supabase:', nom); });
+    },300);
   };
 
-  /* ═══ saveUser → Edge Function crear-usuario ═══ */
-  var _origSaveUser = window.saveUser;
-  window.saveUser = function(){
-    if(typeof _origSaveUser==='function') _origSaveUser();
-    var nom    = (document.getElementById('uNom')?.value||'').trim();
-    var usr    = (document.getElementById('uUsr')?.value||'').trim();
-    var pas    =  document.getElementById('uPas')?.value||'';
-    var lvl    = +(document.getElementById('uLvl')?.value||3);
-    var eml    = (document.getElementById('uEml')?.value||'').trim();
-    var amieId =  document.getElementById('uAmieId')?.value||'';
-    var emailSupa = eml||(usr.includes('@')?usr:'');
-    var rolMap = {1:'super_admin',2:'editor',3:'consultor',4:'admin_plantel'};
-    if(!emailSupa||!pas||!nom) return;
-    fetch(EDGE_CREAR_USER,{
-      method:'POST',
-      headers:{'Content-Type':'application/json','apikey':SUPA_KEY},
-      body:JSON.stringify({email:emailSupa,password:pas,nombre:nom,
-        rol:rolMap[lvl]||'consultor',nivel:lvl,estado:'activo',amie_id:amieId||null})
-    })
-    .then(function(r){return r.json();})
-    .then(function(res){
-      if(res&&res.ok) console.log('[SIGEE] Usuario creado en Supabase:', emailSupa);
-      else console.warn('[SIGEE] createUser:', res.error||JSON.stringify(res));
-    })
-    .catch(function(e){ console.warn('[SIGEE] saveUser edge:', e); });
-  };
-
-  
-/* ══════════════════════════════════════════════════════
-   SIGEE PATCH v8 — 4 mejoras funcionales
-   ══════════════════════════════════════════════════════ */
-document.addEventListener('DOMContentLoaded', function(){
-
-  /* ─────────────────────────────────────────────────────
-     FIX 1: Desvinculación individual de docente
-     Agrega botón "Desvincular" en la tabla de docentes
-     ───────────────────────────────────────────────────── */
-  window.desvincularDocente = function(id){
-    var d = S.docentes.find(function(x){ return x.id===id; });
-    if(!d) return;
-    if(!confirm('¿Desvincular a '+d.nombre+' del plantel '+d.amie+'?\n\nEl docente pasará a la base sin asignar.')) return;
-    d.desvinculado = true;
-    d.amie_anterior = d.amie;
-    d.plantel_anterior = d.plantel;
-    d.amie = null;
-    d.plantel = '';
-    try{ save(); }catch(e){}
-    /* Sincronizar con Supabase */
-    _supaPATCH('docentes','cedula=eq.'+d.cedula,{amie:null,plantel:null,activo:false})
-      .then(function(){ console.log('[SIGEE] Docente desvinculado en Supabase:', d.cedula); })
-      .catch(function(e){ console.warn('[SIGEE] desvincular Supabase:', e); });
-    try{ renderDoc(); }catch(e){}
-    alert('✅ '+d.nombre+' desvinculado del plantel.');
-  };
-
-  /* ─────────────────────────────────────────────────────
-     FIX 2: Admin plantel — AMIE automático al crear docente
-     Bloquea el campo AMIE y lo asigna automáticamente
-     ───────────────────────────────────────────────────── */
-  var _origOpenNewDocente = window.openNewDocente;
-  window.openNewDocente = function(){
-    if(typeof _origOpenNewDocente==='function') _origOpenNewDocente();
-    /* Si el usuario es admin_plantel, asignar AMIE automáticamente */
-    if(S.me && S.me.role==='admin_plantel' && S.me.amie_id){
-      window._caNewAmie = S.me.amie_id;
-      /* Buscar y bloquear el campo AMIE en el modal */
-      setTimeout(function(){
-        var campos = ['dEAmie','docAmie','newDocAmie','inputAmie'];
-        for(var i=0;i<campos.length;i++){
-          var el = document.getElementById(campos[i]);
-          if(el){
-            el.value = S.me.amie_id;
-            el.readOnly = true;
-            el.style.background = '#f3f4f6';
-            el.style.color = '#6b7280';
-            el.title = 'AMIE asignado automáticamente';
-          }
-        }
-        /* Ocultar selector de AMIE si existe */
-        var selAmie = document.getElementById('dEAmieSelect');
-        if(selAmie){ selAmie.style.display='none'; }
-        console.log('[SIGEE] AMIE fijado automáticamente:', S.me.amie_id);
-      }, 200);
-    }
-  };
-
-  /* Interceptar saveDocente para admin_plantel */
-  var _origSaveDocente2 = window.saveDocente;
-  window.saveDocente = function(){
-    if(S.me && S.me.role==='admin_plantel' && S.me.amie_id){
-      window._caNewAmie = S.me.amie_id;
-    }
-    if(typeof _origSaveDocente2==='function') _origSaveDocente2();
-    /* Sincronizar con Supabase */
+  /* ── Período académico ── */
+  var _oSavePeriodo = window.savePeriodo;
+  window.savePeriodo = function(){
+    if(typeof _oSavePeriodo==='function') _oSavePeriodo();
     setTimeout(function(){
-      var cedula = (document.getElementById('dECed')?.value||'').trim();
-      if(!cedula) return;
-      var doc = S.docentes.find(function(d){ return d.cedula===cedula && !d.desvinculado; });
-      if(!doc) return;
-      var payload = {
-        nombre:doc.nombre, cedula:doc.cedula,
-        amie:doc.amie||null, plantel:doc.plantel||null,
-        situacion:doc.situacion, funcion:doc.funcion,
-        especialidad:doc.especialidad, area:doc.area,
-        categoria:doc.categoria||null,
-        rmu:parseFloat(doc.rmu)||0,
-        fecha_ingreso:doc.fecha_ingreso||null, activo:true
-      };
-      _supaGET('docentes','cedula=eq.'+cedula+'&select=id').then(function(rows){
-        if(rows&&rows.length>0) return _supaPATCH('docentes','cedula=eq.'+cedula,payload);
-        else return _supaPOST('docentes',payload);
-      }).then(function(){ console.log('[SIGEE] Docente Supabase OK:', cedula); })
-      .catch(function(e){ console.warn('[SIGEE] saveDocente Supabase:', e); });
-    }, 400);
+      var p=S.periodos&&S.periodos[0];
+      if(!p) return;
+      _GET('periodos_academicos','nombre=eq.'+encodeURIComponent(p.nombre)+'&select=id').then(function(rows){
+        var py={nombre:p.nombre,anio_inicio:p.anio_inicio||null,anio_fin:p.anio_fin||null,
+                tipo:p.tipo||'Sierra',activo:!!p.activo,amie:p.amie||S.me&&S.me.amie_id||null};
+        return (rows&&rows.length>0)
+          ? _PATCH('periodos_academicos','nombre=eq.'+encodeURIComponent(p.nombre),py)
+          : _POST('periodos_academicos',py);
+      }).then(function(){ console.log('[SIGEE] Período → Supabase'); });
+    },300);
   };
 
-  /* ─────────────────────────────────────────────────────
-     FIX 3: 2 recreos configurables en horario
-     ───────────────────────────────────────────────────── */
-  /* Config de recreos por defecto si no existe */
-  if(!S.configHorario) S.configHorario = { recreo1: 2, recreo2: 5 };
+  /* ── Materia ── */
+  var _oSaveMateria = window.saveMateria;
+  window.saveMateria = function(){
+    if(typeof _oSaveMateria==='function') _oSaveMateria();
+    setTimeout(function(){
+      var m=S.materias&&S.materias[S.materias.length-1];
+      if(!m) return;
+      _GET('materias','nombre=eq.'+encodeURIComponent(m.nombre)+'&select=id').then(function(rows){
+        var py={nombre:m.nombre,area:m.area||null,codigo:m.codigo||null,
+                nivel:m.nivel||null,horas_semanales:m.horas||4,activo:true,
+                amie:m.amie||S.me&&S.me.amie_id||null};
+        return (rows&&rows.length>0)
+          ? _PATCH('materias','nombre=eq.'+encodeURIComponent(m.nombre),py)
+          : _POST('materias',py);
+      }).then(function(){ console.log('[SIGEE] Materia → Supabase'); });
+    },300);
+  };
 
-  /* Inyectar controles de 2 recreos en el panel de horario */
-  var horarioConfig = document.getElementById('horarioConfig') ||
-                      document.getElementById('sgConfig') ||
-                      document.querySelector('.sg-config');
-  if(horarioConfig){
-    var recreoDiv = document.createElement('div');
-    recreoDiv.id = 'sigeeRecreosConfig';
-    recreoDiv.style.cssText = 'display:flex;gap:16px;align-items:center;padding:10px 0;border-top:1px solid var(--lineD);margin-top:8px;flex-wrap:wrap';
-    recreoDiv.innerHTML =
-      '<span style="font-size:12px;font-weight:600;color:var(--ink)">⏰ Recreos:</span>'+
-      '<label style="display:flex;align-items:center;gap:6px;font-size:12px">'+
-        'Recreo 1 — después del bloque'+
-        '<input id="recreo1Blq" type="number" min="1" max="10" value="'+(S.configHorario.recreo1||2)+'"'+
-        ' style="width:48px;border:1px solid var(--line);border-radius:4px;padding:2px 6px;font-size:12px"'+
-        ' onchange="S.configHorario.recreo1=+this.value;save();if(typeof renderHorario==='function')renderHorario()">'+
-      '</label>'+
-      '<label style="display:flex;align-items:center;gap:6px;font-size:12px">'+
-        'Recreo 2 — después del bloque'+
-        '<input id="recreo2Blq" type="number" min="1" max="10" value="'+(S.configHorario.recreo2||5)+'"'+
-        ' style="width:48px;border:1px solid var(--line);border-radius:4px;padding:2px 6px;font-size:12px"'+
-        ' onchange="S.configHorario.recreo2=+this.value;save();if(typeof renderHorario==='function')renderHorario()">'+
-      '</label>'+
-      '<button onclick="guardarConfigRecreos()" class="btn btn-primary btn-sm">💾 Guardar recreos</button>';
-    horarioConfig.appendChild(recreoDiv);
+  /* ── Curso / paralelo ── */
+  var _oSaveCurso = window.saveCurso;
+  window.saveCurso = function(){
+    if(typeof _oSaveCurso==='function') _oSaveCurso();
+    setTimeout(function(){
+      var c=S.cursos&&S.cursos[S.cursos.length-1];
+      if(!c) return;
+      var amie=c.amie||S.me&&S.me.amie_id||null;
+      _GET('cursos','nombre=eq.'+encodeURIComponent(c.nombre)+'&select=id').then(function(rows){
+        var py={nombre:c.nombre,nivel:c.nivel||'EGB',grado:c.grado||1,paralelo:c.paralelo||'A',
+                jornada:c.jornada||'Matutina',capacidad:c.capacidad||35,activo:true,
+                amie:amie,periodo_id:c.periodo_id||null};
+        return (rows&&rows.length>0)
+          ? _PATCH('cursos','nombre=eq.'+encodeURIComponent(c.nombre),py)
+          : _POST('cursos',py);
+      }).then(function(res){
+        if(Array.isArray(res)&&res[0]&&res[0].id) c.supa_id=res[0].id;
+        console.log('[SIGEE] Curso → Supabase:', c.nombre);
+      });
+    },300);
+  };
+
+  /* ── Matrícula ── */
+  var _oSaveMatricula = window.saveMatricula;
+  window.saveMatricula = function(){
+    if(typeof _oSaveMatricula==='function') _oSaveMatricula();
+    setTimeout(function(){
+      var m=S.matriculas&&S.matriculas[S.matriculas.length-1];
+      if(!m) return;
+      var amie=S.me&&S.me.amie_id||null;
+      _POST('matriculas',{
+        amie:amie, curso_id:m.supa_curso_id||null,
+        estudiante_id:m.supa_est_id||null,
+        numero:m.numero||null, estado:m.estado||'regular',
+        periodo_id:m.periodo_id||null
+      }).then(function(){ console.log('[SIGEE] Matrícula → Supabase'); });
+    },300);
+  };
+
+  /* ── Distributivo ── */
+  var _oSaveDist = window.saveDistributivo;
+  window.saveDistributivo = function(){
+    if(typeof _oSaveDist==='function') _oSaveDist();
+    setTimeout(function(){
+      var d=S.distributivo&&S.distributivo[S.distributivo.length-1];
+      if(!d) return;
+      var amie=S.me&&S.me.amie_id||null;
+      _POST('distributivo',{
+        amie:amie, curso_id:d.supa_curso_id||null,
+        docente_id:d.supa_docente_id||null,
+        materia_id:d.supa_materia_id||null,
+        horas_semana:d.horas||4, activo:true,
+        periodo_id:d.periodo_id||null
+      }).then(function(){ console.log('[SIGEE] Distributivo → Supabase'); });
+    },300);
+  };
+
+  /* ── Calificaciones ── */
+  var _oSaveCalif = window.saveCalificacion||window.guardarCalif;
+  if(_oSaveCalif){
+    window.saveCalificacion = window.guardarCalif = function(){
+      if(typeof _oSaveCalif==='function') _oSaveCalif();
+      setTimeout(function(){
+        var c=S.calificaciones&&S.calificaciones[S.calificaciones.length-1];
+        if(!c) return;
+        var amie=S.me&&S.me.amie_id||null;
+        _POST('calificaciones',{
+          amie:amie, estudiante_id:c.supa_est_id||null,
+          materia_id:c.supa_mat_id||null, docente_id:c.supa_doc_id||null,
+          curso_id:c.supa_cur_id||null, periodo_id:c.periodo_id||null,
+          trimestre:c.trimestre||1,
+          prom_actitudinal:parseFloat(c.prom_actitudinal)||null,
+          prom_leccion:parseFloat(c.prom_leccion)||null,
+          parcial:parseFloat(c.parcial)||null,
+          nota_final:parseFloat(c.nota_final)||null,
+          qualitativa:c.qualitativa||null
+        }).then(function(){ console.log('[SIGEE] Calificación → Supabase'); });
+      },300);
+    };
   }
 
-  window.guardarConfigRecreos = function(){
-    var r1 = +document.getElementById('recreo1Blq').value;
-    var r2 = +document.getElementById('recreo2Blq').value;
-    if(r1>=r2){ alert('El recreo 2 debe ser después del recreo 1'); return; }
-    if(!S.configHorario) S.configHorario={};
-    S.configHorario.recreo1 = r1;
-    S.configHorario.recreo2 = r2;
-    try{ save(); }catch(e){}
-    alert('✅ Recreos guardados: Recreo 1 después del bloque '+r1+', Recreo 2 después del bloque '+r2);
-    try{ if(typeof renderHorario==='function') renderHorario(); }catch(e){}
+  /* ── Asistencia ── */
+  var _oSaveAsist = window.saveAsistencia||window.guardarAsistencia;
+  if(_oSaveAsist){
+    window.saveAsistencia = window.guardarAsistencia = function(){
+      if(typeof _oSaveAsist==='function') _oSaveAsist();
+      setTimeout(function(){
+        var lista = S.asistencia_pendiente||[];
+        if(!lista.length) return;
+        var amie = S.me&&S.me.amie_id||null;
+        var rows = lista.map(function(a){
+          return {amie:amie, estudiante_id:a.supa_est_id||null,
+                  curso_id:a.supa_cur_id||null, materia_id:a.supa_mat_id||null,
+                  fecha:a.fecha, estado:a.estado||'P',
+                  registrado_por:S.me&&S.me.id||null};
+        });
+        fetch(SUPA_URL+'/rest/v1/asistencia',{
+          method:'POST',
+          headers:{'apikey':SUPA_KEY,'Authorization':'Bearer '+(window._supaToken||SUPA_KEY),
+                   'Content-Type':'application/json','Prefer':'return=minimal'},
+          body:JSON.stringify(rows)
+        }).then(function(r){
+          if(r.ok){ S.asistencia_pendiente=[]; console.log('[SIGEE] Asistencia → Supabase:', rows.length,'registros'); }
+        });
+      },300);
+    };
+  }
+
+  /* ── Usuario nuevo ── */
+  var _oSaveUser = window.saveUser;
+  window.saveUser = function(){
+    if(typeof _oSaveUser==='function') _oSaveUser();
+    var nom=(document.getElementById('uNom')||{}).value||'';
+    var usr=(document.getElementById('uUsr')||{}).value||'';
+    var pas=(document.getElementById('uPas')||{}).value||'';
+    var lvl=+((document.getElementById('uLvl')||{}).value||3);
+    var eml=(document.getElementById('uEml')||{}).value||'';
+    var amieId=(document.getElementById('uAmieId')||{}).value||'';
+    var emailSupa=eml||(usr.includes('@')?usr:'');
+    var rolMap={1:'super_admin',2:'editor',3:'consultor',4:'admin_plantel'};
+    if(!emailSupa||!pas||!nom) return;
+    fetch(EDGE_CREAR,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPA_KEY},
+      body:JSON.stringify({email:emailSupa,password:pas,nombre:nom,rol:rolMap[lvl]||'consultor',
+        nivel:lvl,estado:'activo',amie_id:amieId||null})})
+    .then(function(r){return r.json();})
+    .then(function(res){
+      if(res&&res.ok) console.log('[SIGEE] Usuario → Supabase:', emailSupa);
+      else console.warn('[SIGEE] saveUser error:', res&&res.error);
+    });
   };
 
-  /* ─────────────────────────────────────────────────────
-     FIX 4: Creación automática de acceso docente/alumno
-     Al activar password, también crear usuario en Supabase
-     ───────────────────────────────────────────────────── */
-  var _origActivarPassword = window.activarPassword;
-  window.activarPassword = function(tipo, id){
-    if(typeof _origActivarPassword==='function') _origActivarPassword(tipo, id);
-    /* Después de activar en localStorage, crear en Supabase */
+  /* ── Desvinculación docente ── */
+  window.desvincularDocente = function(id){
+    var d=S.docentes.find(function(x){return x.id===id;});
+    if(!d) return;
+    if(!confirm('¿Desvincular a '+d.nombre+' del plantel?')) return;
+    d.desvinculado=true; d.amie_anterior=d.amie; d.amie=null; d.plantel='';
+    try{save();}catch(e){}
+    _PATCH('docentes','cedula=eq.'+d.cedula,{amie:null,plantel:null,activo:false})
+      .then(function(){ console.log('[SIGEE] Docente desvinculado en Supabase:', d.cedula); });
+    try{renderDoc();}catch(e){}
+    alert('✅ '+d.nombre+' desvinculado.');
+  };
+
+  /* ── Admin plantel: AMIE automático en nuevo docente ── */
+  var _oOpenNewDoc = window.openNewDocente;
+  window.openNewDocente = function(){
+    if(typeof _oOpenNewDoc==='function') _oOpenNewDoc();
+    if(S.me&&S.me.role==='admin_plantel'&&S.me.amie_id){
+      window._caNewAmie = S.me.amie_id;
+      setTimeout(function(){
+        ['dEAmie','docAmie','newDocAmie'].forEach(function(id){
+          var el=document.getElementById(id);
+          if(el){ el.value=S.me.amie_id; el.readOnly=true; el.style.background='#f3f4f6'; }
+        });
+      },200);
+    }
+  };
+
+  /* ── Acceso automático al activar contraseña ── */
+  var _oActivarPwd = window.activarPassword;
+  window.activarPassword = function(tipo,id){
+    if(typeof _oActivarPwd==='function') _oActivarPwd(tipo,id);
     setTimeout(function(){
       var rec;
-      if(tipo==='docente')        rec = S.docentes.find(function(x){ return x.id===id; });
-      else if(tipo==='estudiante') rec = S.estudiantes.find(function(x){ return x.id===id; });
-      else if(tipo==='administrativo') rec = S.administrativos.find(function(x){ return x.id===id; });
+      if(tipo==='docente')         rec=S.docentes.find(function(x){return x.id===id;});
+      else if(tipo==='estudiante') rec=S.estudiantes.find(function(x){return x.id===id;});
+      else if(tipo==='administrativo') rec=S.administrativos.find(function(x){return x.id===id;});
       if(!rec||!rec.password_activa) return;
-
-      /* El email para Supabase */
-      var email = rec.email || (rec.cedula ? rec.cedula+'@sigee.edu.ec' : null);
-      var pass  = rec.cedula || ('sigee'+Math.random().toString(36).slice(2,8));
-      var nombre = rec.nombre || '';
-      var rolMap = {docente:'docente', estudiante:'alumno', administrativo:'admin_plantel'};
-      var nivelMap = {docente:4, estudiante:4, administrativo:4};
-
+      var email=rec.email||(rec.cedula?rec.cedula+'@sigee.edu.ec':null);
+      var pass=rec.cedula||('sigee'+Math.random().toString(36).slice(2,8));
+      var rolM={docente:'docente',estudiante:'alumno',administrativo:'admin_plantel'};
       if(!email) return;
-
-      /* Verificar si ya existe en Supabase */
-      _supaGET('profiles','email=eq.'+encodeURIComponent(email)+'&select=id')
-        .then(function(rows){
-          if(rows&&rows.length>0){
-            console.log('[SIGEE] Usuario ya existe en Supabase:', email);
-            return;
+      _GET('profiles','email=eq.'+encodeURIComponent(email)+'&select=id').then(function(rows){
+        if(rows&&rows.length>0){ console.log('[SIGEE] Usuario ya existe:', email); return; }
+        return fetch(EDGE_CREAR,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPA_KEY},
+          body:JSON.stringify({email:email,password:pass,nombre:rec.nombre,
+            rol:rolM[tipo]||'consultor',nivel:4,estado:'activo',amie_id:rec.amie||null})})
+        .then(function(r){return r.json();})
+        .then(function(res){
+          if(res&&res.ok){
+            if(!rec.email) rec.email=email;
+            try{save();}catch(e){}
+            alert('✅ Acceso creado\nEmail: '+email+'\nContraseña: '+pass+'\n\n⚠️ Guarda estas credenciales.');
           }
-          /* Crear en Supabase via Edge Function */
-          return fetch(EDGE_CREAR_USER,{
-            method:'POST',
-            headers:{'Content-Type':'application/json','apikey':SUPA_KEY},
-            body:JSON.stringify({
-              email:   email,
-              password: pass,
-              nombre:  nombre,
-              rol:     rolMap[tipo]||'consultor',
-              nivel:   nivelMap[tipo]||4,
-              estado:  'activo',
-              amie_id: rec.amie||null
-            })
-          })
-          .then(function(r){ return r.json(); })
-          .then(function(res){
-            if(res&&res.ok){
-              console.log('[SIGEE] ✅ Acceso creado en Supabase:', email, '/', pass);
-              /* Guardar email generado en el registro local */
-              if(!rec.email) { rec.email=email; try{save();}catch(e){} }
-              alert('✅ Acceso creado en Supabase\nEmail: '+email+'\nContraseña: '+pass+'\n\n⚠️ Guarda estas credenciales.');
-            } else {
-              console.warn('[SIGEE] Error creando acceso:', res.error||JSON.stringify(res));
-            }
-          });
-        })
-        .catch(function(e){ console.warn('[SIGEE] activarPassword Supabase:', e); });
-    }, 500);
-  };
-
-  /* ─────────────────────────────────────────────────────
-     FIX 5: Botón desvincular en tabla de docentes
-     ───────────────────────────────────────────────────── */
-  var _origRenderDoc = window.renderDoc;
-  window.renderDoc = function(){
-    if(typeof _origRenderDoc==='function') _origRenderDoc();
-    /* Agregar botones de desvinculación a las filas después del render */
-    setTimeout(function(){
-      var rows = document.querySelectorAll('#dBody tr');
-      rows.forEach(function(tr){
-        var btnDiv = tr.querySelector('td:last-child div');
-        if(!btnDiv) return;
-        /* Evitar duplicados */
-        if(btnDiv.querySelector('.btn-desvinc')) return;
-        /* Obtener id del docente desde los botones existentes */
-        var existBtn = btnDiv.querySelector('button[onclick*="openDocente"]');
-        if(!existBtn) return;
-        var match = existBtn.getAttribute('onclick').match(/'([^']+)'/);
-        if(!match) return;
-        var docId = match[1];
-        var doc = S.docentes ? S.docentes.find(function(d){ return d.id===docId; }) : null;
-        if(!doc||doc.desvinculado) return;
-        var btn = document.createElement('button');
-        btn.className='btn btn-warning btn-xs btn-desvinc';
-        btn.title='Desvincular del plantel';
-        btn.textContent='📤';
-        btn.onclick=function(){ desvincularDocente(docId); };
-        btnDiv.appendChild(btn);
+        });
       });
-    }, 300);
+    },500);
   };
 
-  console.log('[SIGEE] Patch v8 — desvinculación, AMIE automático, recreos, acceso auto');
-});
+  /* ── 2 recreos en horario ── */
+  if(!S.configHorario) S.configHorario={recreo1:2,recreo2:5};
+  setTimeout(function(){
+    var panel=document.querySelector('.sg-config,.horario-config,#horarioConfig');
+    if(panel&&!document.getElementById('sigeeRecreos')){
+      var div=document.createElement('div');
+      div.id='sigeeRecreos';
+      div.style.cssText='display:flex;gap:14px;align-items:center;padding:10px 0;border-top:1px solid var(--lineD);margin-top:8px;flex-wrap:wrap';
+      div.innerHTML='<span style="font-size:12px;font-weight:600">⏰ Recreos:</span>'+
+        '<label style="font-size:12px;display:flex;align-items:center;gap:6px">Recreo 1 — bloque'+
+        '<input id="r1b" type="number" min="1" max="10" value="'+(S.configHorario.recreo1||2)+'"'+
+        ' style="width:44px;border:1px solid var(--line);border-radius:4px;padding:2px 6px;font-size:12px"'+
+        ' onchange="S.configHorario.recreo1=+this.value;save()"></label>'+
+        '<label style="font-size:12px;display:flex;align-items:center;gap:6px">Recreo 2 — bloque'+
+        '<input id="r2b" type="number" min="1" max="10" value="'+(S.configHorario.recreo2||5)+'"'+
+        ' style="width:44px;border:1px solid var(--line);border-radius:4px;padding:2px 6px;font-size:12px"'+
+        ' onchange="S.configHorario.recreo2=+this.value;save()"></label>'+
+        '<button onclick="guardarRecreos()" style="padding:4px 12px;background:var(--acc);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">💾 Guardar</button>';
+      panel.appendChild(div);
+    }
+  },1500);
 
-console.log('[SIGEE] Sync adapter v7 activo — todos los módulos conectados a Supabase');
+  window.guardarRecreos=function(){
+    var r1=+document.getElementById('r1b').value, r2=+document.getElementById('r2b').value;
+    if(r1>=r2){alert('Recreo 2 debe ser después del recreo 1');return;}
+    S.configHorario={recreo1:r1,recreo2:r2}; try{save();}catch(e){}
+    alert('✅ Recreos: bloque '+r1+' y bloque '+r2);
+  };
+
+  console.log('[SIGEE] Core v9 — Supabase como fuente primaria de datos ✅');
 });
 
 </script>
@@ -4830,7 +4791,7 @@ const RAW=[{"amie": "07H00408", "nombre": "BATALLON CAYAMBE NÚMERO 3", "Código
 // ════════════════════════════════════════════
 const BASE_DOCENTES=[];
 
-let S={planteles:[],docentes:[],baseDocentes:[],users:[],hist:[],me:null,comunicados:[],incidentes:[],seguridad_ips:[]};
+let S={planteles:[],docentes:[],baseDocentes:[],users:[{id:'u1',nombre:'Administrador',user:'',pass:'',level:1,email:'admin@sigee.edu.ec'}],hist:[],me:null,comunicados:[],incidentes:[],seguridad_ips:[]};
 let prevPg='dashboard';
 const NC=['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#f97316','#14b8a6','#a855f7'];
 const SC={'Fiscal':'#2563eb','Particular':'#d97706','Fiscomisional':'#16a34a','Municipal':'#7c3aed'};
@@ -5121,7 +5082,7 @@ function migrateAmieIds(){
 // Almacén secundario: localStorage (caché de emergencia)
 // Todas las escrituras son fire-and-forget; no bloquean la UI.
 // ════════════════════════════════════════════════════════════════
-/* SIGEE_IDB → adapter v7 */
+/* SIGEE_IDB → core v9 */
 
 // ════════════════════════════════════════════════════════════════
 // DEBOUNCE — evita filtrar en cada pulsación de teclado
@@ -5216,43 +5177,7 @@ function archivarHistorial() {
   a.click();
 }
 
-function save(){
-  try{
-    // No guardar BASE_DOCENTES en localStorage (ya está en el HTML)
-    // Solo guardar las modificaciones/adiciones hechas por el usuario
-    const toSave={...S};
-    // Separar: solo guardar registros modificados o nuevos (no los originales del Excel)
-    const baseIds=new Set(BASE_DOCENTES.map(r=>r.id));
-    const baseModificados=S.baseDocentes.filter(d=>{
-      if(!baseIds.has(d.id))return true; // nuevo registro agregado por usuario
-      const orig=BASE_DOCENTES.find(r=>r.id===d.id);
-      if(!orig)return true;
-      // Comparar campos relevantes (excluir foto para evitar falsos positivos con base64)
-      const camposKey=['nombre','cedula','categoria','especialidad','situacion','funcion',
-        'rmu','fecha_ingreso','amie_asignado','plantel_asignado','email','telefono',
-        'direccion','canton','genero','fecha_nacimiento','obs_personal','titulos'];
-      return camposKey.some(k=>JSON.stringify(d[k])!==JSON.stringify(orig[k]));
-    });
-    toSave._baseMods=baseModificados;
-    toSave.baseDocentes=undefined;
-    // ── Primario: IndexedDB (sin límite de cuota) ──
-    SIGEE_IDB.set(toSave).catch(e => console.warn('[SIGEE] IDB save falló:', e));
-    // ── Secundario: localStorage (cache lectura inicial) ──
-    try{
-      const str=JSON.stringify(toSave);
-      localStorage.setItem('SIGEE2025',str);
-    }catch(e){
-      try{
-        const slim={...toSave};
-        slim.docentes=S.docentes.map(d=>({...d,foto:d.foto?'[foto]':null}));
-        localStorage.setItem('SIGEE2025',JSON.stringify(slim));
-      }catch(e2){console.warn('[SIGEE] localStorage lleno',e2);}
-    }
-  }catch(e){console.error('[SIGEE] Error en save():', e);}
-  // ── Reactive: notificar a todos los módulos ──
-  try{ document.dispatchEvent(new CustomEvent('sigee:datachanged')); }catch(_){}
-}
-// ════════════════════════════════════════════
+/* save() → core v9 */// ════════════════════════════════════════════
 // REPARAR IDs DUPLICADOS EN DOCENTES
 // El campo "id" en DOCS_RAW era "d" + cédula, lo que
 // produce miles de duplicados. Esta función asigna
@@ -5295,68 +5220,7 @@ function repararIdsArr(arr, prefix){
   return arr;
 }
 
-async function load(){
-  try{
-    // ── 1. Intentar leer de IndexedDB (almacén primario) ──
-    let saved = null;
-    try { saved = await SIGEE_IDB.get(); } catch(e){ console.warn('[SIGEE] IDB read falló, usando localStorage:', e); }
-    // ── 2. Fallback: localStorage ──
-    if(!saved){
-      const raw=localStorage.getItem('SIGEE2025');
-      if(raw) saved=JSON.parse(raw);
-    }
-    if(saved){
-      S=saved;
-      // Reparar IDs duplicados en datos cargados del almacén
-      if(S.docentes&&S.docentes.length) S.docentes=repararIdsDuplicados(S.docentes);
-      if(S.estudiantes&&S.estudiantes.length) S.estudiantes=repararIdsArr(S.estudiantes,'est');
-      if(S.administrativos&&S.administrativos.length) S.administrativos=repararIdsArr(S.administrativos,'adm');
-      if(S.baseAdministrativos&&S.baseAdministrativos.length) S.baseAdministrativos=repararIdsArr(S.baseAdministrativos,'badm');
-      // Reconstruir baseDocentes: base original + modificaciones guardadas
-      const mods=saved._baseMods||[];
-      const modMap={};mods.forEach(m=>modMap[m.id]=m);
-      S.baseDocentes=BASE_DOCENTES.map(r=>modMap[r.id]?{...r,...modMap[r.id]}:{...r});
-      // Agregar registros nuevos (id no en BASE_DOCENTES)
-      const baseIds=new Set(BASE_DOCENTES.map(r=>r.id));
-      mods.filter(m=>!baseIds.has(m.id)).forEach(m=>S.baseDocentes.push(m));
-      delete S._baseMods;
-    } else {
-      S.planteles=RAW.map((r,i)=>({...r,id:'p'+(i+1)}));
-      S.docentes=repararIdsDuplicados(DOCS_RAW.map(r=>({...r})));
-      S.baseDocentes=BASE_DOCENTES.map(r=>({...r}));
-      S.estudiantes=genEstudiantes100();
-    }
-    // Garantizar usuario admin
-    if(!S.users||!S.users.length) S.users=[];
-    const adminIdx=S.users.findIndex(u=>u.id==='u1');
-    if(adminIdx>=0){
-                  S.users[adminIdx].level=1;
-    
-    if(!S.hist) S.hist=[];
-    if(!S.hermanos) S.hermanos=[];
-    if(!S.estudiantes||!S.estudiantes.length){
-      S.estudiantes=genEstudiantes100();
-    }
-    if(!S.docentes||!S.docentes.length) S.docentes=repararIdsDuplicados(DOCS_RAW.map(r=>({...r})));
-    if(!S.planteles||!S.planteles.length) S.planteles=RAW.map((r,i)=>({...r,id:'p'+(i+1)}));
-    if(!S.baseDocentes||!S.baseDocentes.length) S.baseDocentes=BASE_DOCENTES.map(r=>({...r}));
-    if(!S.administrativos) S.administrativos=[];
-    if(!S.baseAdministrativos) S.baseAdministrativos=[];
-    migrateAmieIds();   // ← propagar amie_id FK
-    save();
-  }catch(e){
-    S.planteles=RAW.map((r,i)=>({...r,id:'p'+(i+1)}));
-    S.docentes=repararIdsDuplicados(DOCS_RAW.map(r=>({...r})));
-    S.baseDocentes=BASE_DOCENTES.map(r=>({...r}));
-    S.estudiantes=genEstudiantes100();
-    S.users=[{id:'u1',nombre:'Administrador',user:'admin',pass:'',level:1,email:'admin@sigee.edu.ec'}];
-    S.hist=[];
-    S.administrativos=[];
-    S.baseAdministrativos=[];
-    save();
-  }
-}
-
+/* load() → core v9 */
 // ════════════════════════════════════════════
 // AUTH
 // ════════════════════════════════════════════
@@ -5364,7 +5228,7 @@ function resetAndLogin(){
   localStorage.removeItem('SIGEE2025');
   SIGEE_IDB.remove().catch(()=>{});
   load().then(()=>{
-    document.getElementById('lu').value='';
+    document.getElementById('lu').value='admin';
     document.getElementById('lp').value='';
     document.getElementById('lerr').style.display='none';
     alert('Sesión restablecida. Ingresa tus credenciales.');
@@ -5433,7 +5297,7 @@ function limpiarBD(){
   S.hist=[];
   S.comunicados=[];
   S.users=S.users.filter(u=>u.level===1); // solo conservar admin nivel 1
-  if(!S.users.length) S.users=[{id:'u1',nombre:'Administrador',user:'admin',pass:'',level:1,email:'admin@sigee.edu.ec'}];
+  if(!S.users.length) S.users=[{id:'u1',nombre:'Administrador',user:'',pass:'',level:1,email:'admin@sigee.edu.ec'}];
   // Mantener: planteles, baseDocentes, baseAdministrativos, distributivos
   save();
   updB();updBEst();updBAdm();
@@ -5446,7 +5310,7 @@ function toggleLoginPass(btn){
   else{inp.type='password';btn.textContent='👁';}
 }
 
-/* doLogin → adapter v7 */
+/* doLogin → core v9 */
 /* ══════════════════════════════════════════════
    HELPER — usuario restringido a AMIE
 ══════════════════════════════════════════════ */
@@ -24258,10 +24122,10 @@ function v45UpdatePart(eid, idx, val){
   const prom=v.length?(v.reduce((a,b)=>a+b,0)/v.length).toFixed(2):'0.00';
   const el=document.getElementById('v45part-prom-'+eid);
   if(el) el.textContent=prom;
-}function resetSession(){
-  if(!confirm('¿Restablecer sesión? Se cerrarán los datos locales.')) return;
-  localStorage.clear();
-  location.reload();
+}
+function v45UpdateAsist(eid, field, val){
+  const ex=window.repInitExtra?window.repInitExtra(eid):{};
+  ex[field]=val;
 }
 
 </script>
@@ -24641,7 +24505,7 @@ function v45UpdatePart(eid, idx, val){
     window.S.solicitudesSusc  = window.S.solicitudesSusc  || [];
     return window.S;
   }
-  function save(){ if(typeof window.dSave==='function'){try{window.dSave();}catch(e){}} }
+  function _acadSave(){ if(typeof window.dSave==='function'){try{window.dSave();}catch(e){}} }
   function fmt(d){ try{return new Date(d).toLocaleDateString('es-EC',{day:'2-digit',month:'2-digit',year:'numeric'});}catch(e){return d;} }
   function isAdmin(){
     const me=window.S?.me; if(!me) return false;
