@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
 
 const DEMO_ROLES = [
-  { key: 'super_admin', title: 'Super Admin', desc: 'Todos los planteles · Global', bg: '#f59e0b', fg: '#1e1305', email: 'sigee.admin@gmail.com' },
+  { key: 'super_admin', title: 'Super Admin', desc: 'Todos los planteles · Global (ingreso manual)', bg: '#f59e0b', fg: '#1e1305', email: null },
   { key: 'admin_plantel', title: 'Admin Plantel', desc: 'Gestión de su institución', bg: '#2563eb', fg: '#fff', email: 'demo.adminplantel@sigee.test' },
   { key: 'supervisor_plantel', title: 'Supervisor Plantel', desc: 'Supervisión académica del plantel', bg: '#0891b2', fg: '#fff', email: 'demo.supervisorplantel@sigee.test' },
   { key: 'contador_plantel', title: 'Contador Plantel', desc: 'Finanzas del plantel', bg: '#b45309', fg: '#fff', email: 'demo.contadorplantel@sigee.test' },
@@ -83,6 +83,13 @@ export default function Login() {
   }
 
   function usarDemo(rol) {
+    if (rol.key === 'super_admin') {
+      // Por seguridad, el acceso de Super Admin usa el correo real del
+      // administrador: no se autocompleta, se ingresa manualmente.
+      setEmail('');
+      setPassword('');
+      return;
+    }
     setEmail(rol.email);
     setPassword(DEMO_PASSWORD);
   }
