@@ -45,6 +45,8 @@ export default function Usuarios() {
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [rolFiltro, setRolFiltro] = useState('');
+  const [pagina, setPagina] = useState(1);
+  const porPagina = 25;
 
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -78,6 +80,14 @@ export default function Usuarios() {
     }
     return true;
   }), [usuarios, q, rolFiltro]);
+
+  useEffect(() => { setPagina(1); }, [q, rolFiltro]);
+  const totalPaginas = Math.max(1, Math.ceil(filtrados.length / porPagina));
+  const paginaActual = Math.min(pagina, totalPaginas);
+  const visibles = useMemo(
+    () => filtrados.slice((paginaActual - 1) * porPagina, paginaActual * porPagina),
+    [filtrados, paginaActual]
+  );
 
   function abrirCrear() {
     setForm({
@@ -187,7 +197,7 @@ export default function Usuarios() {
                 </tr>
               </thead>
               <tbody>
-                {filtrados.map(u => (
+                {visibles.map(u => (
                   <tr key={u.id}>
                     <td><strong>{u.nombres} {u.apellidos}</strong>{u.cedula ? <div style={{ fontSize: 11, color: 'var(--slate)' }}>{u.cedula}</div> : null}</td>
                     <td>{u.email}</td>
@@ -203,6 +213,15 @@ export default function Usuarios() {
                 ))}
               </tbody>
             </table>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderTop: '1px solid var(--border)' }}>
+            <span style={{ fontSize: 12, color: 'var(--slate)' }}>
+              {filtrados.length} usuario{filtrados.length === 1 ? '' : 's'} · página {paginaActual} de {totalPaginas}
+            </span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="btn btn-ghost btn-sm" disabled={paginaActual <= 1} onClick={() => setPagina(p => Math.max(1, p - 1))}>Anterior</button>
+              <button className="btn btn-ghost btn-sm" disabled={paginaActual >= totalPaginas} onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))}>Siguiente</button>
+            </div>
           </div>
         </div>
       )}

@@ -13,6 +13,8 @@ export default function Estudiantes() {
   const { data, institucion } = useSession();
   const [estudiantes, setEstudiantes] = useState(data?.estudiantes || []);
   const [busqueda, setBusqueda] = useState('');
+  const [pagina, setPagina] = useState(1);
+  const porPagina = 25;
   const [modal, setModal] = useState(null);
   const [tab, setTab] = useState('alumno');
   const [guardando, setGuardando] = useState(false);
@@ -37,6 +39,11 @@ export default function Estudiantes() {
   const filtrados = estudiantes.filter(e =>
     !busqueda || e.nombre.toLowerCase().includes(busqueda.toLowerCase()) || (e.cedula || '').includes(busqueda)
   );
+
+  useEffect(() => { setPagina(1); }, [busqueda]);
+  const totalPaginas = Math.max(1, Math.ceil(filtrados.length / porPagina));
+  const paginaActual = Math.min(pagina, totalPaginas);
+  const visibles = filtrados.slice((paginaActual - 1) * porPagina, paginaActual * porPagina);
 
   function abrirNuevo() {
     setError('');
@@ -145,7 +152,7 @@ export default function Estudiantes() {
         <table className="data" style={{ width: '100%' }}>
           <thead><tr><th>Nombre</th><th>Cédula</th><th>Curso</th><th>Estado</th><th>Representante</th><th>Acciones</th></tr></thead>
           <tbody>
-            {filtrados.map(e => (
+            {visibles.map(e => (
               <tr key={e.id}>
                 <td><strong style={{ cursor: 'pointer' }} onClick={() => abrirEditar(e.id)}>{e.nombre}</strong></td>
                 <td className="mono">{e.cedula || '—'}</td>
@@ -157,6 +164,17 @@ export default function Estudiantes() {
           </tbody>
         </table>
       </div>
+      {filtrados.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 2px' }}>
+          <span style={{ fontSize: 12, color: 'var(--slate)' }}>
+            {filtrados.length} estudiante{filtrados.length === 1 ? '' : 's'} · página {paginaActual} de {totalPaginas}
+          </span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className="btn btn-ghost btn-sm" disabled={paginaActual <= 1} onClick={() => setPagina(p => Math.max(1, p - 1))}>Anterior</button>
+            <button className="btn btn-ghost btn-sm" disabled={paginaActual >= totalPaginas} onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))}>Siguiente</button>
+          </div>
+        </div>
+      )}
       {filtrados.length === 0 && <p className="muted">No hay estudiantes matriculados en esta institución todavía.</p>}
 
       {modal && (
