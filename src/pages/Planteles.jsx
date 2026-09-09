@@ -35,6 +35,8 @@ export default function Planteles() {
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [sostFiltro, setSostFiltro] = useState('');
+  const [pagina, setPagina] = useState(1);
+  const porPagina = 25;
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
@@ -60,6 +62,15 @@ export default function Planteles() {
     if (q && !`${p.nombre || ''} ${p.amie || ''} ${p.canton || ''}`.toLowerCase().includes(q.toLowerCase())) return false;
     return true;
   }), [planteles, q, sostFiltro]);
+
+  useEffect(() => { setPagina(1); }, [q, sostFiltro]);
+
+  const totalPaginas = Math.max(1, Math.ceil(filtrados.length / porPagina));
+  const paginaActual = Math.min(pagina, totalPaginas);
+  const visibles = useMemo(
+    () => filtrados.slice((paginaActual - 1) * porPagina, paginaActual * porPagina),
+    [filtrados, paginaActual]
+  );
 
   function abrirCrear() {
     setEditId(null);
@@ -264,7 +275,7 @@ export default function Planteles() {
                 </tr>
               </thead>
               <tbody>
-                {filtrados.map(p => (
+                {visibles.map(p => (
                   <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => abrirEditar(p)}>
                     <td><strong>{p.nombre}</strong></td>
                     <td>{p.amie || '—'}</td>
@@ -285,6 +296,19 @@ export default function Planteles() {
                 ))}
               </tbody>
             </table>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderTop: '1px solid var(--border)' }}>
+            <span style={{ fontSize: 12, color: 'var(--slate)' }}>
+              {filtrados.length} plantel{filtrados.length === 1 ? '' : 'es'} · página {paginaActual} de {totalPaginas}
+            </span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="btn btn-ghost btn-sm" disabled={paginaActual <= 1} onClick={() => setPagina(p => Math.max(1, p - 1))}>
+                Anterior
+              </button>
+              <button className="btn btn-ghost btn-sm" disabled={paginaActual >= totalPaginas} onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))}>
+                Siguiente
+              </button>
+            </div>
           </div>
         </div>
       )}
