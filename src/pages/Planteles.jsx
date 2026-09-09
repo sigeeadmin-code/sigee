@@ -47,7 +47,32 @@ export default function Planteles() {
   const [saving, setSaving] = useState(false);
   const [formErr, setFormErr] = useState('');
   const [toast, setToast] = useState(null);
+  const [exportandoId, setExportandoId] = useState(null);
   const [credencialesCreadas, setCredencialesCreadas] = useState(null); // { email, password } tras crear el admin
+
+  async function exportarPlantel(p) {
+    setExportandoId(p.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-export-institucion', {
+        body: { institucion_id: p.id }
+      });
+      if (error) throw error;
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sigee-export-${p.slug || p.amie || p.id}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setToast({ tipo: 'ok', msg: `Exportado: ${p.nombre}` });
+    } catch (e) {
+      setToast({ tipo: 'err', msg: `Error al exportar: ${e.message || e}` });
+    } finally {
+      setExportandoId(null);
+    }
+  }
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -288,6 +313,15 @@ export default function Planteles() {
                       {p.finanzas_habilitado && <span className="badge b-info" style={{ marginLeft: 6 }}>Finanzas</span>}
                     </td>
                     <td style={{ textAlign: 'right' }}>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        disabled={exportandoId === p.id}
+                        onClick={e => { e.stopPropagation(); exportarPlantel(p); }}
+                        title="Descargar todos los datos de este plantel en un archivo, listo para migrar a un servidor propio"
+                      >
+                        {exportandoId === p.id ? 'Exportando…' : 'Exportar'}
+                      </button>
+                      {' '}
                       <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)', borderColor: '#fca5a5' }} onClick={e => { e.stopPropagation(); eliminar(p); }}>
                         Eliminar
                       </button>
