@@ -10,7 +10,7 @@ const FRANJAS = ['07:00–07:40', '07:40–08:20', '08:20–09:00', '09:20–10:
 const COLORES = ['#dbeafe', '#d1fae5', '#ede9fe', '#ffedd5', '#fce7f3', '#ccfbf1', '#fef9c3'];
 
 export default function Horario() {
-  const { institucion, data } = useSession();
+  const { institucion, data, refrescarDatos } = useSession();
   const institucionId = institucion?.id;
   const periodoActivo = data?.periodoActivo;
 
@@ -78,6 +78,7 @@ export default function Horario() {
         aula_id: aulaId || null, dia, franja
       });
       await cargarDetalle();
+      refrescarDatos();
     } catch (err) {
       setToast({ tipo: 'err', msg: err.message || 'No se pudo asignar.' });
     }
@@ -88,6 +89,7 @@ export default function Horario() {
     try {
       await eliminarBloqueHorario(id);
       await cargarDetalle();
+      refrescarDatos();
     } catch (err) {
       setToast({ tipo: 'err', msg: err.message || 'No se pudo quitar.' });
     }

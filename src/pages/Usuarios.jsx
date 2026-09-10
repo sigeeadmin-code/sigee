@@ -35,7 +35,7 @@ const emptyForm = {
 };
 
 export default function Usuarios() {
-  const { profile } = useSession();
+  const { profile, refrescarDatos } = useSession();
   const esSuperAdmin = profile.rolDb === 'super_admin';
   const esAdminPlantel = profile.rolDb === 'admin_plantel';
   const puedeGestionar = esSuperAdmin || esAdminPlantel;
@@ -107,6 +107,7 @@ export default function Usuarios() {
       await actualizarUsuario(u.id, { activo: !u.activo });
       setToast({ tipo: 'ok', msg: `${u.nombres} ${u.apellidos} ahora está ${!u.activo ? 'activo' : 'inactivo'}.` });
       await cargar();
+      refrescarDatos();
     } catch (err) {
       setToast({ tipo: 'err', msg: 'No se pudo actualizar el estado: ' + err.message });
     }
@@ -142,6 +143,7 @@ export default function Usuarios() {
       });
       setCredencialesCreadas({ email: form.email.trim().toLowerCase(), password: form.password });
       await cargar();
+      refrescarDatos();
     } catch (err) {
       setFormErr(err.message || 'No se pudo crear el usuario.');
     }

@@ -42,7 +42,7 @@ function linkWhatsapp(telefono, nombreAlumno) {
 }
 
 export default function Academico() {
-  const { profile } = useSession();
+  const { profile, refrescarDatos } = useSession();
   const institucionId = profile.institucion_id;
 
   const [grados, setGrados] = useState([]);
@@ -190,6 +190,7 @@ function CoursePanel({ grados, gradoSelId, onSelect, institucionId, recargar, sh
       else await crearGrado(institucionId, form);
       setModalOpen(false);
       await recargar();
+      refrescarDatos();
       showToast('ok', editId ? 'Curso actualizado.' : 'Curso creado.');
     } catch (err) {
       showToast('err', err.message || 'No se pudo guardar el curso.');
@@ -202,6 +203,7 @@ function CoursePanel({ grados, gradoSelId, onSelect, institucionId, recargar, sh
     try {
       await eliminarGrado(g.id);
       await recargar();
+      refrescarDatos();
       showToast('ok', 'Curso eliminado.');
     } catch (err) {
       showToast('err', err.message || 'No se pudo eliminar (tiene paralelos o alumnos asociados).');
@@ -296,6 +298,7 @@ function ParallelPanel({ grado, paraleloSelId, onSelect, docentes, recargar, sho
       else await crearParalelo(grado.id, payload);
       setModalOpen(false);
       await recargar();
+      refrescarDatos();
       showToast('ok', editId ? 'Paralelo actualizado.' : 'Paralelo creado.');
     } catch (err) {
       showToast('err', err.message || 'No se pudo guardar el paralelo.');
@@ -308,6 +311,7 @@ function ParallelPanel({ grado, paraleloSelId, onSelect, docentes, recargar, sho
     try {
       await eliminarParalelo(p.id);
       await recargar();
+      refrescarDatos();
       showToast('ok', 'Paralelo eliminado.');
     } catch (err) {
       showToast('err', err.message || 'No se pudo eliminar (tiene alumnos o cargas asociadas).');
