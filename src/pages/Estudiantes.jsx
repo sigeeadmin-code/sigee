@@ -397,7 +397,13 @@ export default function Estudiantes() {
                 <div>
                   <div className="form-grid" style={{ marginBottom: 14 }}>
                     <div><label className="fl">Curso actual</label>
-                      <input className="fc" disabled value={modal.curso || (modal.matricula ? `${modal.matricula.grado_id ? '' : ''}` : '') || '—'} /></div>
+                      <input className="fc" disabled value={(() => {
+                        if (!modal.matricula) return '—';
+                        const grado = catalogo.grados.find(g => g.id === modal.matricula.grado_id);
+                        if (!grado) return '—';
+                        const paralelo = (grado.paralelos || []).find(p => p.id === modal.matricula.paralelo_id);
+                        return `${grado.nombre}${paralelo ? ' ' + paralelo.nombre : ''}`;
+                      })()} /></div>
                     <div><label className="fl">Estado de matrícula</label>
                       <input className="fc" disabled value={modal.matricula?.estado || modal.estado || 'Sin matrícula'} /></div>
                     <div className="full"><label className="fl">Plantel</label>

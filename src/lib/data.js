@@ -293,7 +293,7 @@ export async function fetchEstudiantePerfil(id) {
     }
   }
 
-  const matricula = (await sel('matriculas', '*', q => q.eq('estudiante_id', id).order('created_at', { ascending: false }).limit(1)))[0] || null;
+  const matricula = (await sel('matriculas', '*', q => q.eq('estudiante_id', id).order('fecha_matricula', { ascending: false }).limit(1)))[0] || null;
 
   return { ...est, representantes, hermanos, matricula };
 }
@@ -711,7 +711,7 @@ export async function fetchResumenAcademico(institucionId, periodoId) {
 
   const hace30 = new Date(Date.now() - 30 * 86400000).toISOString();
   const movimientos = paraleloIds.length
-    ? await sel('matriculas', 'id, estado, created_at', q => q.in('paralelo_id', paraleloIds).gte('fecha_matricula', hace30.slice(0, 10)))
+    ? await sel('matriculas', 'id, estado, fecha_matricula', q => q.in('paralelo_id', paraleloIds).gte('fecha_matricula', hace30.slice(0, 10)))
     : [];
 
   const tareaIds = (await sel('tareas', 'id', q => q.eq('institucion_id', institucionId))).map(t => t.id);
