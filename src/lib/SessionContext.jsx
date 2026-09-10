@@ -53,8 +53,16 @@ export function SessionProvider({ children }) {
     if (authErr) { setError('Correo o contraseña incorrectos.'); throw authErr; }
   }, []);
   const logout = useCallback(async () => { await supabase.auth.signOut(); }, []);
+  // Vuelve a traer docentes/estudiantes/usuarios/etc. desde Supabase sin recargar toda la sesión.
+  // Se debe llamar después de crear/editar/borrar registros, para que si el usuario navega a
+  // otra pantalla y regresa, no vea una versión vieja en caché de los datos.
+  const refrescarDatos = useCallback(async () => {
+    if (!profile?.institucion_id) return;
+    const d = await fetchInstitucionData(profile.institucion_id);
+    setData(d);
+  }, [profile]);
   return (
-    <SessionCtx.Provider value={{ loading, profile, instituciones, institucion, data, error, login, logout }}>
+    <SessionCtx.Provider value={{ loading, profile, instituciones, institucion, data, error, login, logout, refrescarDatos }}>
       {children}
     </SessionCtx.Provider>
   );

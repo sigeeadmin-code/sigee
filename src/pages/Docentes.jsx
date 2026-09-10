@@ -54,7 +54,7 @@ function anios(fechaIngreso) {
 }
 
 export default function Docentes() {
-  const { data, institucion, profile } = useSession();
+  const { data, institucion, profile, refrescarDatos } = useSession();
   const [docentes, setDocentes] = useState(data?.docentes || []);
   const [busqueda, setBusqueda] = useState('');
   const [pagina, setPagina] = useState(1);
@@ -190,7 +190,7 @@ export default function Docentes() {
         fallos.push({ cedula: f.payload.cedula, nombre: `${f.payload.nombres} ${f.payload.apellidos}`, motivo: err.message });
       }
     }
-    if (nuevosLocales.length) setDocentes(ds => [...ds, ...nuevosLocales]);
+    if (nuevosLocales.length) { setDocentes(ds => [...ds, ...nuevosLocales]); refrescarDatos(); }
     setMasivo(m => ({ ...m, subiendo: false, resultado: { creados, fallos } }));
   }
 
@@ -225,6 +225,7 @@ export default function Docentes() {
           situacion: payload.situacion, cargo: payload.cargo, materias: [], cursos: [], activo: true, acceso: false
         }]);
       }
+      refrescarDatos();
       cerrar();
     } catch (e) {
       setError('No se pudo guardar: ' + e.message);

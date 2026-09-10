@@ -23,7 +23,7 @@ const GENEROS = ['Masculino', 'Femenino'];
 const ROLES_REP = ['Padre', 'Madre', 'Tutor', 'Otro'];
 
 export default function Estudiantes() {
-  const { data, institucion } = useSession();
+  const { data, institucion, refrescarDatos } = useSession();
   const [estudiantes, setEstudiantes] = useState(data?.estudiantes || []);
   const [busqueda, setBusqueda] = useState('');
   const [pagina, setPagina] = useState(1);
@@ -160,7 +160,7 @@ export default function Estudiantes() {
         fallos.push({ cedula: f.payload.cedula, nombre: `${f.payload.nombres} ${f.payload.apellidos}`, motivo: err.message });
       }
     }
-    if (nuevosLocales.length) setEstudiantes(es => [...es, ...nuevosLocales]);
+    if (nuevosLocales.length) { setEstudiantes(es => [...es, ...nuevosLocales]); refrescarDatos(); }
     setMasivo(m => ({ ...m, subiendo: false, resultado: { creados, fallos } }));
   }
 
@@ -219,6 +219,7 @@ export default function Estudiantes() {
           curso: '—', paralelo: '', estado: 'Sin matrícula', representante: '', activo: true, acceso: false
         }]);
       }
+      refrescarDatos();
       cerrar();
     } catch (e) {
       setError('No se pudo guardar: ' + e.message);
@@ -234,6 +235,7 @@ export default function Estudiantes() {
       const rep = await agregarRepresentante(institucion.id, modal.id, nuevoRep);
       upd('representantes', [...modal.representantes, rep]);
       setNuevoRep({ nombres: '', apellidos: '', cedula: '', telefono: '', email: '', rol_representante: 'Padre' });
+      refrescarDatos();
     } catch (e) { setError('No se pudo agregar el representante: ' + e.message); }
   }
 
@@ -241,6 +243,7 @@ export default function Estudiantes() {
     try {
       await quitarRepresentanteDeEstudiante(repId, modal.id);
       upd('representantes', modal.representantes.filter(r => r.id !== repId));
+      refrescarDatos();
     } catch (e) { setError('No se pudo quitar el representante: ' + e.message); }
   }
 
@@ -254,6 +257,7 @@ export default function Estudiantes() {
       const actualizado = await fetchEstudiantePerfil(modal.id);
       setModal(actualizado);
       setNuevaMatricula({ periodoId: '', gradoId: '', paraleloId: '' });
+      refrescarDatos();
     } catch (e) {
       setError('No se pudo matricular: ' + e.message);
     }
