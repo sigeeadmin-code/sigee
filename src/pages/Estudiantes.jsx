@@ -5,6 +5,19 @@ import {
   agregarRepresentante, actualizarRepresentante, quitarRepresentanteDeEstudiante,
   crearMatricula, fetchGradosConParalelos, fetchPeriodos
 } from '../lib/data.js';
+import { descargarPlantillaExcel, leerExcel, normalizarFecha, validarCedulaEC } from '../lib/cargaMasiva.js';
+
+const PLANTILLA_ESTUDIANTES_COLS = [
+  'Cédula', 'Nombres', 'Apellidos', 'Fecha Nacimiento (AAAA-MM-DD)', 'Género (Masculino/Femenino)', 'Dirección',
+  'Curso (ej: Primero de Básica)', 'Paralelo (ej: A)',
+  'Representante Nombres', 'Representante Apellidos', 'Representante Cédula', 'Representante Teléfono',
+  'Representante Email', 'Parentesco (Padre/Madre/Tutor/Otro)'
+];
+const PLANTILLA_ESTUDIANTES_EJEMPLO = [
+  '0712345678', 'María José', 'López Torres', '2015-06-20', 'Femenino', 'Av. Las Palmeras 123',
+  'Segundo de Básica', 'A',
+  'Carlos', 'López Vera', '0798765432', '0987654321', 'carlos.lopez@ejemplo.com', 'Padre'
+];
 
 const GENEROS = ['Masculino', 'Femenino'];
 const ROLES_REP = ['Padre', 'Madre', 'Tutor', 'Otro'];
@@ -23,6 +36,7 @@ export default function Estudiantes() {
   const [catalogo, setCatalogo] = useState({ grados: [], periodos: [] });
   const [nuevaMatricula, setNuevaMatricula] = useState({ periodoId: '', gradoId: '', paraleloId: '' });
   const [matriculando, setMatriculando] = useState(false);
+  const [masivo, setMasivo] = useState(null);
 
   useEffect(() => { setEstudiantes(data?.estudiantes || []); }, [data]);
 
@@ -39,6 +53,116 @@ export default function Estudiantes() {
   const filtrados = estudiantes.filter(e =>
     !busqueda || e.nombre.toLowerCase().includes(busqueda.toLowerCase()) || (e.cedula || '').includes(busqueda)
   );
+
+  function filaAPayloadEstudiante(fila) {
+    const cedula = String(fila['Cédula'] || '').trim();
+    const nombres = String(fila['Nombres'] || '').trim();
+    const apellidos = String(fila['Apellidos'] || '').trim();
+    const cursoTxt = String(fila['Curso (ej: Primero de Básica)'] || '').trim();
+    const paraleloTxt = String(fila['Paralelo (ej: A)'] || '').trim();
+    const errores = [];
+    if (!nombres) errores.push('nombres vacíos');
+    if (!apellidos) errores.push('apellidos vacíos');
+    if (cedula && !validarCedulaEC(cedula)) errores.push('cédula inválida');
+
+    let gradoId = null, paraleloId = null;
+    if (cursoTxt) {
+      const grado = catalogo.grados.find(g => g.nombre.toLowerCase().trim() === cursoTxt.toLowerCase());
+      if (!grado) errores.push(`curso "${cursoTxt}" no existe en este plantel`);
+      else {
+        gradoId = grado.id;
+        if (paraleloTxt) {
+          const par = (grado.paralelos || []).find(p => p.nombre.toLowerCase().trim() === paraleloTxt.toLowerCase());
+          if (!par) errores.push(`paralelo "${paraleloTxt}" no existe en ${cursoTxt}`);
+          else paraleloId = par.id;
+        }
+      }
+    }
+
+    const repNombres = String(fila['Representante Nombres'] || '').trim();
+    const repApellidos = String(fila['Representante Apellidos'] || '').trim();
+    const tieneRepresentante = !!(repNombres || repApellidos);
+
+    return {
+      payload: {
+        cedula: cedula || null, nombres, apellidos,
+        fecha_nacimiento: normalizarFecha(fila['Fecha Nacimiento (AAAA-MM-DD)']),
+        genero: String(fila['Género (Masculino/Femenino)'] || '').trim() || null,
+        direccion: String(fila['Dirección'] || '').trim() || null,
+      },
+      gradoId, paraleloId, cursoTxt, paraleloTxt,
+      representante: tieneRepresentante ? {
+        nombres: repNombres, apellidos: repApellidos,
+        cedula: String(fila['Representante Cédula'] || '').trim() || null,
+        telefono: String(fila['Representante Teléfono'] || '').trim() || null,
+        email: String(fila['Representante Email'] || '').trim() || null,
+        rol_representante: String(fila['Parentesco (Padre/Madre/Tutor/Otro)'] || '').trim() || 'Padre',
+      } : null,
+      errores,
+    };
+  }
+
+  function abrirCargaMasiva() {
+    setMasivo({ filas: [], subiendo: false, resultado: null });
+  }
+
+  async function onArchivoMasivo(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const filasCrudas = await leerExcel(file);
+      const cedulasExistentes = new Set(estudiantes.map(x => x.cedula).filter(Boolean));
+      const vistas = new Set();
+      const filas = filasCrudas.map(fila => {
+        const r = filaAPayloadEstudiante(fila);
+        if (r.payload.cedula) {
+          if (cedulasExistentes.has(r.payload.cedula)) r.errores.push('cédula ya existe en el sistema');
+          else if (vistas.has(r.payload.cedula)) r.errores.push('cédula duplicada en el archivo');
+          vistas.add(r.payload.cedula);
+        }
+        return r;
+      });
+      setMasivo({ filas, subiendo: false, resultado: null });
+    } catch (err) {
+      setMasivo({ filas: [], subiendo: false, resultado: null });
+      setError('No se pudo leer el archivo: ' + err.message);
+    } finally {
+      e.target.value = '';
+    }
+  }
+
+  async function confirmarCargaMasivaEstudiantes() {
+    const validas = masivo.filas.filter(f => f.errores.length === 0);
+    if (validas.length === 0) return;
+    setMasivo(m => ({ ...m, subiendo: true }));
+    const periodoActivo = catalogo.periodos.find(p => p.activo) || catalogo.periodos[0] || null;
+    let creados = 0;
+    const fallos = [];
+    const nuevosLocales = [];
+    for (const f of validas) {
+      try {
+        const nuevo = await crearEstudiante(institucion.id, f.payload);
+        let curso = '—', paralelo = '', estado = 'Sin matrícula', representanteTxto = '';
+        if (f.gradoId && f.paraleloId && periodoActivo) {
+          await crearMatricula(nuevo.id, periodoActivo.id, f.gradoId, f.paraleloId);
+          curso = f.cursoTxt; paralelo = f.paraleloTxt; estado = 'Activa';
+        }
+        if (f.representante) {
+          await agregarRepresentante(institucion.id, nuevo.id, f.representante);
+          representanteTxto = `${f.representante.apellidos} ${f.representante.nombres}`.trim();
+        }
+        nuevosLocales.push({
+          id: nuevo.id, nombre: `${f.payload.apellidos} ${f.payload.nombres}`.trim(), cedula: f.payload.cedula,
+          curso, paralelo, estado, representante: representanteTxto, activo: true, acceso: false
+        });
+        creados++;
+      } catch (err) {
+        fallos.push({ cedula: f.payload.cedula, nombre: `${f.payload.nombres} ${f.payload.apellidos}`, motivo: err.message });
+      }
+    }
+    if (nuevosLocales.length) setEstudiantes(es => [...es, ...nuevosLocales]);
+    setMasivo(m => ({ ...m, subiendo: false, resultado: { creados, fallos } }));
+  }
 
   useEffect(() => { setPagina(1); }, [busqueda]);
   const totalPaginas = Math.max(1, Math.ceil(filtrados.length / porPagina));
@@ -142,7 +266,10 @@ export default function Estudiantes() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2>Estudiantes</h2>
-        <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo estudiante</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost" onClick={abrirCargaMasiva}>📥 Carga masiva (Excel)</button>
+          <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo estudiante</button>
+        </div>
       </div>
 
       <input className="search" placeholder="Buscar por nombre o cédula…"
@@ -323,6 +450,85 @@ export default function Estudiantes() {
               <button className="btn btn-primary" disabled={guardando} onClick={guardar}>
                 {guardando ? 'Guardando…' : '💾 Guardar'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {masivo && (
+        <div className="modal-bg" onClick={() => !masivo.subiendo && setMasivo(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 820 }}>
+            <h3>📥 Carga masiva de estudiantes (Excel)</h3>
+            <p style={{ color: 'var(--slate)', fontSize: 13 }}>
+              Descarga la plantilla y complétala. Nombres y apellidos son obligatorios; curso/paralelo y representante son opcionales,
+              pero si los llenas deben coincidir con los cursos/paralelos ya creados en este plantel.
+            </p>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+              <button className="btn btn-secondary" onClick={() => descargarPlantillaExcel('plantilla_estudiantes_sigee.xlsx', PLANTILLA_ESTUDIANTES_COLS, PLANTILLA_ESTUDIANTES_EJEMPLO)}>
+                ⬇️ Descargar plantilla
+              </button>
+              <label className="btn btn-primary" style={{ cursor: 'pointer' }}>
+                📂 Elegir archivo
+                <input type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={onArchivoMasivo} />
+              </label>
+            </div>
+
+            {masivo.filas.length > 0 && !masivo.resultado && (
+              <>
+                <div style={{ maxHeight: 320, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
+                  <table className="tbl">
+                    <thead><tr><th>#</th><th>Nombres</th><th>Apellidos</th><th>Curso/Paralelo</th><th>Representante</th><th>Estado</th></tr></thead>
+                    <tbody>
+                      {masivo.filas.map((f, i) => (
+                        <tr key={i}>
+                          <td>{i + 1}</td>
+                          <td>{f.payload.nombres}</td>
+                          <td>{f.payload.apellidos}</td>
+                          <td>{f.cursoTxt ? `${f.cursoTxt} ${f.paraleloTxt}` : '—'}</td>
+                          <td>{f.representante ? `${f.representante.nombres} ${f.representante.apellidos}` : '—'}</td>
+                          <td>
+                            {f.errores.length === 0
+                              ? <span className="badge b-ok">Listo</span>
+                              : <span className="badge b-err" title={f.errores.join(', ')}>⚠️ {f.errores.join(', ')}</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p style={{ fontSize: 12, color: 'var(--slate)', margin: '8px 0' }}>
+                  {masivo.filas.filter(f => f.errores.length === 0).length} de {masivo.filas.length} filas listas para cargar.
+                </p>
+              </>
+            )}
+
+            {masivo.resultado && (
+              <div style={{ padding: 12, background: 'var(--bg-soft)', borderRadius: 8, marginBottom: 12 }}>
+                <p><strong>{masivo.resultado.creados}</strong> estudiante{masivo.resultado.creados === 1 ? '' : 's'} creado{masivo.resultado.creados === 1 ? '' : 's'} correctamente.</p>
+                {masivo.resultado.fallos.length > 0 && (
+                  <>
+                    <p style={{ color: 'var(--red)' }}>{masivo.resultado.fallos.length} fila(s) fallaron:</p>
+                    <ul style={{ fontSize: 12, color: 'var(--red)' }}>
+                      {masivo.resultado.fallos.map((f, i) => <li key={i}>{f.nombre} ({f.cedula}): {f.motivo}</li>)}
+                    </ul>
+                  </>
+                )}
+              </div>
+            )}
+
+            <div className="modal-f">
+              <button className="btn btn-secondary" disabled={masivo.subiendo} onClick={() => setMasivo(null)}>
+                {masivo.resultado ? 'Cerrar' : 'Cancelar'}
+              </button>
+              {!masivo.resultado && (
+                <button
+                  className="btn btn-primary"
+                  disabled={masivo.subiendo || masivo.filas.filter(f => f.errores.length === 0).length === 0}
+                  onClick={confirmarCargaMasivaEstudiantes}
+                >
+                  {masivo.subiendo ? 'Cargando…' : `✅ Confirmar carga (${masivo.filas.filter(f => f.errores.length === 0).length})`}
+                </button>
+              )}
             </div>
           </div>
         </div>

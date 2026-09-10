@@ -5,6 +5,42 @@ import {
   fetchCargasPorDocenteId, crearCargaDocente, eliminarCargaDocente,
   fetchMaterias, fetchGradosConParalelos, fetchPeriodos
 } from '../lib/data.js';
+import { descargarPlantillaExcel, leerExcel, normalizarFecha, validarCedulaEC } from '../lib/cargaMasiva.js';
+
+const PLANTILLA_DOCENTES_COLS = [
+  'Cédula', 'Nombres', 'Apellidos', 'Email', 'Teléfono', 'Título', 'Cargo',
+  'Situación (NOMBRAMIENTO/CONTRATO/OCASIONAL/REEMPLAZO)', 'Especialidad', 'Área',
+  'Fecha Ingreso (AAAA-MM-DD)', 'Género (Masculino/Femenino)'
+];
+const PLANTILLA_DOCENTES_EJEMPLO = [
+  '0701234567', 'Juan Carlos', 'Pérez Gómez', 'juan.perez@ejemplo.com', '0991234567',
+  'Licenciado en Educación Básica', 'Docente', 'NOMBRAMIENTO', 'Matemática', 'Ciencias Exactas',
+  '2020-03-15', 'Masculino'
+];
+
+function filaAPayloadDocente(fila) {
+  const cedula = String(fila['Cédula'] || '').trim();
+  const nombres = String(fila['Nombres'] || '').trim();
+  const apellidos = String(fila['Apellidos'] || '').trim();
+  const errores = [];
+  if (!cedula) errores.push('cédula vacía');
+  else if (!validarCedulaEC(cedula)) errores.push('cédula inválida');
+  if (!nombres) errores.push('nombres vacíos');
+  if (!apellidos) errores.push('apellidos vacíos');
+  const payload = {
+    cedula, nombres, apellidos,
+    email: String(fila['Email'] || '').trim() || null,
+    telefono: String(fila['Teléfono'] || '').trim() || null,
+    titulo: String(fila['Título'] || '').trim() || null,
+    cargo: String(fila['Cargo'] || '').trim() || null,
+    situacion: String(fila['Situación (NOMBRAMIENTO/CONTRATO/OCASIONAL/REEMPLAZO)'] || '').trim().toUpperCase() || 'NOMBRAMIENTO',
+    especialidad: String(fila['Especialidad'] || '').trim() || null,
+    area: String(fila['Área'] || '').trim() || null,
+    fecha_ingreso: normalizarFecha(fila['Fecha Ingreso (AAAA-MM-DD)']),
+    genero: String(fila['Género (Masculino/Femenino)'] || '').trim() || null,
+  };
+  return { payload, errores };
+}
 
 const SANGRE = ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'];
 const GENEROS = ['Masculino', 'Femenino'];
@@ -30,6 +66,7 @@ export default function Docentes() {
   const [cargas, setCargas] = useState([]);
   const [catalogo, setCatalogo] = useState({ materias: [], grados: [], periodos: [] });
   const [nuevaCarga, setNuevaCarga] = useState({ materiaId: '', gradoId: '', paraleloId: '', periodoId: '' });
+  const [masivo, setMasivo] = useState(null); // { filas: [{payload, errores, fila}], subiendo, resultado }
 
   useEffect(() => { setDocentes(data?.docentes || []); }, [data]);
 
@@ -105,6 +142,58 @@ export default function Docentes() {
     } catch (e) { setError('No se pudo subir el documento: ' + e.message); }
   }
 
+  function abrirCargaMasiva() {
+    setMasivo({ filas: [], subiendo: false, resultado: null });
+  }
+
+  async function onArchivoMasivo(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const filasCrudas = await leerExcel(file);
+      const cedulasExistentes = new Set(docentes.map(d => d.cedula));
+      const vistas = new Set();
+      const filas = filasCrudas.map(fila => {
+        const { payload, errores } = filaAPayloadDocente(fila);
+        if (payload.cedula) {
+          if (cedulasExistentes.has(payload.cedula)) errores.push('cédula ya existe en el sistema');
+          else if (vistas.has(payload.cedula)) errores.push('cédula duplicada en el archivo');
+          vistas.add(payload.cedula);
+        }
+        return { payload, errores };
+      });
+      setMasivo({ filas, subiendo: false, resultado: null });
+    } catch (err) {
+      setMasivo({ filas: [], subiendo: false, resultado: null });
+      setError('No se pudo leer el archivo: ' + err.message);
+    } finally {
+      e.target.value = '';
+    }
+  }
+
+  async function confirmarCargaMasiva() {
+    const validas = masivo.filas.filter(f => f.errores.length === 0);
+    if (validas.length === 0) return;
+    setMasivo(m => ({ ...m, subiendo: true }));
+    let creados = 0;
+    const fallos = [];
+    const nuevosLocales = [];
+    for (const f of validas) {
+      try {
+        const nuevo = await crearDocente(institucion.id, f.payload);
+        nuevosLocales.push({
+          id: nuevo.id, nombre: `${f.payload.apellidos} ${f.payload.nombres}`.trim(), cedula: f.payload.cedula,
+          situacion: f.payload.situacion, cargo: f.payload.cargo, materias: [], cursos: [], activo: true, acceso: false
+        });
+        creados++;
+      } catch (err) {
+        fallos.push({ cedula: f.payload.cedula, nombre: `${f.payload.nombres} ${f.payload.apellidos}`, motivo: err.message });
+      }
+    }
+    if (nuevosLocales.length) setDocentes(ds => [...ds, ...nuevosLocales]);
+    setMasivo(m => ({ ...m, subiendo: false, resultado: { creados, fallos } }));
+  }
+
   async function guardar() {
     if (!modal.nombres || !modal.apellidos || !modal.cedula) {
       setError('Nombres, apellidos y cédula son obligatorios.'); setTab('personales'); return;
@@ -172,7 +261,10 @@ export default function Docentes() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2>Docentes</h2>
-        <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo docente</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost" onClick={abrirCargaMasiva}>📥 Carga masiva (Excel)</button>
+          <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo docente</button>
+        </div>
       </div>
 
       <input className="search" placeholder="Buscar por nombre o cédula…"
@@ -415,6 +507,83 @@ export default function Docentes() {
               <button className="btn btn-primary" disabled={guardando} onClick={guardar}>
                 {guardando ? 'Guardando…' : '💾 Guardar'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {masivo && (
+        <div className="modal-bg" onClick={() => !masivo.subiendo && setMasivo(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 720 }}>
+            <h3>📥 Carga masiva de docentes (Excel)</h3>
+            <p style={{ color: 'var(--slate)', fontSize: 13 }}>
+              Descarga la plantilla, complétala con los datos de los docentes y súbela aquí. Cédula, nombres y apellidos son obligatorios.
+            </p>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+              <button className="btn btn-secondary" onClick={() => descargarPlantillaExcel('plantilla_docentes_sigee.xlsx', PLANTILLA_DOCENTES_COLS, PLANTILLA_DOCENTES_EJEMPLO)}>
+                ⬇️ Descargar plantilla
+              </button>
+              <label className="btn btn-primary" style={{ cursor: 'pointer' }}>
+                📂 Elegir archivo
+                <input type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={onArchivoMasivo} />
+              </label>
+            </div>
+
+            {masivo.filas.length > 0 && !masivo.resultado && (
+              <>
+                <div style={{ maxHeight: 320, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
+                  <table className="tbl">
+                    <thead><tr><th>#</th><th>Cédula</th><th>Nombres</th><th>Apellidos</th><th>Estado</th></tr></thead>
+                    <tbody>
+                      {masivo.filas.map((f, i) => (
+                        <tr key={i}>
+                          <td>{i + 1}</td>
+                          <td className="mono">{f.payload.cedula || '—'}</td>
+                          <td>{f.payload.nombres}</td>
+                          <td>{f.payload.apellidos}</td>
+                          <td>
+                            {f.errores.length === 0
+                              ? <span className="badge b-ok">Listo</span>
+                              : <span className="badge b-err" title={f.errores.join(', ')}>⚠️ {f.errores.join(', ')}</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p style={{ fontSize: 12, color: 'var(--slate)', margin: '8px 0' }}>
+                  {masivo.filas.filter(f => f.errores.length === 0).length} de {masivo.filas.length} filas listas para cargar.
+                </p>
+              </>
+            )}
+
+            {masivo.resultado && (
+              <div style={{ padding: 12, background: 'var(--bg-soft)', borderRadius: 8, marginBottom: 12 }}>
+                <p><strong>{masivo.resultado.creados}</strong> docente{masivo.resultado.creados === 1 ? '' : 's'} creado{masivo.resultado.creados === 1 ? '' : 's'} correctamente.</p>
+                {masivo.resultado.fallos.length > 0 && (
+                  <>
+                    <p style={{ color: 'var(--red)' }}>{masivo.resultado.fallos.length} fila(s) fallaron:</p>
+                    <ul style={{ fontSize: 12, color: 'var(--red)' }}>
+                      {masivo.resultado.fallos.map((f, i) => <li key={i}>{f.nombre} ({f.cedula}): {f.motivo}</li>)}
+                    </ul>
+                  </>
+                )}
+              </div>
+            )}
+
+            <div className="modal-f">
+              <button className="btn btn-secondary" disabled={masivo.subiendo} onClick={() => setMasivo(null)}>
+                {masivo.resultado ? 'Cerrar' : 'Cancelar'}
+              </button>
+              {!masivo.resultado && (
+                <button
+                  className="btn btn-primary"
+                  disabled={masivo.subiendo || masivo.filas.filter(f => f.errores.length === 0).length === 0}
+                  onClick={confirmarCargaMasiva}
+                >
+                  {masivo.subiendo ? 'Cargando…' : `✅ Confirmar carga (${masivo.filas.filter(f => f.errores.length === 0).length})`}
+                </button>
+              )}
             </div>
           </div>
         </div>
