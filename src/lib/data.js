@@ -809,7 +809,9 @@ export async function fetchAlumnosParaExportar(institucionId, periodoId) {
 
 // ── Justificaciones: al aprobar, marca también la asistencia del día ──
 export async function marcarAsistenciaJustificada(estudianteId, fecha) {
+  // Solo se justifican las faltas reales (estado 'ausente') de ese día — nunca se debe
+  // sobrescribir un registro donde el estudiante sí asistió a otra materia/hora la misma fecha.
   const { error } = await supabase.from('asistencia')
-    .update({ estado: 'justificado' }).eq('estudiante_id', estudianteId).eq('fecha', fecha);
+    .update({ estado: 'justificado' }).eq('estudiante_id', estudianteId).eq('fecha', fecha).eq('estado', 'ausente');
   if (error) throw error;
 }
