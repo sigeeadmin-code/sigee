@@ -815,3 +815,35 @@ export async function marcarAsistenciaJustificada(estudianteId, fecha) {
     .update({ estado: 'justificado' }).eq('estudiante_id', estudianteId).eq('fecha', fecha).eq('estado', 'ausente');
   if (error) throw error;
 }
+
+// ── Roles y Permisos: matriz módulo × acción por rol (tablas modulos_sistema/permisos_rol) ──
+export async function fetchModulosSistema() {
+  return sel('modulos_sistema', '*', q => q.eq('activo', true).order('orden'));
+}
+export async function fetchPermisosRol(rol) {
+  return sel('permisos_rol', 'modulo_codigo, accion', q => q.eq('rol', rol));
+}
+export async function setPermisoRol(rol, modulo_codigo, accion, permitido) {
+  if (permitido) {
+    const { error } = await supabase
+      .from('permisos_rol')
+      .upsert({ rol, modulo_codigo, accion, permitido: true }, { onConflict: 'rol,modulo_codigo,accion' });
+    if (error) throw error;
+  } else {
+    const { error } = await supabase
+      .from('permisos_rol')
+      .delete()
+      .eq('rol', rol).eq('modulo_codigo', modulo_codigo).eq('accion', accion);
+    if (error) throw error;
+  }
+}
+export async function copiarPermisosRol(rolOrigen, rolDestino) {
+  const origen = await sel('permisos_rol', 'modulo_codigo, accion', q => q.eq('rol', rolOrigen));
+  const { error: delErr } = await supabase.from('permisos_rol').delete().eq('rol', rolDestino);
+  if (delErr) throw delErr;
+  if (origen.length) {
+    const filas = origen.map(p => ({ rol: rolDestino, modulo_codigo: p.modulo_codigo, accion: p.accion, permitido: true }));
+    const { error: insErr } = await supabase.from('permisos_rol').insert(filas);
+    if (insErr) throw insErr;
+  }
+}
