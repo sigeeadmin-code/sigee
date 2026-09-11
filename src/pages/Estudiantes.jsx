@@ -21,6 +21,19 @@ const PLANTILLA_ESTUDIANTES_EJEMPLO = [
 
 const GENEROS = ['Masculino', 'Femenino'];
 const ROLES_REP = ['Padre', 'Madre', 'Tutor', 'Otro'];
+const ETNIAS = ['Mestizo', 'Indígena', 'Afroecuatoriano', 'Montubio', 'Blanco', 'Mulato', 'Negro', 'Otro'];
+const DISCAPACIDADES = ['Ninguna', 'Física', 'Visual', 'Auditiva', 'Intelectual', 'Psicosocial', 'Múltiple'];
+
+function calcularEdad(fechaNacimiento) {
+  if (!fechaNacimiento) return null;
+  const nac = new Date(fechaNacimiento + 'T00:00:00');
+  if (Number.isNaN(nac.getTime())) return null;
+  const hoy = new Date();
+  let edad = hoy.getFullYear() - nac.getFullYear();
+  const aunNoCumple = hoy.getMonth() < nac.getMonth() || (hoy.getMonth() === nac.getMonth() && hoy.getDate() < nac.getDate());
+  if (aunNoCumple) edad -= 1;
+  return edad >= 0 ? edad : null;
+}
 
 export default function Estudiantes() {
   const { data, institucion, refrescarDatos } = useSession();
@@ -173,7 +186,9 @@ export default function Estudiantes() {
     setError('');
     setModal({
       id: null, cedula: '', nombres: '', apellidos: '', fecha_nacimiento: '', genero: '',
-      direccion: '', foto_url: '', activo: true, representantes: [], hermanos: [], matricula: null
+      etnia: '', discapacidad: '', telefono: '', email: '',
+      direccion: '', provincia: institucion?.provincia || '', canton: institucion?.canton || '',
+      observaciones: '', foto_url: '', activo: true, representantes: [], hermanos: [], matricula: null
     });
     setTab('alumno');
   }
@@ -204,7 +219,10 @@ export default function Estudiantes() {
     const payload = {
       cedula: modal.cedula || null, nombres: modal.nombres, apellidos: modal.apellidos,
       fecha_nacimiento: modal.fecha_nacimiento || null, genero: modal.genero || null,
-      direccion: modal.direccion || null, foto_url: modal.foto_url || null
+      etnia: modal.etnia || null, discapacidad: modal.discapacidad || null,
+      telefono: modal.telefono || null, email: modal.email || null,
+      direccion: modal.direccion || null, provincia: modal.provincia || null, canton: modal.canton || null,
+      observaciones: modal.observaciones || null, foto_url: modal.foto_url || null
     };
     try {
       if (modal.id) {
@@ -341,17 +359,40 @@ export default function Estudiantes() {
                     <input className="fc" value={modal.apellidos} onChange={e => upd('apellidos', e.target.value)} /></div>
                   <div className="full"><label className="fl">Nombres *</label>
                     <input className="fc" value={modal.nombres} onChange={e => upd('nombres', e.target.value)} /></div>
-                  <div><label className="fl">Cédula</label>
+                  <div><label className="fl">Cédula de identidad</label>
                     <input className="fc mono" value={modal.cedula || ''} onChange={e => upd('cedula', e.target.value)} /></div>
-                  <div><label className="fl">Fecha de nacimiento</label>
-                    <input className="fc" type="date" value={modal.fecha_nacimiento || ''} onChange={e => upd('fecha_nacimiento', e.target.value)} /></div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                    <div style={{ flex: 1 }}><label className="fl">Fecha de nacimiento</label>
+                      <input className="fc" type="date" value={modal.fecha_nacimiento || ''} onChange={e => upd('fecha_nacimiento', e.target.value)} /></div>
+                    <div style={{ width: 90 }}><label className="fl">Edad</label>
+                      <input className="fc" value={calcularEdad(modal.fecha_nacimiento) ?? '—'} disabled /></div>
+                  </div>
                   <div><label className="fl">Género</label>
                     <select className="fc" value={modal.genero || ''} onChange={e => upd('genero', e.target.value)}>
                       <option value="">Seleccione…</option>
                       {GENEROS.map(g => <option key={g} value={g}>{g}</option>)}
                     </select></div>
+                  <div><label className="fl">Etnia / Nacionalidad</label>
+                    <select className="fc" value={modal.etnia || ''} onChange={e => upd('etnia', e.target.value)}>
+                      <option value="">—</option>
+                      {ETNIAS.map(x => <option key={x} value={x}>{x}</option>)}
+                    </select></div>
+                  <div><label className="fl">Discapacidad</label>
+                    <select className="fc" value={modal.discapacidad || ''} onChange={e => upd('discapacidad', e.target.value)}>
+                      {DISCAPACIDADES.map(x => <option key={x} value={x}>{x}</option>)}
+                    </select></div>
+                  <div><label className="fl">Teléfono / Celular</label>
+                    <input className="fc" value={modal.telefono || ''} onChange={e => upd('telefono', e.target.value)} /></div>
+                  <div className="full"><label className="fl">Correo electrónico</label>
+                    <input className="fc" type="email" value={modal.email || ''} onChange={e => upd('email', e.target.value)} /></div>
                   <div className="full"><label className="fl">Dirección de domicilio</label>
-                    <input className="fc" value={modal.direccion || ''} onChange={e => upd('direccion', e.target.value)} /></div>
+                    <input className="fc" placeholder="Calle, número, sector, cantón" value={modal.direccion || ''} onChange={e => upd('direccion', e.target.value)} /></div>
+                  <div><label className="fl">Provincia</label>
+                    <input className="fc" value={modal.provincia || ''} onChange={e => upd('provincia', e.target.value)} /></div>
+                  <div><label className="fl">Cantón</label>
+                    <input className="fc" value={modal.canton || ''} onChange={e => upd('canton', e.target.value)} /></div>
+                  <div className="full"><label className="fl">Observaciones</label>
+                    <textarea className="fc" rows={3} value={modal.observaciones || ''} onChange={e => upd('observaciones', e.target.value)} /></div>
                 </div>
               )}
 
