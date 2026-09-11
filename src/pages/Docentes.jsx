@@ -44,6 +44,19 @@ function filaAPayloadDocente(fila) {
 
 const SANGRE = ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'];
 const GENEROS = ['Masculino', 'Femenino'];
+const ETNIAS = ['Mestizo', 'Indígena', 'Afroecuatoriano', 'Montubio', 'Blanco', 'Mulato', 'Negro', 'Otro'];
+const DISCAPACIDADES = ['Ninguna', 'Física', 'Visual', 'Auditiva', 'Intelectual', 'Psicosocial', 'Múltiple'];
+
+function calcularEdad(fechaNacimiento) {
+  if (!fechaNacimiento) return null;
+  const nac = new Date(fechaNacimiento + 'T00:00:00');
+  if (Number.isNaN(nac.getTime())) return null;
+  const hoy = new Date();
+  let edad = hoy.getFullYear() - nac.getFullYear();
+  const aunNoCumple = hoy.getMonth() < nac.getMonth() || (hoy.getMonth() === nac.getMonth() && hoy.getDate() < nac.getDate());
+  if (aunNoCumple) edad -= 1;
+  return edad >= 0 ? edad : null;
+}
 const SITUACIONES = ['NOMBRAMIENTO', 'CONTRATO', 'OCASIONAL', 'REEMPLAZO'];
 const JORNADAS = ['Matutina', 'Vespertina', 'Nocturna', 'Completa'];
 
@@ -98,7 +111,8 @@ export default function Docentes() {
     setError('');
     setModal({
       id: null, cedula: '', nombres: '', apellidos: '', fecha_nacimiento: '', genero: '',
-      tipo_sangre: '', direccion: '', residencia: '', telefono: '', email: '', foto_url: '',
+      tipo_sangre: '', etnia: '', discapacidad: '', direccion: '', residencia: '', telefono: '', email: '',
+      provincia: institucion?.provincia || '', canton: institucion?.canton || '', observaciones: '', foto_url: '',
       situacion: 'NOMBRAMIENTO', cargo: '', especialidad: '', area: '', accion_personal: '',
       categoria: '', rmu: 0, jornada: '', fecha_ingreso: '', incorporado: true,
       obs_laborales: [], titulos: [], documentos: []
@@ -202,9 +216,10 @@ export default function Docentes() {
     const payload = {
       cedula: modal.cedula, nombres: modal.nombres, apellidos: modal.apellidos,
       fecha_nacimiento: modal.fecha_nacimiento || null, genero: modal.genero || null,
-      tipo_sangre: modal.tipo_sangre || null, direccion: modal.direccion || null,
-      residencia: modal.residencia || null, telefono: modal.telefono || null,
+      tipo_sangre: modal.tipo_sangre || null, etnia: modal.etnia || null, discapacidad: modal.discapacidad || null,
+      direccion: modal.direccion || null, residencia: modal.residencia || null, telefono: modal.telefono || null,
       email: modal.email || null, foto_url: modal.foto_url || null,
+      provincia: modal.provincia || null, canton: modal.canton || null, observaciones: modal.observaciones || null,
       situacion: modal.situacion || null, cargo: modal.cargo || null,
       especialidad: modal.especialidad || null, area: modal.area || null,
       accion_personal: modal.accion_personal || null, categoria: modal.categoria || null,
@@ -343,8 +358,12 @@ export default function Docentes() {
                     <input className="fc" value={modal.nombres} onChange={e => upd('nombres', e.target.value)} /></div>
                   <div><label className="fl">Cédula *</label>
                     <input className="fc mono" value={modal.cedula} onChange={e => upd('cedula', e.target.value)} /></div>
-                  <div><label className="fl">Fecha de nacimiento</label>
-                    <input className="fc" type="date" value={modal.fecha_nacimiento || ''} onChange={e => upd('fecha_nacimiento', e.target.value)} /></div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                    <div style={{ flex: 1 }}><label className="fl">Fecha de nacimiento</label>
+                      <input className="fc" type="date" value={modal.fecha_nacimiento || ''} onChange={e => upd('fecha_nacimiento', e.target.value)} /></div>
+                    <div style={{ width: 90 }}><label className="fl">Edad</label>
+                      <input className="fc" value={calcularEdad(modal.fecha_nacimiento) ?? '—'} disabled /></div>
+                  </div>
                   <div><label className="fl">Género</label>
                     <select className="fc" value={modal.genero || ''} onChange={e => upd('genero', e.target.value)}>
                       <option value="">Seleccione…</option>
@@ -355,6 +374,15 @@ export default function Docentes() {
                       <option value="">Seleccione…</option>
                       {SANGRE.map(s => <option key={s} value={s}>{s}</option>)}
                     </select></div>
+                  <div><label className="fl">Etnia / Nacionalidad</label>
+                    <select className="fc" value={modal.etnia || ''} onChange={e => upd('etnia', e.target.value)}>
+                      <option value="">—</option>
+                      {ETNIAS.map(x => <option key={x} value={x}>{x}</option>)}
+                    </select></div>
+                  <div><label className="fl">Discapacidad</label>
+                    <select className="fc" value={modal.discapacidad || ''} onChange={e => upd('discapacidad', e.target.value)}>
+                      {DISCAPACIDADES.map(x => <option key={x} value={x}>{x}</option>)}
+                    </select></div>
                   <div><label className="fl">Correo electrónico</label>
                     <input className="fc" type="email" value={modal.email || ''} onChange={e => upd('email', e.target.value)} /></div>
                   <div><label className="fl">Teléfono / celular</label>
@@ -363,6 +391,12 @@ export default function Docentes() {
                     <input className="fc" value={modal.direccion || ''} onChange={e => upd('direccion', e.target.value)} /></div>
                   <div className="full"><label className="fl">Lugar de residencia</label>
                     <input className="fc" value={modal.residencia || ''} onChange={e => upd('residencia', e.target.value)} /></div>
+                  <div><label className="fl">Provincia</label>
+                    <input className="fc" value={modal.provincia || ''} onChange={e => upd('provincia', e.target.value)} /></div>
+                  <div><label className="fl">Cantón</label>
+                    <input className="fc" value={modal.canton || ''} onChange={e => upd('canton', e.target.value)} /></div>
+                  <div className="full"><label className="fl">Observaciones</label>
+                    <textarea className="fc" rows={3} value={modal.observaciones || ''} onChange={e => upd('observaciones', e.target.value)} /></div>
                 </div>
               )}
 
