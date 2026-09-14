@@ -55,7 +55,9 @@ export async function fetchInstitucionData(institucionId) {
     return {
       id: d.id, profileId: d.profile_id, nombre: `${d.apellidos || ''} ${d.nombres || ''}`.trim(),
       cedula: d.cedula, email: d.email, telefono: d.telefono,
-      situacion: d.incorporado ? 'NOMBRAMIENTO' : 'CONTRATO', cargo: d.cargo || 'DOCENTE',
+      situacion: d.situacion || (d.incorporado ? 'NOMBRAMIENTO' : 'CONTRATO'), cargo: d.cargo || 'DOCENTE',
+      especialidad: d.especialidad || '', area: d.area || '',
+      fechaIngreso: d.fecha_ingreso || null,
       titulo: d.titulo, materias: [...materiasSet], cursos: [...cursosSet], cargas,
       activo: !!d.activo, acceso: !!d.profile_id
     };
