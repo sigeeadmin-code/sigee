@@ -70,6 +70,8 @@ export default function Docentes() {
   const { data, institucion, profile, refrescarDatos } = useSession();
   const [docentes, setDocentes] = useState(data?.docentes || []);
   const [busqueda, setBusqueda] = useState('');
+  const [fSituacion, setFSituacion] = useState('');
+  const [fFuncion, setFFuncion] = useState('');
   const [pagina, setPagina] = useState(1);
   const porPagina = 25;
   const [modal, setModal] = useState(null);
@@ -98,11 +100,16 @@ export default function Docentes() {
     setCargas(await fetchCargasPorDocenteId(docenteId, institucion.id));
   }
 
-  const filtrados = docentes.filter(d =>
-    !busqueda || d.nombre.toLowerCase().includes(busqueda.toLowerCase()) || (d.cedula || '').includes(busqueda)
-  );
+  const filtrados = docentes.filter(d => {
+    if (busqueda && !d.nombre.toLowerCase().includes(busqueda.toLowerCase()) && !(d.cedula || '').includes(busqueda)) return false;
+    if (fSituacion && d.situacion !== fSituacion) return false;
+    if (fFuncion && d.cargo !== fFuncion) return false;
+    return true;
+  });
+  const situacionesDisponibles = [...new Set(docentes.map(d => d.situacion).filter(Boolean))];
+  const funcionesDisponibles = [...new Set(docentes.map(d => d.cargo).filter(Boolean))];
 
-  useEffect(() => { setPagina(1); }, [busqueda]);
+  useEffect(() => { setPagina(1); }, [busqueda, fSituacion, fFuncion]);
   const totalPaginas = Math.max(1, Math.ceil(filtrados.length / porPagina));
   const paginaActual = Math.min(pagina, totalPaginas);
   const visibles = filtrados.slice((paginaActual - 1) * porPagina, paginaActual * porPagina);
@@ -283,26 +290,41 @@ export default function Docentes() {
         </div>
       </div>
 
-      <input className="search" placeholder="Buscar por nombre o cédula…"
-        value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+      <div className="search-bar">
+        <input className="fc" style={{ flex: 1, minWidth: 200 }} placeholder="Buscar por nombre, cédula o AMIE…"
+          value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+        <select className="fc" value={fSituacion} onChange={e => setFSituacion(e.target.value)}>
+          <option value="">Todas las Situaciones</option>
+          {situacionesDisponibles.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select className="fc" value={fFuncion} onChange={e => setFFuncion(e.target.value)}>
+          <option value="">Todas las Funciones</option>
+          {funcionesDisponibles.map(f => <option key={f} value={f}>{f}</option>)}
+        </select>
+      </div>
 
       <div className="card">
         <table className="data" style={{ width: '100%' }}>
           <thead>
             <tr>
-              <th>#</th><th>Plantel</th><th>Cédula</th><th>Apellidos y Nombres</th>
-              <th>Situación</th><th>Función</th><th>Acceso</th><th>Acciones</th>
+              <th>#</th><th>AMIE</th><th>Plantel</th><th>Cédula</th><th>Apellidos y Nombres</th>
+              <th>Situación laboral</th><th>Función</th><th>Especialidad</th><th>Área</th>
+              <th>Años serv.</th><th>Acceso</th><th>Acciones</th>
             </tr>
           </thead>
           <tbody>
             {visibles.map((d, i) => (
               <tr key={d.id}>
                 <td>{(paginaActual - 1) * porPagina + i + 1}</td>
+                <td className="mono" style={{ fontSize: 11 }}>{institucion?.amie || '—'}</td>
                 <td>{institucion?.nombre || '—'}</td>
                 <td className="mono">{d.cedula || '—'}</td>
                 <td><strong style={{ cursor: 'pointer' }} onClick={() => abrirEditar(d.id)}>{d.nombre}</strong></td>
-                <td>{d.situacion}</td>
-                <td>{d.cargo}</td>
+                <td>{d.situacion || '—'}</td>
+                <td style={{ fontSize: 11 }}>{d.cargo}</td>
+                <td style={{ fontSize: 11 }}>{d.especialidad || (d.materias || [])[0] || '—'}</td>
+                <td style={{ fontSize: 11 }}>{d.area || '—'}</td>
+                <td style={{ color: 'var(--green)', fontWeight: 700 }}>{anios(d.fechaIngreso)}</td>
                 <td>{d.acceso ? <span className="badge b-ok">Activo</span> : <span className="badge b-muted">Sin acceso</span>}</td>
                 <td><button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(d.id)}>✏️ Editar</button></td>
               </tr>
