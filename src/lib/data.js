@@ -182,17 +182,7 @@ export async function eliminarBloqueHorario(id) {
   if (error) throw error;
 }
 
-export async function fetchCalendario(institucionId) {
-  return sel('calendario_eventos', '*', q => q.eq('institucion_id', institucionId).order('fecha_inicio'));
-}
-export async function crearEventoCalendario(institucionId, evento, creadoPor) {
-  const { error } = await supabase.from('calendario_eventos').insert({ institucion_id: institucionId, created_by: creadoPor, ...evento });
-  if (error) throw error;
-}
-export async function eliminarEventoCalendario(id) {
-  const { error } = await supabase.from('calendario_eventos').delete().eq('id', id);
-  if (error) throw error;
-}
+export { fetchCalendario, crearEventoCalendario, eliminarEventoCalendario, mensajeAsistencia, evaluarDia } from './calendario.js';
 
 export async function fetchNotificaciones(institucionId) {
   return sel('notificaciones', '*', q => q.eq('institucion_id', institucionId).order('created_at', { ascending: false }));
