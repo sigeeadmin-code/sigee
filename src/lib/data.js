@@ -290,9 +290,58 @@ export async function fetchEstudiantePerfil(id) {
   return { ...est, representantes, hermanos, matricula };
 }
 
+export async function fetchEstudianteIdPorProfile(profileId) {
+  const rows = await sel('estudiantes', 'id', q => q.eq('profile_id', profileId));
+  return rows[0]?.id || null;
+}
+
+export async function fetchHijosDeRepresentante(profileId) {
+  const reps = await sel('representantes', 'id', q => q.eq('profile_id', profileId));
+  if (!reps.length) return [];
+  const vinculos = await sel('representantes_estudiantes', 'estudiante_id', q => q.eq('representante_id', reps[0].id));
+  const ids = vinculos.map(v => v.estudiante_id);
+  if (!ids.length) return [];
+  const estudiantes = await sel('estudiantes', 'id, nombres, apellidos', q => q.in('id', ids));
+  return estudiantes.map(e => ({ id: e.id, nombre: `${e.nombres} ${e.apellidos}`.trim() }));
+}
+
+/**
+ * Todo lo "programado" visible para un estudiante puntual: su matrícula/curso,
+ * el resumen de su propia asistencia, y las tareas vigentes de su paralelo.
+ * Padre y estudiante ven exactamente lo mismo — se llama con el mismo estudianteId.
+ */
+export async function fetchProgramacionEstudiante(estudianteId) {
+  const { data: est, error: e1 } = await supabase.from('estudiantes').select('*').eq('id', estudianteId).single();
+  if (e1 || !est) return null;
+
+  const matricula = (await sel('matriculas', '*', q => q.eq('estudiante_id', estudianteId).order('fecha_matricula', { ascending: false }).limit(1)))[0] || null;
+
+  let curso = null, tareas = [], asistenciaReciente = [], resumenAsistencia = { presente: 0, atraso: 0, ausente: 0, justificado: 0 };
+
+  if (matricula?.paralelo_id) {
+    const [{ data: paralelo }, { data: grado }] = await Promise.all([
+      supabase.from('paralelos').select('*').eq('id', matricula.paralelo_id).single(),
+      matricula.grado_id ? supabase.from('grados').select('*').eq('id', matricula.grado_id).single() : Promise.resolve({ data: null })
+    ]);
+    curso = { paralelo: paralelo?.nombre, grado: grado?.nombre };
+
+    const hoy = new Date().toISOString().slice(0, 10);
+    const { data: tareasRows } = await supabase.from('tareas').select('*, materias(nombre)')
+      .eq('paralelo_id', matricula.paralelo_id).gte('fecha_limite', hoy).order('fecha_limite');
+    tareas = tareasRows || [];
+  }
+
+  const { data: asis } = await supabase.from('asistencia').select('fecha, estado')
+    .eq('estudiante_id', estudianteId).order('fecha', { ascending: false }).limit(15);
+  asistenciaReciente = asis || [];
+  asistenciaReciente.forEach(a => { if (resumenAsistencia[a.estado] !== undefined) resumenAsistencia[a.estado]++; });
+
+  return { estudiante: est, matricula, curso, tareas, asistenciaReciente, resumenAsistencia };
+}
+
+
 export async function crearEstudiante(institucionId, datos) {
   const { data, error } = await supabase.from('estudiantes')
-    .insert({ institucion_id: institucionId, ...datos }).select().single();
   if (error) throw error;
   return data;
 }

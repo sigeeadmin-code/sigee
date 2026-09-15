@@ -60,17 +60,36 @@ export default function Asistencia() {
     setLoading(true);
     const gr = await fetchGradosConParalelos(institucionId);
     setGrados(gr);
-    if (esDocente) setCargasDocente(await fetchCargasDocente(profile.id, institucionId));
-    if (!gradoId && gr.length) {
-      setGradoId(gr[0].id);
-      setParaleloId(gr[0].paralelos[0]?.id || '');
+    let cd = [];
+    if (esDocente) { cd = await fetchCargasDocente(profile.id, institucionId); setCargasDocente(cd); }
+    if (!gradoId) {
+      if (esDocente) {
+        const primerParaleloId = cd[0]?.paraleloId;
+        const gradoDeEsePar = gr.find(g => g.paralelos.some(p => p.id === primerParaleloId));
+        if (gradoDeEsePar) { setGradoId(gradoDeEsePar.id); setParaleloId(primerParaleloId); }
+      } else if (gr.length) {
+        setGradoId(gr[0].id);
+        setParaleloId(gr[0].paralelos[0]?.id || '');
+      }
     }
     setLoading(false);
   }, [institucionId, esDocente, profile.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { cargarBase(); }, [cargarBase]);
 
-  const gradoSel = grados.find(g => g.id === gradoId);
+  // gradosVisibles: un docente NUNCA debe poder elegir un curso/paralelo donde no
+  // tiene una carga asignada — eso rompería la relación real de datos (vería alumnos ajenos).
+  const paralelosPermitidos = useMemo(
+    () => esDocente ? new Set(cargasDocente.map(c => c.paraleloId)) : null,
+    [esDocente, cargasDocente]
+  );
+  const gradosVisibles = useMemo(() => {
+    if (!paralelosPermitidos) return grados;
+    return grados
+      .map(g => ({ ...g, paralelos: g.paralelos.filter(p => paralelosPermitidos.has(p.id)) }))
+      .filter(g => g.paralelos.length > 0);
+  }, [grados, paralelosPermitidos]);
+  const gradoSel = gradosVisibles.find(g => g.id === gradoId);
 
   const cargarCargasParalelo = useCallback(async () => {
     if (!paraleloId || !periodoActivo) { setCargas([]); return; }
@@ -157,8 +176,9 @@ export default function Asistencia() {
         <div className="form-grid">
           <div>
             <label className="fl">Curso</label>
-            <select className="fc" value={gradoId} onChange={e => { setGradoId(e.target.value); const g = grados.find(x => x.id === e.target.value); setParaleloId(g?.paralelos[0]?.id || ''); }}>
-              {grados.map(g => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+            <select className="fc" value={gradoId} onChange={e => { setGradoId(e.target.value); const g = gradosVisibles.find(x => x.id === e.target.value); setParaleloId(g?.paralelos[0]?.id || ''); }}>
+              {gradosVisibles.length === 0 && <option value="">Sin cursos asignados</option>}
+              {gradosVisibles.map(g => <option key={g.id} value={g.id}>{g.nombre}</option>)}
             </select>
           </div>
           <div>
