@@ -36,9 +36,11 @@ function calcularEdad(fechaNacimiento) {
 }
 
 export default function Estudiantes() {
-  const { data, institucion, refrescarDatos } = useSession();
+  const { data, institucion, profile, refrescarDatos } = useSession();
+  const puedeActivarDesactivar = ['super_admin', 'admin_plantel'].includes(profile.rolDb);
   const [estudiantes, setEstudiantes] = useState(data?.estudiantes || []);
   const [busqueda, setBusqueda] = useState('');
+  const [fCurso, setFCurso] = useState('');
   const [pagina, setPagina] = useState(1);
   const porPagina = 25;
   const [modal, setModal] = useState(null);
@@ -63,9 +65,29 @@ export default function Estudiantes() {
     })();
   }, [institucion?.id]);
 
-  const filtrados = estudiantes.filter(e =>
-    !busqueda || e.nombre.toLowerCase().includes(busqueda.toLowerCase()) || (e.cedula || '').includes(busqueda)
-  );
+  const filtrados = estudiantes.filter(e => {
+    if (busqueda && !e.nombre.toLowerCase().includes(busqueda.toLowerCase()) && !(e.cedula || '').includes(busqueda)) return false;
+    if (fCurso && `${e.curso} ${e.paralelo}`.trim() !== fCurso) return false;
+    return true;
+  });
+  const cursosDisponibles = [...new Set(estudiantes.map(e => `${e.curso} ${e.paralelo}`.trim()).filter(c => c && c !== '—'))].sort();
+
+  useEffect(() => { setPagina(1); }, [busqueda, fCurso]);
+
+  async function toggleActivo(e) {
+    if (!puedeActivarDesactivar) return;
+    const nuevoValor = !e.activo;
+    const mensaje = nuevoValor
+      ? `¿Reactivar a ${e.nombre}?`
+      : `¿Desactivar a ${e.nombre}? Dejará de aparecer como estudiante activo (no se borra su información).`;
+    if (!window.confirm(mensaje)) return;
+    try {
+      await guardarEstudiantePerfil(e.id, { activo: nuevoValor });
+      setEstudiantes(es => es.map(x => x.id === e.id ? { ...x, activo: nuevoValor } : x));
+    } catch (err) {
+      setError('No se pudo actualizar el estado: ' + err.message);
+    }
+  }
 
   function filaAPayloadEstudiante(fila) {
     const cedula = String(fila['Cédula'] || '').trim();
@@ -177,7 +199,6 @@ export default function Estudiantes() {
     setMasivo(m => ({ ...m, subiendo: false, resultado: { creados, fallos } }));
   }
 
-  useEffect(() => { setPagina(1); }, [busqueda]);
   const totalPaginas = Math.max(1, Math.ceil(filtrados.length / porPagina));
   const paginaActual = Math.min(pagina, totalPaginas);
   const visibles = filtrados.slice((paginaActual - 1) * porPagina, paginaActual * porPagina);
@@ -294,18 +315,37 @@ export default function Estudiantes() {
         </div>
       </div>
 
-      <input className="search" placeholder="Buscar por nombre o cédula…"
-        value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+      <div className="search-bar">
+        <input className="search" style={{ flex: 1 }} placeholder="Buscar por nombre o cédula…"
+          value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+        <select className="fc" value={fCurso} onChange={e => setFCurso(e.target.value)}>
+          <option value="">Todos los Cursos</option>
+          {cursosDisponibles.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
 
       <div className="card">
         <table className="data" style={{ width: '100%' }}>
-          <thead><tr><th>Nombre</th><th>Cédula</th><th>Curso</th><th>Estado</th><th>Representante</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Nombre</th><th>Cédula</th><th>Curso</th><th>Estado matrícula</th><th>Activo</th><th>Representante</th><th>Acciones</th></tr></thead>
           <tbody>
             {visibles.map(e => (
               <tr key={e.id}>
                 <td><strong style={{ cursor: 'pointer' }} onClick={() => abrirEditar(e.id)}>{e.nombre}</strong></td>
                 <td className="mono">{e.cedula || '—'}</td>
                 <td>{e.curso} {e.paralelo}</td><td>{e.estado}</td>
+                <td>
+                  {puedeActivarDesactivar ? (
+                    <button
+                      className={'btn btn-sm ' + (e.activo ? 'btn-secondary' : 'btn-primary')}
+                      title={e.activo ? 'Clic para desactivar' : 'Clic para reactivar'}
+                      onClick={() => toggleActivo(e)}
+                    >
+                      {e.activo ? '🟢 Activo' : '⚪ Inactivo'}
+                    </button>
+                  ) : (
+                    <span className={'badge ' + (e.activo ? 'b-ok' : 'b-muted')}>{e.activo ? 'Activo' : 'Inactivo'}</span>
+                  )}
+                </td>
                 <td>{e.representante || '—'}</td>
                 <td><button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(e.id)}>✏️ Editar</button></td>
               </tr>

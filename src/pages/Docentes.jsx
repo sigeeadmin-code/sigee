@@ -68,10 +68,13 @@ function anios(fechaIngreso) {
 
 export default function Docentes() {
   const { data, institucion, profile, refrescarDatos } = useSession();
+  const puedeActivarDesactivar = ['super_admin', 'admin_plantel'].includes(profile.rolDb);
   const [docentes, setDocentes] = useState(data?.docentes || []);
   const [busqueda, setBusqueda] = useState('');
   const [fSituacion, setFSituacion] = useState('');
   const [fFuncion, setFFuncion] = useState('');
+  const [fArea, setFArea] = useState('');
+  const [fEspecialidad, setFEspecialidad] = useState('');
   const [pagina, setPagina] = useState(1);
   const porPagina = 25;
   const [modal, setModal] = useState(null);
@@ -104,12 +107,16 @@ export default function Docentes() {
     if (busqueda && !d.nombre.toLowerCase().includes(busqueda.toLowerCase()) && !(d.cedula || '').includes(busqueda)) return false;
     if (fSituacion && d.situacion !== fSituacion) return false;
     if (fFuncion && d.cargo !== fFuncion) return false;
+    if (fArea && d.area !== fArea) return false;
+    if (fEspecialidad && d.especialidad !== fEspecialidad) return false;
     return true;
   });
   const situacionesDisponibles = [...new Set(docentes.map(d => d.situacion).filter(Boolean))];
   const funcionesDisponibles = [...new Set(docentes.map(d => d.cargo).filter(Boolean))];
+  const areasDisponibles = [...new Set(docentes.map(d => d.area).filter(Boolean))].sort();
+  const especialidadesDisponibles = [...new Set(docentes.map(d => d.especialidad).filter(Boolean))].sort();
 
-  useEffect(() => { setPagina(1); }, [busqueda, fSituacion, fFuncion]);
+  useEffect(() => { setPagina(1); }, [busqueda, fSituacion, fFuncion, fArea, fEspecialidad]);
   const totalPaginas = Math.max(1, Math.ceil(filtrados.length / porPagina));
   const paginaActual = Math.min(pagina, totalPaginas);
   const visibles = filtrados.slice((paginaActual - 1) * porPagina, paginaActual * porPagina);
@@ -215,6 +222,21 @@ export default function Docentes() {
     setMasivo(m => ({ ...m, subiendo: false, resultado: { creados, fallos } }));
   }
 
+  async function toggleActivo(d) {
+    if (!puedeActivarDesactivar) return;
+    const nuevoValor = !d.activo;
+    const mensaje = nuevoValor
+      ? `¿Reactivar a ${d.nombre}?`
+      : `¿Desactivar a ${d.nombre}? Dejará de aparecer como docente activo (no se borra su información).`;
+    if (!window.confirm(mensaje)) return;
+    try {
+      await guardarDocentePerfil(d.id, { activo: nuevoValor });
+      setDocentes(ds => ds.map(x => x.id === d.id ? { ...x, activo: nuevoValor } : x));
+    } catch (e) {
+      setError('No se pudo actualizar el estado: ' + e.message);
+    }
+  }
+
   async function guardar() {
     if (!modal.nombres || !modal.apellidos || !modal.cedula) {
       setError('Nombres, apellidos y cédula son obligatorios.'); setTab('personales'); return;
@@ -301,6 +323,14 @@ export default function Docentes() {
           <option value="">Todas las Funciones</option>
           {funcionesDisponibles.map(f => <option key={f} value={f}>{f}</option>)}
         </select>
+        <select className="fc" value={fArea} onChange={e => setFArea(e.target.value)}>
+          <option value="">Todas las Áreas</option>
+          {areasDisponibles.map(a => <option key={a} value={a}>{a}</option>)}
+        </select>
+        <select className="fc" value={fEspecialidad} onChange={e => setFEspecialidad(e.target.value)}>
+          <option value="">Todas las Especialidades</option>
+          {especialidadesDisponibles.map(e => <option key={e} value={e}>{e}</option>)}
+        </select>
       </div>
 
       <div className="card">
@@ -309,7 +339,7 @@ export default function Docentes() {
             <tr>
               <th>#</th><th>AMIE</th><th>Plantel</th><th>Cédula</th><th>Apellidos y Nombres</th>
               <th>Situación laboral</th><th>Función</th><th>Especialidad</th><th>Área</th>
-              <th>Años serv.</th><th>Acceso</th><th>Acciones</th>
+              <th>Años serv.</th><th>Acceso</th><th>Estado</th><th>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -326,6 +356,19 @@ export default function Docentes() {
                 <td style={{ fontSize: 11 }}>{d.area || '—'}</td>
                 <td style={{ color: 'var(--green)', fontWeight: 700 }}>{anios(d.fechaIngreso)}</td>
                 <td>{d.acceso ? <span className="badge b-ok">Activo</span> : <span className="badge b-muted">Sin acceso</span>}</td>
+                <td>
+                  {puedeActivarDesactivar ? (
+                    <button
+                      className={'btn btn-sm ' + (d.activo ? 'btn-secondary' : 'btn-primary')}
+                      title={d.activo ? 'Clic para desactivar' : 'Clic para reactivar'}
+                      onClick={() => toggleActivo(d)}
+                    >
+                      {d.activo ? '🟢 Activo' : '⚪ Inactivo'}
+                    </button>
+                  ) : (
+                    <span className={'badge ' + (d.activo ? 'b-ok' : 'b-muted')}>{d.activo ? 'Activo' : 'Inactivo'}</span>
+                  )}
+                </td>
                 <td><button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(d.id)}>✏️ Editar</button></td>
               </tr>
             ))}
