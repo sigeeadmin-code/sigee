@@ -4,10 +4,11 @@ import {
   fetchGradosConParalelos, fetchMateriasParalelo, fetchEstudiantesParaleloDetalle,
   fetchAsistencia, guardarAsistencia, fetchCargasDocente
 } from '../lib/data.js';
+import { mensajeAsistencia } from '../lib/calendario.js';
 
 const ESTADOS = [
   { v: 'presente', label: 'Presente' },
-  { v: 'tarde', label: 'Tarde' },
+  { v: 'atraso', label: 'Atraso' },
   { v: 'ausente', label: 'Ausente' },
   { v: 'justificado', label: 'Justificado' }
 ];
@@ -39,6 +40,14 @@ export default function Asistencia() {
   const [loading, setLoading] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [toast, setToast] = useState(null);
+  const [gate, setGate] = useState({ ok: true, msg: '' });
+
+  useEffect(() => {
+    let activo = true;
+    if (!institucionId || !fecha) return;
+    mensajeAsistencia(institucionId, fecha, periodoActivo, paraleloId || null).then(g => { if (activo) setGate(g); });
+    return () => { activo = false; };
+  }, [institucionId, fecha, periodoActivo, paraleloId]);
 
   useEffect(() => {
     if (!toast) return;
@@ -100,6 +109,7 @@ export default function Asistencia() {
 
   async function guardar() {
     if (!docenteMateriaId) { setToast({ tipo: 'err', msg: 'Selecciona una materia/carga.' }); return; }
+    if (!gate.ok) { setToast({ tipo: 'err', msg: 'No se puede guardar: ' + gate.msg }); return; }
     setGuardando(true);
     try {
       const lista = alumnos.filter(a => registros[a.id]).map(a => ({ estudiante_id: a.id, estado: registros[a.id] }));
@@ -112,7 +122,7 @@ export default function Asistencia() {
   }
 
   const conteo = useMemo(() => {
-    const c = { presente: 0, tarde: 0, ausente: 0, justificado: 0, sin: 0 };
+    const c = { presente: 0, atraso: 0, ausente: 0, justificado: 0, sin: 0 };
     alumnos.forEach(a => {
       const st = registros[a.id];
       if (st) c[st] = (c[st] || 0) + 1; else c.sin++;
@@ -131,8 +141,15 @@ export default function Asistencia() {
           <div style={{ fontSize: 13, color: 'var(--slate)' }}>{institucion?.nombre} · {periodoActivo.nombre}</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-success btn-sm" onClick={() => marcarTodos('presente')}>✓ Todos presentes</button>
-          <button className="btn btn-primary btn-sm" disabled={guardando} onClick={guardar}>{guardando ? 'Guardando…' : '💾 Guardar día'}</button>
+          <button className="btn btn-success btn-sm" disabled={!gate.ok} onClick={() => marcarTodos('presente')}>✓ Todos presentes</button>
+          <button className="btn btn-primary btn-sm" disabled={guardando || !gate.ok} onClick={guardar}>{guardando ? 'Guardando…' : '💾 Guardar día'}</button>
+        </div>
+      </div>
+
+      <div className={'card'} style={{ marginBottom: 14, borderColor: gate.ok ? 'var(--green)' : 'var(--red)' }}>
+        <div className="cb" style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className={'badge ' + (gate.ok ? 'b-ok' : 'b-err')}>{gate.ok ? 'Día lectivo' : 'No lectivo'}</span>
+          {gate.msg}
         </div>
       </div>
 
@@ -166,7 +183,7 @@ export default function Asistencia() {
 
       <div className="grid-4">
         <div className="metric m-green"><div className="m-lbl">Presentes</div><div className="m-val">{conteo.presente}</div></div>
-        <div className="metric m-amber"><div className="m-lbl">Tardanzas</div><div className="m-val">{conteo.tarde}</div></div>
+        <div className="metric m-amber"><div className="m-lbl">Atrasos</div><div className="m-val">{conteo.atraso}</div></div>
         <div className="metric m-red"><div className="m-lbl">Ausentes</div><div className="m-val">{conteo.ausente}</div></div>
         <div className="metric m-blue"><div className="m-lbl">Sin marcar / Justif.</div><div className="m-val" style={{ fontSize: 18 }}>{conteo.sin} / {conteo.justificado}</div></div>
       </div>
