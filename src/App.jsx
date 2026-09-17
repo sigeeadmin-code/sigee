@@ -1,6 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { SessionProvider, useSession } from './lib/SessionContext.jsx';
+import { rolesConAcceso } from './lib/nav.js';
 import Login from './pages/Login.jsx';
 import Shell from './pages/Shell.jsx';
 import Dashboard from './pages/Dashboard.jsx';
@@ -23,6 +24,28 @@ import Calendario from './pages/Calendario.jsx';
 import Justificaciones from './pages/Justificaciones.jsx';
 import Inasistencias from './pages/Inasistencias.jsx';
 import Placeholder from './pages/Placeholder.jsx';
+function AccesoDenegado() {
+  return (
+    <div className="empty" style={{ padding: '60px 20px' }}>
+      <span className="ti ti-lock" style={{ fontSize: 32 }} />
+      <h3 style={{ margin: '12px 0 6px' }}>No tienes acceso a esta sección</h3>
+      <p style={{ color: 'var(--slate)', marginBottom: 16 }}>Tu rol actual no está autorizado para ver esta página.</p>
+      <a href="/" className="btn btn-primary">Volver al Dashboard</a>
+    </div>
+  );
+}
+
+/**
+ * Guardián de rutas: valida el rol real del usuario contra el mismo NAV_BY_ROL
+ * que arma el menú lateral, para que ocultar un link en el sidebar y bloquear
+ * la URL directa sean siempre la misma regla (nunca se desincronizan).
+ */
+function Protegida({ path, children }) {
+  const { profile } = useSession();
+  const permitido = rolesConAcceso(path).includes(profile.rolDb);
+  return permitido ? children : <AccesoDenegado />;
+}
+
 function Gate() {
   const { loading, profile } = useSession();
   if (loading) return <div className="splash">Cargando SIGEE…</div>;
@@ -31,27 +54,27 @@ function Gate() {
     <Routes>
       <Route element={<Shell />}>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/instituciones" element={<Planteles />} />
-        <Route path="/roles-permisos" element={<RolesPermisos />} />
-        <Route path="/diagnostico" element={<Diagnostico />} />
-        <Route path="/docentes" element={<Docentes />} />
-        <Route path="/academico" element={<Academico />} />
-        <Route path="/estudiantes" element={<Estudiantes />} />
-        <Route path="/usuarios" element={<Usuarios />} />
-        <Route path="/financiero" element={<Placeholder title="Financiero" />} />
+        <Route path="/instituciones" element={<Protegida path="/instituciones"><Planteles /></Protegida>} />
+        <Route path="/roles-permisos" element={<Protegida path="/roles-permisos"><RolesPermisos /></Protegida>} />
+        <Route path="/diagnostico" element={<Protegida path="/diagnostico"><Diagnostico /></Protegida>} />
+        <Route path="/docentes" element={<Protegida path="/docentes"><Docentes /></Protegida>} />
+        <Route path="/academico" element={<Protegida path="/academico"><Academico /></Protegida>} />
+        <Route path="/estudiantes" element={<Protegida path="/estudiantes"><Estudiantes /></Protegida>} />
+        <Route path="/usuarios" element={<Protegida path="/usuarios"><Usuarios /></Protegida>} />
+        <Route path="/financiero" element={<Protegida path="/financiero"><Placeholder title="Financiero" /></Protegida>} />
         <Route path="/configuracion" element={<Configuracion />} />
-        <Route path="/mi-plantel" element={<MiPlantel />} />
-        <Route path="/tareas" element={<Tareas />} />
-        <Route path="/asistencia" element={<Asistencia />} />
-        <Route path="/inasistencias" element={<Inasistencias />} />
-        <Route path="/justificaciones" element={<Justificaciones />} />
-        <Route path="/calendario" element={<Calendario />} />
-        <Route path="/aulas" element={<Aulas />} />
-        <Route path="/horario" element={<Horario />} />
-        <Route path="/calificaciones" element={<Calificaciones />} />
-        <Route path="/notificaciones" element={<Notificaciones title="Notificaciones" />} />
-        <Route path="/anuncios" element={<Notificaciones title="Anuncios" />} />
-        <Route path="/comunicados" element={<Notificaciones title="Comunicados" />} />
+        <Route path="/mi-plantel" element={<Protegida path="/mi-plantel"><MiPlantel /></Protegida>} />
+        <Route path="/tareas" element={<Protegida path="/tareas"><Tareas /></Protegida>} />
+        <Route path="/asistencia" element={<Protegida path="/asistencia"><Asistencia /></Protegida>} />
+        <Route path="/inasistencias" element={<Protegida path="/inasistencias"><Inasistencias /></Protegida>} />
+        <Route path="/justificaciones" element={<Protegida path="/justificaciones"><Justificaciones /></Protegida>} />
+        <Route path="/calendario" element={<Protegida path="/calendario"><Calendario /></Protegida>} />
+        <Route path="/aulas" element={<Protegida path="/aulas"><Aulas /></Protegida>} />
+        <Route path="/horario" element={<Protegida path="/horario"><Horario /></Protegida>} />
+        <Route path="/calificaciones" element={<Protegida path="/calificaciones"><Calificaciones /></Protegida>} />
+        <Route path="/notificaciones" element={<Protegida path="/notificaciones"><Notificaciones title="Notificaciones" /></Protegida>} />
+        <Route path="/anuncios" element={<Protegida path="/anuncios"><Notificaciones title="Anuncios" /></Protegida>} />
+        <Route path="/comunicados" element={<Protegida path="/comunicados"><Notificaciones title="Comunicados" /></Protegida>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

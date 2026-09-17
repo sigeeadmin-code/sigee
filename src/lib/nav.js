@@ -135,3 +135,15 @@ export const NAV_BY_ROL = {
     ]}
   ]
 };
+
+/**
+ * Deriva, a partir del propio menú (NAV_BY_ROL), qué roles tienen acceso a
+ * una ruta dada. Es intencional que sea el MISMO origen de datos que arma el
+ * sidebar: si un rol no ve el link, tampoco debe poder entrar escribiendo la
+ * URL a mano. Usado por el guardián de rutas en App.jsx.
+ */
+export function rolesConAcceso(path) {
+  return Object.entries(NAV_BY_ROL)
+    .filter(([, categorias]) => categorias.some(cat => cat.items.some(it => it.to === path)))
+    .map(([rol]) => rol);
+}
