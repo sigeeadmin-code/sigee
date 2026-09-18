@@ -219,6 +219,50 @@ export async function fetchInasistencias(institucionId, desde) {
   });
 }
 
+/**
+ * Estadísticas de asistencia para un paralelo en un rango de fechas.
+ * docenteMateriaIds acota qué registros contar: un docente solo debe ver
+ * SU propia materia (evita que vea inasistencias de una clase que no dicta);
+ * un rol administrativo puede pasar todas las cargas del paralelo para ver
+ * el cuadro completo. Incluye a TODOS los matriculados, incluso sin ningún
+ * registro todavía (para no inflar el % de asistencia por omisión).
+ */
+export async function fetchEstadisticasCurso(paraleloId, docenteMateriaIds, desde, hasta) {
+  const matriculas = await sel('matriculas', 'estudiante_id, estudiantes(id, nombres, apellidos)', q => q.eq('paralelo_id', paraleloId).eq('estado', 'activa'));
+  const alumnos = matriculas.map(m => ({ id: m.estudiante_id, nombre: `${m.estudiantes?.apellidos || ''} ${m.estudiantes?.nombres || ''}`.trim() }));
+  if (!alumnos.length || !docenteMateriaIds?.length) return alumnos.map(a => ({ ...a, presente: 0, atraso: 0, ausente: 0, justificado: 0, total: 0, pct: null }));
+
+  const { data: registros, error } = await supabase.from('asistencia')
+    .select('estudiante_id, estado')
+    .in('docente_materia_id', docenteMateriaIds)
+    .gte('fecha', desde).lte('fecha', hasta);
+  if (error) { console.error('[Supabase] estadisticas curso', error.message); return []; }
+
+  const porAlumno = {};
+  alumnos.forEach(a => { porAlumno[a.id] = { presente: 0, atraso: 0, ausente: 0, justificado: 0 }; });
+  (registros || []).forEach(r => { if (porAlumno[r.estudiante_id] && porAlumno[r.estudiante_id][r.estado] !== undefined) porAlumno[r.estudiante_id][r.estado]++; });
+
+  return alumnos.map(a => {
+    const c = porAlumno[a.id];
+    const total = c.presente + c.atraso + c.ausente + c.justificado;
+    const pct = total > 0 ? Math.round(((c.presente + c.atraso) / total) * 100) : null;
+    return { ...a, ...c, total, pct };
+  });
+}
+
+/** Historial día a día de un estudiante puntual, dentro de las cargas indicadas. */
+export async function fetchHistorialEstudiante(estudianteId, docenteMateriaIds, desde, hasta) {
+  if (!docenteMateriaIds?.length) return [];
+  const { data, error } = await supabase.from('asistencia')
+    .select('fecha, estado, observacion, docente_materia_id, docente_materia(materias(nombre))')
+    .eq('estudiante_id', estudianteId)
+    .in('docente_materia_id', docenteMateriaIds)
+    .gte('fecha', desde).lte('fecha', hasta)
+    .order('fecha', { ascending: false });
+  if (error) { console.error('[Supabase] historial estudiante', error.message); return []; }
+  return (data || []).map(r => ({ ...r, materia: r.docente_materia?.materias?.nombre || '—' }));
+}
+
 export async function fetchAulas(institucionId) {
   return sel('aulas', '*', q => q.eq('institucion_id', institucionId).order('codigo'));
 }

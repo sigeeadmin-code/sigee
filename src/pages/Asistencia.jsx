@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchGradosConParalelos, fetchMateriasParalelo, fetchEstudiantesParaleloDetalle,
-  fetchAsistencia, guardarAsistencia, fetchCargasDocente, fetchAsistenciaReciente
+  fetchAsistencia, guardarAsistencia, fetchCargasDocente, fetchAsistenciaReciente,
+  fetchEstadisticasCurso, fetchHistorialEstudiante
 } from '../lib/data.js';
 import { mensajeAsistencia } from '../lib/calendario.js';
 
@@ -14,6 +16,7 @@ const ESTADOS = [
 ];
 
 function hoyISO() { return new Date().toISOString().slice(0, 10); }
+function haceDias(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
 
 function linkWhatsapp(telefono, nombreAlumno) {
   const tel = (telefono || '').replace(/^0/, '');
@@ -21,7 +24,7 @@ function linkWhatsapp(telefono, nombreAlumno) {
   return `https://wa.me/593${tel}?text=${msg}`;
 }
 
-export default function Asistencia() {
+function RegistroDiario() {
   const { profile, institucion, data } = useSession();
   const esDocente = profile.rolDb === 'docente';
   const institucionId = institucion?.id;
@@ -291,6 +294,227 @@ export default function Asistencia() {
       )}
 
       {toast && <div className={'toast ' + (toast.tipo === 'ok' ? 'ok' : 'err')}>{toast.msg}</div>}
+    </div>
+  );
+}
+
+const ROLES_VISTA_AMPLIA = ['super_admin', 'admin_plantel', 'secretario', 'inspector_general', 'supervisor_plantel'];
+
+function ConsultasEstadisticas() {
+  const { profile, institucion, data } = useSession();
+  const esDocente = profile.rolDb === 'docente';
+  const vistaAmplia = ROLES_VISTA_AMPLIA.includes(profile.rolDb); // ve todas las materias del curso, no solo una
+  const institucionId = institucion?.id;
+  const periodoActivo = data?.periodoActivo;
+
+  const [modo, setModo] = useState('curso'); // curso | estudiante
+  const [grados, setGrados] = useState([]);
+  const [cargasDocente, setCargasDocente] = useState([]);
+  const [gradoId, setGradoId] = useState('');
+  const [paraleloId, setParaleloId] = useState('');
+  const [cargasParalelo, setCargasParalelo] = useState([]); // todas las materias/docentes de ese paralelo (vista amplia)
+  const [desde, setDesde] = useState(haceDias(30));
+  const [hasta, setHasta] = useState(hoyISO());
+  const [filaEstudiantes, setFilaEstudiantes] = useState([]);
+  const [estudianteId, setEstudianteId] = useState('');
+  const [historial, setHistorial] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let activo = true;
+    (async () => {
+      if (!institucionId) return;
+      setLoading(true);
+      const gr = await fetchGradosConParalelos(institucionId);
+      if (!activo) return;
+      setGrados(gr);
+      let cd = [];
+      if (esDocente) { cd = await fetchCargasDocente(profile.id, institucionId); setCargasDocente(cd); }
+      const primerParalelo = esDocente ? cd[0]?.paraleloId : gr[0]?.paralelos[0]?.id;
+      const gradoDelPrimero = gr.find(g => g.paralelos.some(p => p.id === primerParalelo));
+      if (gradoDelPrimero) { setGradoId(gradoDelPrimero.id); setParaleloId(primerParalelo); }
+      setLoading(false);
+    })();
+    return () => { activo = false; };
+  }, [institucionId, esDocente, profile.id]);
+
+  const gradosVisibles = useMemo(() => {
+    if (!esDocente) return grados;
+    const paralelosPermitidos = new Set(cargasDocente.map(c => c.paraleloId));
+    return grados.map(g => ({ ...g, paralelos: g.paralelos.filter(p => paralelosPermitidos.has(p.id)) })).filter(g => g.paralelos.length);
+  }, [grados, esDocente, cargasDocente]);
+  const gradoSel = gradosVisibles.find(g => g.id === gradoId);
+
+  // Qué docente_materia_id(s) cuentan para las estadísticas de este paralelo.
+  useEffect(() => {
+    let activo = true;
+    (async () => {
+      if (!paraleloId || !periodoActivo) return;
+      if (esDocente && !vistaAmplia) {
+        const ids = cargasDocente.filter(c => c.paraleloId === paraleloId).map(c => c.id);
+        if (activo) setCargasParalelo(ids.map(id => ({ id })));
+      } else {
+        const todas = await fetchMateriasParalelo(paraleloId, periodoActivo.id);
+        if (activo) setCargasParalelo(todas);
+      }
+    })();
+    return () => { activo = false; };
+  }, [paraleloId, periodoActivo, esDocente, vistaAmplia, cargasDocente]);
+
+  const docenteMateriaIds = cargasParalelo.map(c => c.id).filter(Boolean);
+
+  useEffect(() => {
+    let activo = true;
+    (async () => {
+      if (!paraleloId || !docenteMateriaIds.length) { setFilaEstudiantes([]); return; }
+      setLoading(true);
+      const rows = await fetchEstadisticasCurso(paraleloId, docenteMateriaIds, desde, hasta);
+      if (activo) { setFilaEstudiantes(rows.sort((a, b) => (a.pct ?? 999) - (b.pct ?? 999))); setLoading(false); }
+    })();
+    return () => { activo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paraleloId, desde, hasta, JSON.stringify(docenteMateriaIds)]);
+
+  useEffect(() => {
+    let activo = true;
+    (async () => {
+      if (!estudianteId || !docenteMateriaIds.length) { setHistorial([]); return; }
+      const rows = await fetchHistorialEstudiante(estudianteId, docenteMateriaIds, desde, hasta);
+      if (activo) setHistorial(rows);
+    })();
+    return () => { activo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estudianteId, desde, hasta, JSON.stringify(docenteMateriaIds)]);
+
+  const totales = filaEstudiantes.reduce((acc, a) => ({
+    presente: acc.presente + a.presente, atraso: acc.atraso + a.atraso, ausente: acc.ausente + a.ausente, justificado: acc.justificado + a.justificado
+  }), { presente: 0, atraso: 0, ausente: 0, justificado: 0 });
+  const datosGrafico = [
+    { name: 'Presente', value: totales.presente, color: '#22c55e' },
+    { name: 'Atraso', value: totales.atraso, color: '#f59e0b' },
+    { name: 'Ausente', value: totales.ausente, color: '#ef4444' },
+    { name: 'Justificado', value: totales.justificado, color: '#94a3b8' }
+  ].filter(d => d.value > 0);
+
+  const estudianteSel = filaEstudiantes.find(a => a.id === estudianteId);
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 14, alignItems: 'flex-end' }}>
+        <div>
+          <label className="fl">Curso</label>
+          <select className="fc" value={gradoId} onChange={e => { setGradoId(e.target.value); const g = gradosVisibles.find(x => x.id === e.target.value); setParaleloId(g?.paralelos[0]?.id || ''); setEstudianteId(''); }}>
+            {gradosVisibles.length === 0 && <option value="">Sin cursos asignados</option>}
+            {gradosVisibles.map(g => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="fl">Paralelo</label>
+          <select className="fc" value={paraleloId} onChange={e => { setParaleloId(e.target.value); setEstudianteId(''); }}>
+            {gradoSel?.paralelos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+          </select>
+        </div>
+        <div><label className="fl">Desde</label><input className="fc" type="date" value={desde} onChange={e => setDesde(e.target.value)} /></div>
+        <div><label className="fl">Hasta</label><input className="fc" type="date" value={hasta} onChange={e => setHasta(e.target.value)} /></div>
+        {esDocente && !vistaAmplia && (
+          <div style={{ fontSize: 11, color: 'var(--slate)', maxWidth: 220 }}>Solo se cuentan tus propias clases en este curso.</div>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        <button className={'btn btn-sm ' + (modo === 'curso' ? 'btn-primary' : 'btn-secondary')} onClick={() => setModo('curso')}>Por curso</button>
+        <button className={'btn btn-sm ' + (modo === 'estudiante' ? 'btn-primary' : 'btn-secondary')} onClick={() => setModo('estudiante')}>Por estudiante</button>
+      </div>
+
+      {loading ? <p style={{ fontSize: 13, color: 'var(--slate)' }}>Cargando…</p> : modo === 'curso' ? (
+        <>
+          {datosGrafico.length > 0 && (
+            <div className="card" style={{ marginBottom: 14 }}>
+              <div className="ch"><h3>Distribución general</h3></div>
+              <div className="cb" style={{ height: 220 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={datosGrafico} dataKey="value" nameKey="name" outerRadius={80} label>
+                      {datosGrafico.map((d, i) => <Cell key={i} fill={d.color} />)}
+                    </Pie>
+                    <Tooltip /><Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+          <div className="card"><div className="cb" style={{ padding: 0, overflowX: 'auto' }}>
+            {filaEstudiantes.length === 0 ? (
+              <p style={{ fontSize: 13, color: 'var(--slate)', padding: 14 }}>Sin datos para este curso en el rango elegido.</p>
+            ) : (
+              <table className="data" style={{ width: '100%' }}>
+                <thead><tr><th>Estudiante</th><th>Presente</th><th>Atraso</th><th>Ausente</th><th>Justificado</th><th>Total</th><th>% Asistencia</th></tr></thead>
+                <tbody>
+                  {filaEstudiantes.map(a => (
+                    <tr key={a.id} style={{ cursor: 'pointer' }} onClick={() => { setEstudianteId(a.id); setModo('estudiante'); }}>
+                      <td><strong>{a.nombre}</strong></td>
+                      <td>{a.presente}</td><td>{a.atraso}</td><td>{a.ausente}</td><td>{a.justificado}</td><td>{a.total}</td>
+                      <td>{a.pct === null ? '—' : <span className={'badge ' + (a.pct >= 90 ? 'b-ok' : a.pct >= 75 ? 'b-warn' : 'b-err')}>{a.pct}%</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div></div>
+        </>
+      ) : (
+        <div className="card">
+          <div className="cb">
+            <label className="fl">Estudiante</label>
+            <select className="fc" value={estudianteId} onChange={e => setEstudianteId(e.target.value)} style={{ maxWidth: 320, marginBottom: 14 }}>
+              <option value="">Selecciona un estudiante…</option>
+              {filaEstudiantes.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+            </select>
+
+            {estudianteSel && (
+              <div className="grid-4" style={{ marginBottom: 14 }}>
+                <div className="metric m-green"><div className="m-lbl">Presente</div><div className="m-val">{estudianteSel.presente}</div></div>
+                <div className="metric m-amber"><div className="m-lbl">Atraso</div><div className="m-val">{estudianteSel.atraso}</div></div>
+                <div className="metric m-red"><div className="m-lbl">Ausente</div><div className="m-val">{estudianteSel.ausente}</div></div>
+                <div className="metric m-blue"><div className="m-lbl">Justificado</div><div className="m-val">{estudianteSel.justificado}</div></div>
+              </div>
+            )}
+
+            {!estudianteId ? (
+              <p style={{ fontSize: 13, color: 'var(--slate)' }}>Elige un estudiante para ver su historial detallado.</p>
+            ) : historial.length === 0 ? (
+              <p style={{ fontSize: 13, color: 'var(--slate)' }}>Sin registros en el rango elegido.</p>
+            ) : (
+              <table className="data" style={{ width: '100%' }}>
+                <thead><tr><th>Fecha</th><th>Materia</th><th>Estado</th><th>Observación</th></tr></thead>
+                <tbody>
+                  {historial.map((r, i) => (
+                    <tr key={i}>
+                      <td className="mono">{r.fecha}</td>
+                      <td>{r.materia}</td>
+                      <td><span className={'badge ' + (r.estado === 'presente' ? 'b-ok' : r.estado === 'ausente' ? 'b-err' : r.estado === 'atraso' ? 'b-warn' : 'b-muted')}>{ESTADOS.find(e => e.v === r.estado)?.label || r.estado}</span></td>
+                      <td style={{ fontSize: 12 }}>{r.observacion || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function Asistencia() {
+  const [tab, setTab] = useState('registro');
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <button className={'btn btn-sm ' + (tab === 'registro' ? 'btn-primary' : 'btn-secondary')} onClick={() => setTab('registro')}>Registro diario</button>
+        <button className={'btn btn-sm ' + (tab === 'consultas' ? 'btn-primary' : 'btn-secondary')} onClick={() => setTab('consultas')}>Consultas y estadísticas</button>
+      </div>
+      {tab === 'registro' ? <RegistroDiario /> : <ConsultasEstadisticas />}
     </div>
   );
 }
