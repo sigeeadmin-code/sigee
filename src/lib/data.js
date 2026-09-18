@@ -133,11 +133,14 @@ export async function guardarAsistencia(docenteMateriaId, fecha, registros, regi
   registros.forEach(r => {
     const prev = existentesPorEstudiante[r.estudiante_id];
     if (prev) {
-      if (prev.estado !== r.estado) aActualizar.push({ id: prev.id, estado: r.estado });
+      const cambios = {};
+      if (prev.estado !== r.estado) cambios.estado = r.estado;
+      if ((prev.observacion || '') !== (r.observacion || '')) cambios.observacion = r.observacion || null;
+      if (Object.keys(cambios).length) aActualizar.push({ id: prev.id, ...cambios });
     } else {
       aInsertar.push({
         estudiante_id: r.estudiante_id, docente_materia_id: docenteMateriaId,
-        fecha, estado: r.estado, registrado_por: registradoPor
+        fecha, estado: r.estado, observacion: r.observacion || null, registrado_por: registradoPor
       });
     }
   });
@@ -146,10 +149,26 @@ export async function guardarAsistencia(docenteMateriaId, fecha, registros, regi
     if (error) throw error;
   }
   for (const upd of aActualizar) {
-    const { error } = await supabase.from('asistencia').update({ estado: upd.estado }).eq('id', upd.id);
+    const { id, ...cambios } = upd;
+    const { error } = await supabase.from('asistencia').update(cambios).eq('id', id);
     if (error) throw error;
   }
   return true;
+}
+
+export async function fetchAsistenciaReciente(docenteMateriaId, dias = 7) {
+  if (!docenteMateriaId) return [];
+  const desde = new Date();
+  desde.setDate(desde.getDate() - dias);
+  const desdeStr = desde.toISOString().slice(0, 10);
+  const { data, error } = await supabase
+    .from('asistencia')
+    .select('fecha, estado, observacion, estudiantes(nombres, apellidos)')
+    .eq('docente_materia_id', docenteMateriaId)
+    .gte('fecha', desdeStr)
+    .order('fecha', { ascending: false });
+  if (error) { console.error('[Supabase] asistencia reciente', error.message); return []; }
+  return data || [];
 }
 
 export async function fetchAulas(institucionId) {

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchGradosConParalelos, fetchMateriasParalelo, fetchEstudiantesParaleloDetalle,
-  fetchAsistencia, guardarAsistencia, fetchCargasDocente
+  fetchAsistencia, guardarAsistencia, fetchCargasDocente, registrarAviso, fetchAsistenciaReciente
 } from '../lib/data.js';
 import { mensajeAsistencia } from '../lib/calendario.js';
 
@@ -36,7 +36,9 @@ export default function Asistencia() {
   const [fecha, setFecha] = useState(hoyISO());
   const [alumnos, setAlumnos] = useState([]);
   const [registros, setRegistros] = useState({});
+  const [registrosOriginales, setRegistrosOriginales] = useState({});
   const [obs, setObs] = useState({});
+  const [reciente, setReciente] = useState([]);
   const [loading, setLoading] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [toast, setToast] = useState(null);
@@ -106,15 +108,18 @@ export default function Asistencia() {
 
   const cargarAlumnosYAsistencia = useCallback(async () => {
     if (!paraleloId || !periodoActivo) { setAlumnos([]); return; }
-    const [als, asis] = await Promise.all([
+    const [als, asis, rec] = await Promise.all([
       fetchEstudiantesParaleloDetalle(paraleloId, periodoActivo.id),
-      docenteMateriaId ? fetchAsistencia(docenteMateriaId, fecha) : Promise.resolve([])
+      docenteMateriaId ? fetchAsistencia(docenteMateriaId, fecha) : Promise.resolve([]),
+      fetchAsistenciaReciente(docenteMateriaId, 7)
     ]);
     setAlumnos(als);
     const map = {}; const om = {};
-    asis.forEach(a => { map[a.estudiante_id] = a.estado; });
+    asis.forEach(a => { map[a.estudiante_id] = a.estado; om[a.estudiante_id] = a.observacion || ''; });
     setRegistros(map);
+    setRegistrosOriginales(map);
     setObs(om);
+    setReciente(rec.filter(r => r.fecha !== fecha)); // el día actual ya se ve arriba, no lo dupliques
   }, [paraleloId, periodoActivo, docenteMateriaId, fecha]);
 
   useEffect(() => { cargarAlumnosYAsistencia(); }, [cargarAlumnosYAsistencia]);
@@ -131,9 +136,22 @@ export default function Asistencia() {
     if (!gate.ok) { setToast({ tipo: 'err', msg: 'No se puede guardar: ' + gate.msg }); return; }
     setGuardando(true);
     try {
-      const lista = alumnos.filter(a => registros[a.id]).map(a => ({ estudiante_id: a.id, estado: registros[a.id] }));
+      const lista = alumnos.filter(a => registros[a.id]).map(a => ({ estudiante_id: a.id, estado: registros[a.id], observacion: obs[a.id] || '' }));
       await guardarAsistencia(docenteMateriaId, fecha, lista, profile.id);
-      setToast({ tipo: 'ok', msg: 'Asistencia guardada.' });
+
+      // Aviso automático: solo para quienes PASARON a 'ausente' en este guardado,
+      // no para los que ya estaban marcados así desde antes (evita re-avisar cada vez).
+      const nuevasAusencias = alumnos.filter(a => registros[a.id] === 'ausente' && registrosOriginales[a.id] !== 'ausente');
+      for (const a of nuevasAusencias) {
+        try {
+          await registrarAviso(institucionId, a.id, `Inasistencia registrada el ${fecha} en ${gradoSel?.nombre || 'su curso'}.`, profile.id);
+        } catch (e) {
+          console.error('No se pudo registrar el aviso de inasistencia para', a.id, e.message);
+        }
+      }
+
+      setRegistrosOriginales(registros);
+      setToast({ tipo: 'ok', msg: 'Asistencia guardada.' + (nuevasAusencias.length ? ` Se registraron ${nuevasAusencias.length} aviso(s) de inasistencia.` : '') });
     } catch (err) {
       setToast({ tipo: 'err', msg: err.message || 'No se pudo guardar.' });
     }
@@ -219,6 +237,7 @@ export default function Asistencia() {
               <tr>
                 <th>#</th><th>Estudiante</th><th>Representante</th>
                 {ESTADOS.map(e => <th key={e.v} style={{ textAlign: 'center' }}>{e.label}</th>)}
+                <th>Observación</th>
               </tr>
             </thead>
             <tbody>
@@ -239,11 +258,41 @@ export default function Asistencia() {
                       <input type="radio" name={'as_' + a.id} checked={registros[a.id] === e.v} onChange={() => marcar(a.id, e.v)} />
                     </td>
                   ))}
+                  <td>
+                    <input className="fc" style={{ minWidth: 120, padding: '4px 8px', fontSize: 12 }}
+                      value={obs[a.id] || ''} onChange={ev => setObs(o => ({ ...o, [a.id]: ev.target.value }))}
+                      placeholder="—" />
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div></div>
+      )}
+
+      {docenteMateriaId && (
+        <div className="card" style={{ marginTop: 14 }}>
+          <div className="ch"><h3>Resumen reciente (últimos 7 días)</h3></div>
+          <div className="cb" style={{ padding: 0 }}>
+            {reciente.length === 0 ? (
+              <p style={{ fontSize: 13, color: 'var(--slate)', padding: 14 }}>Sin registros anteriores en esta carga.</p>
+            ) : (
+              <table className="data" style={{ width: '100%' }}>
+                <thead><tr><th>Fecha</th><th>Estudiante</th><th>Estado</th><th>Observación</th></tr></thead>
+                <tbody>
+                  {reciente.map((r, i) => (
+                    <tr key={i}>
+                      <td className="mono">{r.fecha}</td>
+                      <td>{r.estudiantes?.apellidos} {r.estudiantes?.nombres}</td>
+                      <td><span className={'badge ' + (r.estado === 'presente' ? 'b-ok' : r.estado === 'ausente' ? 'b-err' : r.estado === 'atraso' ? 'b-warn' : 'b-muted')}>{ESTADOS.find(e => e.v === r.estado)?.label || r.estado}</span></td>
+                      <td style={{ fontSize: 12 }}>{r.observacion || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
       )}
 
       {toast && <div className={'toast ' + (toast.tipo === 'ok' ? 'ok' : 'err')}>{toast.msg}</div>}
