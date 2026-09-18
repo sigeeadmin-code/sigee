@@ -507,14 +507,18 @@ function ConsultasEstadisticas() {
 }
 
 export default function Asistencia() {
-  const [tab, setTab] = useState('registro');
+  const { profile } = useSession();
+  const puedeRegistrar = profile.rolDb === 'docente';
+  const [tab, setTab] = useState(puedeRegistrar ? 'registro' : 'consultas');
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        <button className={'btn btn-sm ' + (tab === 'registro' ? 'btn-primary' : 'btn-secondary')} onClick={() => setTab('registro')}>Registro diario</button>
+        {puedeRegistrar && (
+          <button className={'btn btn-sm ' + (tab === 'registro' ? 'btn-primary' : 'btn-secondary')} onClick={() => setTab('registro')}>Registro diario</button>
+        )}
         <button className={'btn btn-sm ' + (tab === 'consultas' ? 'btn-primary' : 'btn-secondary')} onClick={() => setTab('consultas')}>Consultas y estadísticas</button>
       </div>
-      {tab === 'registro' ? <RegistroDiario /> : <ConsultasEstadisticas />}
+      {tab === 'registro' && puedeRegistrar ? <RegistroDiario /> : <ConsultasEstadisticas />}
     </div>
   );
 }

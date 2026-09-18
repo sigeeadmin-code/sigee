@@ -14,6 +14,7 @@ import Estudiantes from './pages/Estudiantes.jsx';
 import Usuarios from './pages/Usuarios.jsx';
 import Tareas from './pages/Tareas.jsx';
 import Asistencia from './pages/Asistencia.jsx';
+import ReportesAsistencia from './pages/ReportesAsistencia.jsx';
 import Calificaciones from './pages/Calificaciones.jsx';
 import Aulas from './pages/Aulas.jsx';
 import Horario from './pages/Horario.jsx';
@@ -42,7 +43,11 @@ function AccesoDenegado() {
  */
 function Protegida({ path, children }) {
   const { profile } = useSession();
-  const permitido = rolesConAcceso(path).includes(profile.rolDb);
+  // profile.rol es el rol AGRUPADO (mismo que usa Shell.jsx para armar el menú);
+  // profile.rolDb es el crudo de la BD. Deben compararse contra el mismo tipo
+  // que las claves de NAV_BY_ROL (agrupado), o el guardián bloquea a roles
+  // que sí deberían entrar (pasó con inspector_general, estudiante, etc).
+  const permitido = rolesConAcceso(path).includes(profile.rol);
   return permitido ? children : <AccesoDenegado />;
 }
 
@@ -66,6 +71,7 @@ function Gate() {
         <Route path="/mi-plantel" element={<Protegida path="/mi-plantel"><MiPlantel /></Protegida>} />
         <Route path="/tareas" element={<Protegida path="/tareas"><Tareas /></Protegida>} />
         <Route path="/asistencia" element={<Protegida path="/asistencia"><Asistencia /></Protegida>} />
+        <Route path="/reportes-asistencia" element={<Protegida path="/reportes-asistencia"><ReportesAsistencia /></Protegida>} />
         <Route path="/inasistencias" element={<Protegida path="/inasistencias"><Inasistencias /></Protegida>} />
         <Route path="/justificaciones" element={<Protegida path="/justificaciones"><Justificaciones /></Protegida>} />
         <Route path="/calendario" element={<Protegida path="/calendario"><Calendario /></Protegida>} />

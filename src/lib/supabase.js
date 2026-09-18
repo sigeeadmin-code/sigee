@@ -17,6 +17,10 @@ export const ROLE_GROUP = {
   estudiante: 'alumno',
   padre: 'padre'
 };
+// OJO: estas claves son los NOMBRES DE GRUPO (ROLE_GROUP), no el rol crudo
+// de la base de datos. data.js las consulta como ROLE_LABELS[ROLE_GROUP[rol]].
+// Por eso dice 'inspector' y 'alumno' aquí, aunque en la BD el enum real sea
+// 'inspector_general' y 'estudiante' — ROLE_GROUP ya hizo esa traducción antes.
 export const ROLE_LABELS = {
   super_admin: 'Super Admin Global',
   admin_plantel: 'Administrador de Plantel',

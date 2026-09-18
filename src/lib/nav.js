@@ -75,16 +75,21 @@ export const NAV_BY_ROL = {
       { to: '/configuracion', label: 'Configuración', icon: 'ti ti-settings' }
     ]}
   ],
+  // Clave 'inspector': es el nombre de GRUPO (ver ROLE_GROUP en supabase.js),
+  // no el rol crudo de la BD — el enum real es 'inspector_general', pero
+  // Shell.jsx busca el menú por profile.rol (ya agrupado), no por rolDb.
   inspector: [
     { cat: 'Principal', items: [
       { to: '/', label: 'Dashboard', icon: 'ti ti-layout-dashboard' },
       { to: '/notificaciones', label: 'Notificaciones', icon: 'ti ti-bell' }
     ]},
-    { cat: 'Académico', items: [
+    { cat: 'Convivencia y asistencia', items: [
       { to: '/estudiantes', label: 'Estudiantes', icon: 'ti ti-users' },
-      { to: '/asistencia', label: 'Asistencia', icon: 'ti ti-calendar-check' },
+      { to: '/reportes-asistencia', label: 'Reportes de asistencia', icon: 'ti ti-chart-bar' },
+      { to: '/asistencia', label: 'Consultas de asistencia', icon: 'ti ti-calendar-check' },
       { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' },
-      { to: '/inasistencias', label: 'Inasistencias / WhatsApp', icon: 'ti ti-message-circle' }
+      { to: '/inasistencias', label: 'Inasistencias / WhatsApp', icon: 'ti ti-message-circle' },
+      { to: '/calendario', label: 'Calendario académico', icon: 'ti ti-calendar' }
     ]},
     { cat: 'Sistema', items: [
       { to: '/configuracion', label: 'Configuración', icon: 'ti ti-settings' }
@@ -105,6 +110,7 @@ export const NAV_BY_ROL = {
       { to: '/configuracion', label: 'Configuración', icon: 'ti ti-settings' }
     ]}
   ],
+  // Clave 'alumno': nombre de GRUPO; el rol crudo real en la BD es 'estudiante'.
   alumno: [
     { cat: 'Principal', items: [
       { to: '/', label: 'Inicio', icon: 'ti ti-layout-dashboard' },
@@ -113,7 +119,6 @@ export const NAV_BY_ROL = {
     { cat: 'Académico', items: [
       { to: '/horario', label: 'Horario', icon: 'ti ti-clock', wip: true },
       { to: '/calificaciones', label: 'Calificaciones', icon: 'ti ti-report' },
-      { to: '/asistencia', label: 'Asistencia', icon: 'ti ti-calendar-check' },
       { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' },
       { to: '/tareas', label: 'Tareas', icon: 'ti ti-clipboard-list' }
     ]},
@@ -128,12 +133,16 @@ export const NAV_BY_ROL = {
     ]},
     { cat: 'Académico', items: [
       { to: '/calificaciones', label: 'Calificaciones', icon: 'ti ti-report' },
-      { to: '/asistencia', label: 'Asistencia', icon: 'ti ti-calendar-check' }
+      { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' }
     ]},
     { cat: 'Sistema', items: [
       { to: '/configuracion', label: 'Configuración', icon: 'ti ti-settings' }
     ]}
   ]
+  // supervisor_general, contador_general y supervisor_plantel se agrupan como
+  // 'admin_plantel' (ROLE_GROUP en supabase.js); contador_plantel y
+  // administrativo se agrupan como 'secretario'. Por eso no tienen una clave
+  // propia aquí: ya heredan ese menú automáticamente vía profile.rol.
 };
 
 /**

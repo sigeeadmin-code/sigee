@@ -263,6 +263,50 @@ export async function fetchHistorialEstudiante(estudianteId, docenteMateriaIds, 
   return (data || []).map(r => ({ ...r, materia: r.docente_materia?.materias?.nombre || '—' }));
 }
 
+/**
+ * Reporte de asistencia de TODA la institución (todos los cursos a la vez),
+ * pensado para inspección/dirección — a diferencia de fetchEstadisticasCurso
+ * (un curso puntual). Marca 'advertencia' cuando un estudiante tiene 3 o más
+ * ausencias en el rango, o su % de asistencia cae bajo 80.
+ */
+export async function fetchReporteInstitucional(institucionId, desde, hasta) {
+  const dm = await sel('docente_materia', 'id, docentes!inner(institucion_id)', q => q.eq('docentes.institucion_id', institucionId));
+  const dmIds = dm.map(d => d.id);
+
+  const matriculasInst = await sel(
+    'matriculas',
+    'estudiante_id, paralelo_id, estudiantes!inner(nombres, apellidos, institucion_id), grados(nombre), paralelos(nombre)',
+    q => q.eq('estado', 'activa').eq('estudiantes.institucion_id', institucionId)
+  );
+
+  let registros = [];
+  if (dmIds.length) {
+    const { data, error } = await supabase.from('asistencia').select('estudiante_id, estado')
+      .in('docente_materia_id', dmIds).gte('fecha', desde).lte('fecha', hasta);
+    if (error) console.error('[Supabase] reporte institucional', error.message);
+    registros = data || [];
+  }
+
+  const porAlumno = {};
+  matriculasInst.forEach(m => {
+    porAlumno[m.estudiante_id] = {
+      id: m.estudiante_id,
+      nombre: `${m.estudiantes?.apellidos || ''} ${m.estudiantes?.nombres || ''}`.trim(),
+      curso: `${m.grados?.nombre || ''} ${m.paralelos?.nombre || ''}`.trim(),
+      paraleloId: m.paralelo_id,
+      presente: 0, atraso: 0, ausente: 0, justificado: 0
+    };
+  });
+  registros.forEach(r => { if (porAlumno[r.estudiante_id] && porAlumno[r.estudiante_id][r.estado] !== undefined) porAlumno[r.estudiante_id][r.estado]++; });
+
+  return Object.values(porAlumno).map(a => {
+    const total = a.presente + a.atraso + a.ausente + a.justificado;
+    const pct = total > 0 ? Math.round(((a.presente + a.atraso) / total) * 100) : null;
+    const advertencia = a.ausente >= 3 || (pct !== null && pct < 80);
+    return { ...a, total, pct, advertencia };
+  }).sort((x, y) => (x.pct ?? 999) - (y.pct ?? 999));
+}
+
 export async function fetchAulas(institucionId) {
   return sel('aulas', '*', q => q.eq('institucion_id', institucionId).order('codigo'));
 }

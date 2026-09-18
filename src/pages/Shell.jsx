@@ -5,7 +5,11 @@ import { NAV_BY_ROL } from '../lib/nav.js';
 import { ROLE_LABELS } from '../lib/supabase.js';
 export default function Shell() {
   const { profile, institucion, logout } = useSession();
-  const categorias = NAV_BY_ROL[profile.rol] || NAV_BY_ROL.docente;
+  const MENU_MINIMO = [
+    { cat: 'Principal', items: [{ to: '/', label: 'Dashboard', icon: 'ti ti-layout-dashboard' }] },
+    { cat: 'Sistema', items: [{ to: '/configuracion', label: 'Configuración', icon: 'ti ti-settings' }] }
+  ];
+  const categorias = NAV_BY_ROL[profile.rol] || MENU_MINIMO;
   const initials = ((profile.nombres?.[0] || '') + (profile.apellidos?.[0] || '')).toUpperCase() || 'U';
   const isGlobal = profile.rol === 'super_admin';
   const [navOpen, setNavOpen] = React.useState(false);
