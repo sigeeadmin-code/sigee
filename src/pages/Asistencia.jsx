@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchGradosConParalelos, fetchMateriasParalelo, fetchEstudiantesParaleloDetalle,
-  fetchAsistencia, guardarAsistencia, fetchCargasDocente, registrarAviso, fetchAsistenciaReciente
+  fetchAsistencia, guardarAsistencia, fetchCargasDocente, fetchAsistenciaReciente
 } from '../lib/data.js';
 import { mensajeAsistencia } from '../lib/calendario.js';
 
@@ -139,19 +139,14 @@ export default function Asistencia() {
       const lista = alumnos.filter(a => registros[a.id]).map(a => ({ estudiante_id: a.id, estado: registros[a.id], observacion: obs[a.id] || '' }));
       await guardarAsistencia(docenteMateriaId, fecha, lista, profile.id);
 
-      // Aviso automático: solo para quienes PASARON a 'ausente' en este guardado,
-      // no para los que ya estaban marcados así desde antes (evita re-avisar cada vez).
+      // Nota: el aviso a representantes se registra manualmente desde
+      // Inasistencias (ahí se envía el WhatsApp y luego se confirma el envío),
+      // no automáticamente aquí — avisos_inasistencia representa avisos YA
+      // enviados (canal, enviado_at), no una cola de pendientes.
       const nuevasAusencias = alumnos.filter(a => registros[a.id] === 'ausente' && registrosOriginales[a.id] !== 'ausente');
-      for (const a of nuevasAusencias) {
-        try {
-          await registrarAviso(institucionId, a.id, `Inasistencia registrada el ${fecha} en ${gradoSel?.nombre || 'su curso'}.`, profile.id);
-        } catch (e) {
-          console.error('No se pudo registrar el aviso de inasistencia para', a.id, e.message);
-        }
-      }
 
       setRegistrosOriginales(registros);
-      setToast({ tipo: 'ok', msg: 'Asistencia guardada.' + (nuevasAusencias.length ? ` Se registraron ${nuevasAusencias.length} aviso(s) de inasistencia.` : '') });
+      setToast({ tipo: 'ok', msg: 'Asistencia guardada.' + (nuevasAusencias.length ? ` ${nuevasAusencias.length} nueva(s) ausencia(s) — revísalas en Inasistencias.` : '') });
     } catch (err) {
       setToast({ tipo: 'err', msg: err.message || 'No se pudo guardar.' });
     }

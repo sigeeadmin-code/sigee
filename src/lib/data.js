@@ -171,6 +171,54 @@ export async function fetchAsistenciaReciente(docenteMateriaId, dias = 7) {
   return data || [];
 }
 
+/**
+ * Todas las ausencias ('estado'='ausente') de la institución desde `desde`,
+ * cruzadas con avisos_inasistencia para saber cuáles YA se avisaron al
+ * representante y cuáles siguen pendientes. Incluye el teléfono del
+ * representante para armar el link de WhatsApp.
+ */
+export async function fetchInasistencias(institucionId, desde) {
+  const dm = await sel('docente_materia', 'id, docentes!inner(institucion_id)', q => q.eq('docentes.institucion_id', institucionId));
+  const dmIds = dm.map(d => d.id);
+  if (!dmIds.length) return [];
+
+  const [{ data: ausencias, error: e1 }, avisos] = await Promise.all([
+    supabase.from('asistencia')
+      .select('id, fecha, estudiante_id, estudiantes(nombres, apellidos, cedula)')
+      .in('docente_materia_id', dmIds).eq('estado', 'ausente').gte('fecha', desde)
+      .order('fecha', { ascending: false }),
+    sel('avisos_inasistencia', '*', q => q.eq('institucion_id', institucionId).gte('fecha', desde))
+  ]);
+  if (e1) { console.error('[Supabase] inasistencias', e1.message); return []; }
+  if (!ausencias?.length) return [];
+
+  const estudianteIds = [...new Set(ausencias.map(a => a.estudiante_id))];
+  const matriculas = await sel('matriculas', 'estudiante_id, paralelo_id, grados(nombre), paralelos(nombre)', q => q.in('estudiante_id', estudianteIds));
+  const cursoPorEstudiante = Object.fromEntries(matriculas.map(m => [m.estudiante_id, `${m.grados?.nombre || ''} ${m.paralelos?.nombre || ''}`.trim()]));
+
+  const vinculos = await sel('representantes_estudiantes', 'estudiante_id, representante_id', q => q.in('estudiante_id', estudianteIds));
+  const repIds = [...new Set(vinculos.map(v => v.representante_id))];
+  const reps = repIds.length ? await sel('representantes', 'id, nombres, apellidos, telefono', q => q.in('id', repIds)) : [];
+  const repPorId = Object.fromEntries(reps.map(r => [r.id, r]));
+  const repPorEstudiante = {};
+  vinculos.forEach(v => { repPorEstudiante[v.estudiante_id] = repPorId[v.representante_id]; });
+
+  const avisadoKey = (estId, fecha) => estId + '|' + fecha;
+  const avisadosSet = new Set((avisos || []).map(av => avisadoKey(av.estudiante_id, av.fecha)));
+
+  return ausencias.map(a => {
+    const rep = repPorEstudiante[a.estudiante_id];
+    return {
+      asistenciaId: a.id, fecha: a.fecha, estudianteId: a.estudiante_id,
+      nombre: `${a.estudiantes?.apellidos || ''} ${a.estudiantes?.nombres || ''}`.trim(),
+      curso: cursoPorEstudiante[a.estudiante_id] || '—',
+      representante: rep ? `${rep.nombres} ${rep.apellidos}`.trim() : null,
+      telefonoRep: rep?.telefono || null,
+      avisado: avisadosSet.has(avisadoKey(a.estudiante_id, a.fecha))
+    };
+  });
+}
+
 export async function fetchAulas(institucionId) {
   return sel('aulas', '*', q => q.eq('institucion_id', institucionId).order('codigo'));
 }
@@ -237,8 +285,10 @@ export async function fetchAsistenciaInstitucion(institucionId, desde) {
 export async function fetchAvisosInasistencia(institucionId) {
   return sel('avisos_inasistencia', '*', q => q.eq('institucion_id', institucionId).order('enviado_at', { ascending: false }));
 }
-export async function registrarAviso(institucionId, estudianteId, mensaje, enviadoPor) {
-  const { error } = await supabase.from('avisos_inasistencia').insert({ institucion_id: institucionId, estudiante_id: estudianteId, mensaje, enviado_por: enviadoPor });
+export async function registrarAviso(institucionId, estudianteId, mensaje, enviadoPor, fecha) {
+  const payload = { institucion_id: institucionId, estudiante_id: estudianteId, mensaje, enviado_por: enviadoPor };
+  if (fecha) payload.fecha = fecha;
+  const { error } = await supabase.from('avisos_inasistencia').insert(payload);
   if (error) throw error;
 }
 
