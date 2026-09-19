@@ -245,7 +245,10 @@ export async function fetchEstadisticasCurso(paraleloId, docenteMateriaIds, desd
   return alumnos.map(a => {
     const c = porAlumno[a.id];
     const total = c.presente + c.atraso + c.ausente + c.justificado;
-    const pct = total > 0 ? Math.round(((c.presente + c.atraso) / total) * 100) : null;
+    // Una falta ya JUSTIFICADA no debe penalizar el % de asistencia — de lo
+    // contrario, justificar no serviría de nada (seguiría contando en contra).
+    const totalContable = c.presente + c.atraso + c.ausente;
+    const pct = totalContable > 0 ? Math.round(((c.presente + c.atraso) / totalContable) * 100) : null;
     return { ...a, ...c, total, pct };
   });
 }
@@ -301,7 +304,8 @@ export async function fetchReporteInstitucional(institucionId, desde, hasta) {
 
   return Object.values(porAlumno).map(a => {
     const total = a.presente + a.atraso + a.ausente + a.justificado;
-    const pct = total > 0 ? Math.round(((a.presente + a.atraso) / total) * 100) : null;
+    const totalContable = a.presente + a.atraso + a.ausente; // justificado no penaliza el %
+    const pct = totalContable > 0 ? Math.round(((a.presente + a.atraso) / totalContable) * 100) : null;
     const advertencia = a.ausente >= 3 || (pct !== null && pct < 80);
     return { ...a, total, pct, advertencia };
   }).sort((x, y) => (x.pct ?? 999) - (y.pct ?? 999));

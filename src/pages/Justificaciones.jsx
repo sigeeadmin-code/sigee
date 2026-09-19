@@ -1,11 +1,28 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
-import { fetchJustificaciones, crearJustificacion, revisarJustificacion, marcarAsistenciaJustificada } from '../lib/data.js';
+import { fetchJustificaciones, crearJustificacion, revisarJustificacion, marcarAsistenciaJustificada, fetchHijosDeRepresentante, fetchEstudianteIdPorProfile } from '../lib/data.js';
+
+const ROLES_REVISAN = ['admin_plantel', 'secretario', 'inspector_general', 'super_admin'];
 
 export default function Justificaciones() {
   const { profile, institucion, data } = useSession();
   const institucionId = institucion?.id;
-  const estudiantes = data?.estudiantes || [];
+  const puedeRevisar = ROLES_REVISAN.includes(profile.rolDb);
+  const [estudiantesPropios, setEstudiantesPropios] = useState(null); // null = "todavía no aplica restricción / no cargado"
+  // Para roles administrativos, se sigue usando el listado completo de la institución.
+  const estudiantes = estudiantesPropios ?? (data?.estudiantes || []);
+
+  useEffect(() => {
+    (async () => {
+      if (profile.rolDb === 'padre') {
+        setEstudiantesPropios(await fetchHijosDeRepresentante(profile.id));
+      } else if (profile.rolDb === 'estudiante') {
+        const id = await fetchEstudianteIdPorProfile(profile.id);
+        const propio = (data?.estudiantes || []).find(e => e.id === id);
+        setEstudiantesPropios(propio ? [{ id: propio.id, nombre: propio.nombre }] : []);
+      }
+    })();
+  }, [profile.rolDb, profile.id, data]);
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,6 +47,8 @@ export default function Justificaciones() {
 
   const pendientes = items.filter(j => j.estado === 'pendiente').length;
   const nombreEst = id => { const e = estudiantes.find(x => x.id === id); return e ? e.nombre : '—'; };
+  const idsPropios = new Set((estudiantesPropios || []).map(e => e.id));
+  const itemsVisibles = puedeRevisar ? items : items.filter(j => idsPropios.has(j.estudiante_id));
 
   async function resolver(j, estado) {
     let motivoRechazo = null;
@@ -81,14 +100,14 @@ export default function Justificaciones() {
         <button className="btn btn-primary btn-sm" onClick={abrirCrear}><span className="ti ti-plus" /> Nueva justificación</button>
       </div>
 
-      {items.length === 0 ? (
+      {itemsVisibles.length === 0 ? (
         <div className="empty"><span className="ti ti-file-check" /><p>Sin justificaciones registradas.</p></div>
       ) : (
         <div className="card"><div className="cb" style={{ padding: 0, overflowX: 'auto' }}>
           <table className="data" style={{ width: '100%' }}>
             <thead><tr><th>Falta</th><th>Estudiante</th><th>Motivo</th><th>Estado</th><th /></tr></thead>
             <tbody>
-              {items.map(j => (
+              {itemsVisibles.map(j => (
                 <tr key={j.id}>
                   <td className="mono">{j.fecha}</td>
                   <td><strong>{nombreEst(j.estudiante_id)}</strong></td>
@@ -99,7 +118,7 @@ export default function Justificaciones() {
                     </span>
                   </td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {j.estado === 'pendiente' ? (
+                    {j.estado === 'pendiente' && puedeRevisar ? (
                       <>
                         <button className="btn btn-success btn-sm" onClick={() => resolver(j, 'aprobada')}>Aprobar</button>{' '}
                         <button className="btn btn-danger btn-sm" onClick={() => resolver(j, 'rechazada')}>Rechazar</button>
