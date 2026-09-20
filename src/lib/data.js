@@ -331,6 +331,16 @@ export async function eliminarAula(id) {
 export async function fetchHorario(institucionId) {
   return sel('horario_bloques', '*', q => q.eq('institucion_id', institucionId));
 }
+/** Solo los bloques de las cargas que el docente realmente dicta — nunca todo el plantel. */
+export async function fetchHorarioDocente(docenteMateriaIds) {
+  if (!docenteMateriaIds?.length) return [];
+  return sel('horario_bloques', '*', q => q.in('docente_materia_id', docenteMateriaIds));
+}
+/** El horario completo (todas las materias) de un único paralelo — para la vista de estudiante/padre. */
+export async function fetchHorarioParalelo(paraleloId) {
+  if (!paraleloId) return [];
+  return sel('horario_bloques', '*', q => q.eq('paralelo_id', paraleloId));
+}
 export async function guardarBloqueHorario(bloque) {
   const { data, error } = await supabase.from('horario_bloques').upsert(bloque).select().single();
   if (error) throw error;

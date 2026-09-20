@@ -117,7 +117,7 @@ export const NAV_BY_ROL = {
       { to: '/comunicados', label: 'Comunicados', icon: 'ti ti-speakerphone' }
     ]},
     { cat: 'Académico', items: [
-      { to: '/horario', label: 'Horario', icon: 'ti ti-clock', wip: true },
+      { to: '/horario', label: 'Horario', icon: 'ti ti-clock' },
       { to: '/calificaciones', label: 'Calificaciones', icon: 'ti ti-report' },
       { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' },
       { to: '/tareas', label: 'Tareas', icon: 'ti ti-clipboard-list' }
@@ -132,6 +132,7 @@ export const NAV_BY_ROL = {
       { to: '/comunicados', label: 'Comunicados', icon: 'ti ti-speakerphone' }
     ]},
     { cat: 'Académico', items: [
+      { to: '/horario', label: 'Horario', icon: 'ti ti-clock' },
       { to: '/calificaciones', label: 'Calificaciones', icon: 'ti ti-report' },
       { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' }
     ]},
