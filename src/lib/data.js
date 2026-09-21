@@ -311,6 +311,57 @@ export async function fetchReporteInstitucional(institucionId, desde, hasta) {
   }).sort((x, y) => (x.pct ?? 999) - (y.pct ?? 999));
 }
 
+/**
+ * Resumen de asistencia de TODAS las cargas de un docente juntas (no una por
+ * una) — para su propio Dashboard. Incluye el desglose por materia/curso.
+ */
+export async function fetchResumenAsistenciaDocente(docenteMateriaIds, desde, hasta) {
+  if (!docenteMateriaIds?.length) return { totales: null, porCarga: [] };
+  const { data, error } = await supabase.from('asistencia')
+    .select('docente_materia_id, estado')
+    .in('docente_materia_id', docenteMateriaIds).gte('fecha', desde).lte('fecha', hasta);
+  if (error) { console.error('[Supabase] resumen docente', error.message); return { totales: null, porCarga: [] }; }
+
+  const vacios = () => ({ presente: 0, atraso: 0, ausente: 0, justificado: 0 });
+  const totales = vacios();
+  const porId = {};
+  docenteMateriaIds.forEach(id => { porId[id] = vacios(); });
+  (data || []).forEach(r => {
+    if (porId[r.docente_materia_id]?.[r.estado] !== undefined) { porId[r.docente_materia_id][r.estado]++; totales[r.estado]++; }
+  });
+  const contable = c => c.presente + c.atraso + c.ausente;
+  const pct = c => contable(c) > 0 ? Math.round(((c.presente + c.atraso) / contable(c)) * 100) : null;
+  return {
+    totales: { ...totales, pct: pct(totales) },
+    porCarga: Object.entries(porId).map(([id, c]) => ({ docenteMateriaId: id, ...c, pct: pct(c) }))
+  };
+}
+
+/** Lo mismo que arriba, pero agrupado por CADA docente de la institución — vista del inspector. */
+export async function fetchResumenAsistenciaPorDocente(institucionId, desde, hasta) {
+  const docentes = await sel('docentes', 'id, nombres, apellidos', q => q.eq('institucion_id', institucionId).eq('activo', true));
+  const cargas = await sel('docente_materia', 'id, docente_id', q => q.in('docente_id', docentes.map(d => d.id)));
+  if (!cargas.length) return [];
+
+  const { data, error } = await supabase.from('asistencia').select('docente_materia_id, estado')
+    .in('docente_materia_id', cargas.map(c => c.id)).gte('fecha', desde).lte('fecha', hasta);
+  if (error) { console.error('[Supabase] resumen por docente', error.message); return []; }
+
+  const dmToDocente = Object.fromEntries(cargas.map(c => [c.id, c.docente_id]));
+  const vacios = () => ({ presente: 0, atraso: 0, ausente: 0, justificado: 0 });
+  const porDocente = {};
+  docentes.forEach(d => { porDocente[d.id] = { ...vacios(), nombre: `${d.nombres} ${d.apellidos}`.trim() }; });
+  (data || []).forEach(r => {
+    const docId = dmToDocente[r.docente_materia_id];
+    if (porDocente[docId]?.[r.estado] !== undefined) porDocente[docId][r.estado]++;
+  });
+  return Object.values(porDocente).map(d => {
+    const contable = d.presente + d.atraso + d.ausente;
+    const pct = contable > 0 ? Math.round(((d.presente + d.atraso) / contable) * 100) : null;
+    return { ...d, total: contable + d.justificado, pct };
+  }).sort((a, b) => (a.pct ?? 999) - (b.pct ?? 999));
+}
+
 export async function fetchAulas(institucionId) {
   return sel('aulas', '*', q => q.eq('institucion_id', institucionId).order('codigo'));
 }

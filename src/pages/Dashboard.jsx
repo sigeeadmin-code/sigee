@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
-import { fetchMetricasGlobales, fetchEstudianteIdPorProfile, fetchHijosDeRepresentante, fetchProgramacionEstudiante } from '../lib/data.js';
+import {
+  fetchMetricasGlobales, fetchEstudianteIdPorProfile, fetchHijosDeRepresentante, fetchProgramacionEstudiante,
+  fetchCargasDocente, fetchHorarioDocente, fetchResumenAsistenciaDocente
+} from '../lib/data.js';
 
 const SOST_LABEL = { Fiscal: 'Fiscal', Particular: 'Particular', Fiscomisional: 'Fiscomisional', Municipal: 'Municipal' };
 
@@ -332,9 +335,116 @@ function DashboardEstudiante() {
   );
 }
 
+const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+function haceDias(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
+function minutosDesdeFranja(franja) { const [ini] = franja.split('–'); const [h, m] = ini.split(':').map(Number); return h * 60 + m; }
+
+/** Dashboard propio de un docente: sus clases de hoy, próxima clase, y el
+ * resumen general de asistencia de TODAS sus cargas — nunca métricas de
+ * dirección de toda la institución (eso era lo que veía antes, por error). */
+function DashboardDocente() {
+  const { profile, institucion, data } = useSession();
+  const institucionId = institucion?.id;
+  const [cargas, setCargas] = useState([]);
+  const [clasesHoy, setClasesHoy] = useState([]);
+  const [resumen, setResumen] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const ahoraMin = new Date().getHours() * 60 + new Date().getMinutes();
+  const hoyNombre = DIAS[new Date().getDay()];
+
+  useEffect(() => {
+    let activo = true;
+    (async () => {
+      if (!institucionId) return;
+      setLoading(true);
+      const cd = await fetchCargasDocente(profile.id, institucionId);
+      if (!activo) return;
+      setCargas(cd);
+      const ids = cd.map(c => c.id);
+      const [bloques, res] = await Promise.all([
+        fetchHorarioDocente(ids),
+        fetchResumenAsistenciaDocente(ids, haceDias(30), new Date().toISOString().slice(0, 10))
+      ]);
+      if (!activo) return;
+      const cargaPorId = Object.fromEntries(cd.map(c => [c.id, c]));
+      const deHoy = bloques
+        .filter(b => b.dia === hoyNombre)
+        .map(b => ({ ...b, carga: cargaPorId[b.docente_materia_id], inicioMin: minutosDesdeFranja(b.franja) }))
+        .sort((a, b) => a.inicioMin - b.inicioMin);
+      setClasesHoy(deHoy);
+      setResumen(res);
+      setLoading(false);
+    })();
+    return () => { activo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [institucionId, profile.id]);
+
+  if (loading) return <p style={{ fontSize: 13, color: 'var(--slate)' }}>Cargando…</p>;
+
+  const proximaIdx = clasesHoy.findIndex(c => c.inicioMin >= ahoraMin);
+
+  return (
+    <div>
+      <div style={{ marginBottom: 4, fontSize: 12, color: 'var(--slate)' }}>Panel docente</div>
+      <h2 style={{ margin: '0 0 4px' }}>{profile.nombres} {profile.apellidos}</h2>
+      <div style={{ fontSize: 13, color: 'var(--slate)', marginBottom: 18 }}>{institucion?.nombre} · {cargas.length} carga(s) asignada(s)</div>
+
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="ch"><h3>Clases de hoy ({hoyNombre})</h3></div>
+        <div className="cb">
+          {clasesHoy.length === 0 ? (
+            <p style={{ fontSize: 13, color: 'var(--slate)' }}>No tienes clases programadas hoy.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {clasesHoy.map((c, i) => {
+                const esProxima = i === proximaIdx;
+                const yaPaso = c.inicioMin < ahoraMin && !esProxima;
+                return (
+                  <div key={c.id} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '10px 14px', borderRadius: 10,
+                    background: esProxima ? 'var(--brandXL, #eef2ff)' : '#fafbfc',
+                    border: esProxima ? '1.5px solid var(--brand)' : '1px solid var(--line)',
+                    opacity: yaPaso ? .55 : 1
+                  }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 13 }}>{c.carga?.materiaNombre || 'Materia'}</div>
+                      <div style={{ fontSize: 11.5, color: 'var(--slate)' }}>{c.carga?.gradoNombre} "{c.carga?.paraleloNombre}"</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 600 }}>{c.franja}</div>
+                      {esProxima && <span className="badge b-ok" style={{ marginTop: 2 }}>Próxima clase</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 6, fontSize: 13, fontWeight: 700 }}>Asistencia de tus clases (últimos 30 días)</div>
+      <div className="grid-4" style={{ marginBottom: 18 }}>
+        <div className="metric m-green"><div className="m-lbl">Presente</div><div className="m-val">{resumen?.totales?.presente ?? 0}</div></div>
+        <div className="metric m-amber"><div className="m-lbl">Atraso</div><div className="m-val">{resumen?.totales?.atraso ?? 0}</div></div>
+        <div className="metric m-red"><div className="m-lbl">Ausente</div><div className="m-val">{resumen?.totales?.ausente ?? 0}</div></div>
+        <div className="metric m-teal"><div className="m-lbl">% Asistencia</div><div className="m-val">{resumen?.totales?.pct ?? '—'}{resumen?.totales?.pct !== null ? '%' : ''}</div></div>
+      </div>
+
+      <div className="card">
+        <div className="ch"><h3>Calificaciones</h3></div>
+        <div className="cb">
+          <p style={{ fontSize: 13, color: 'var(--slate)' }}>El módulo de calificaciones todavía no está habilitado en el sistema — en cuanto esté listo, aquí verás un resumen de notas pendientes por registrar.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { profile } = useSession();
   if (profile.rolDb === 'super_admin') return <DashboardGlobal />;
   if (profile.rolDb === 'padre' || profile.rolDb === 'estudiante') return <DashboardEstudiante />;
+  if (profile.rolDb === 'docente') return <DashboardDocente />;
   return <DashboardInstitucion />;
 }

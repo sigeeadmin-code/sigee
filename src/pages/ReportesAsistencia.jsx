@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useSession } from '../lib/SessionContext.jsx';
-import { fetchReporteInstitucional } from '../lib/data.js';
+import { fetchReporteInstitucional, fetchResumenAsistenciaPorDocente } from '../lib/data.js';
 
 function haceDias(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
 function hoyISO() { return new Date().toISOString().slice(0, 10); }
@@ -14,9 +14,11 @@ export default function ReportesAsistencia() {
 
   const [periodo, setPeriodo] = useState('semana');
   const [filas, setFilas] = useState([]);
+  const [porDocente, setPorDocente] = useState([]);
   const [loading, setLoading] = useState(true);
   const [soloAdvertencias, setSoloAdvertencias] = useState(true);
   const [buscarCurso, setBuscarCurso] = useState('');
+  const [vista, setVista] = useState('estudiantes'); // estudiantes | docentes
 
   const { desde, hasta } = useMemo(() => ({
     desde: haceDias(periodo === 'semana' ? 7 : 30),
@@ -26,8 +28,12 @@ export default function ReportesAsistencia() {
   const cargar = useCallback(async () => {
     if (!institucionId) return;
     setLoading(true);
-    const rows = await fetchReporteInstitucional(institucionId, desde, hasta);
+    const [rows, pd] = await Promise.all([
+      fetchReporteInstitucional(institucionId, desde, hasta),
+      fetchResumenAsistenciaPorDocente(institucionId, desde, hasta)
+    ]);
     setFilas(rows);
+    setPorDocente(pd);
     setLoading(false);
   }, [institucionId, desde, hasta]);
 
@@ -94,6 +100,30 @@ export default function ReportesAsistencia() {
         </div>
       </div>
 
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        <button className={'btn btn-sm ' + (vista === 'estudiantes' ? 'btn-primary' : 'btn-secondary')} onClick={() => setVista('estudiantes')}>Por estudiante</button>
+        <button className={'btn btn-sm ' + (vista === 'docentes' ? 'btn-primary' : 'btn-secondary')} onClick={() => setVista('docentes')}>Por docente</button>
+      </div>
+
+      {vista === 'docentes' ? (
+        loading ? <p style={{ fontSize: 13, color: 'var(--slate)' }}>Cargando…</p> : (
+          <div className="card"><div className="cb" style={{ padding: 0, overflowX: 'auto' }}>
+            <table className="data" style={{ width: '100%' }}>
+              <thead><tr><th>Docente</th><th>Presente</th><th>Atraso</th><th>Ausente</th><th>Justificado</th><th>% Asistencia en sus clases</th></tr></thead>
+              <tbody>
+                {porDocente.map((d, i) => (
+                  <tr key={i}>
+                    <td><strong>{d.nombre}</strong></td>
+                    <td>{d.presente}</td><td>{d.atraso}</td><td>{d.ausente}</td><td>{d.justificado}</td>
+                    <td>{d.pct === null ? '—' : <span className={'badge ' + (d.pct >= 90 ? 'b-ok' : d.pct >= 75 ? 'b-warn' : 'b-err')}>{d.pct}%</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div></div>
+        )
+      ) : (
+        <>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14, alignItems: 'center' }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
           <input type="checkbox" checked={soloAdvertencias} onChange={e => setSoloAdvertencias(e.target.checked)} />
@@ -130,6 +160,8 @@ export default function ReportesAsistencia() {
             </tbody>
           </table>
         </div></div>
+      )}
+        </>
       )}
     </div>
   );
