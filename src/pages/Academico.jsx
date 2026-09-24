@@ -274,18 +274,18 @@ function CoursePanel({ grados, gradoSelId, onSelect, institucionId, recargar, sh
 function ParallelPanel({ grado, paraleloSelId, onSelect, docentes, recargar, showToast }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState({ nombre: '', jornada: 'Matutina', tutor_docente_id: '' });
+  const [form, setForm] = useState({ nombre: '', jornada: 'Matutina', tutor_docente_id: '', especialidad: '' });
   const [saving, setSaving] = useState(false);
 
   function abrirCrear() {
     setEditId(null);
-    setForm({ nombre: '', jornada: 'Matutina', tutor_docente_id: '' });
+    setForm({ nombre: '', jornada: 'Matutina', tutor_docente_id: '', especialidad: '' });
     setModalOpen(true);
   }
   function abrirEditar(p, e) {
     e.stopPropagation();
     setEditId(p.id);
-    setForm({ nombre: p.nombre, jornada: p.jornada || 'Matutina', tutor_docente_id: p.tutor_docente_id || '' });
+    setForm({ nombre: p.nombre, jornada: p.jornada || 'Matutina', tutor_docente_id: p.tutor_docente_id || '', especialidad: p.especialidad || '' });
     setModalOpen(true);
   }
   async function guardar(e) {
@@ -293,7 +293,7 @@ function ParallelPanel({ grado, paraleloSelId, onSelect, docentes, recargar, sho
     if (!grado || !form.nombre.trim()) return;
     setSaving(true);
     try {
-      const payload = { nombre: form.nombre, jornada: form.jornada, tutor_docente_id: form.tutor_docente_id || null };
+      const payload = { nombre: form.nombre, jornada: form.jornada, tutor_docente_id: form.tutor_docente_id || null, especialidad: form.especialidad.trim() || null };
       if (editId) await actualizarParalelo(editId, payload);
       else await crearParalelo(grado.id, payload);
       setModalOpen(false);
@@ -345,6 +345,7 @@ function ParallelPanel({ grado, paraleloSelId, onSelect, docentes, recargar, sho
                 <div>
                   <div style={{ fontSize: 13, fontWeight: p.id === paraleloSelId ? 700 : 500 }}>
                     {p.nombre} <span className="badge b-info" style={{ fontSize: 10, marginLeft: 4 }}>{p.jornada || 'Matutina'}</span>
+                    {p.especialidad && <span className="badge" style={{ fontSize: 10, marginLeft: 4 }}>{p.especialidad}</span>}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--slate)' }}>Tutor: {tutor ? tutor.nombre : 'Sin asignar'}</div>
                 </div>
@@ -380,6 +381,10 @@ function ParallelPanel({ grado, paraleloSelId, onSelect, docentes, recargar, sho
                     <option value="">Sin asignar</option>
                     {docentes.map(d => <option key={d.id} value={d.id}>{d.nombre}</option>)}
                   </select>
+                </div>
+                <div className="full">
+                  <label className="fl">Especialidad (solo Bachillerato Técnico — opcional)</label>
+                  <input className="fc" value={form.especialidad} onChange={e => setForm(f => ({ ...f, especialidad: e.target.value }))} placeholder="Ej: Informática, Contabilidad…" />
                 </div>
               </div>
             </div>

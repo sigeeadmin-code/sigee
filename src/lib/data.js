@@ -786,6 +786,43 @@ export async function fetchReporteCambiosMatricula(institucionId, filtros = {}) 
     .map(r => ({ ...r, estadoNuevo: r.cambios?.new?.estado, estudianteId: r.cambios?.new?.estudiante_id || r.cambios?.old?.estudiante_id }))
     .filter(r => r.estadoNuevo && r.estadoNuevo !== 'activa' && (!filtros.tipo || r.estadoNuevo === filtros.tipo));
 }
+
+// Egresados: estudiantes cuya matrícula quedó en estado 'egresada' (graduados
+// del último año). Se agrupan en pantalla por promoción (el período lectivo en
+// que egresaron) y, si el paralelo tiene especialidad (Bach. Técnico), por esa.
+export async function fetchEgresados(institucionId) {
+  const estudiantesInst = await sel('estudiantes', 'id, nombres, apellidos, cedula', q => q.eq('institucion_id', institucionId));
+  const idsEst = estudiantesInst.map(e => e.id);
+  if (!idsEst.length) return [];
+  const estById = Object.fromEntries(estudiantesInst.map(e => [e.id, e]));
+  const [matriculas, grados, paralelos, periodos] = await Promise.all([
+    sel('matriculas', '*', q => q.eq('estado', 'egresada').in('estudiante_id', idsEst)),
+    sel('grados', '*', q => q.eq('institucion_id', institucionId)),
+    sel('paralelos', '*'),
+    sel('periodos_lectivos', '*', q => q.eq('institucion_id', institucionId))
+  ]);
+  const gradosById = Object.fromEntries(grados.map(g => [g.id, g]));
+  const paralelosById = Object.fromEntries(paralelos.map(p => [p.id, p]));
+  const periodosById = Object.fromEntries(periodos.map(p => [p.id, p]));
+  return matriculas
+    .map(m => {
+      const est = estById[m.estudiante_id];
+      const par = paralelosById[m.paralelo_id];
+      return {
+        matriculaId: m.id, estudianteId: m.estudiante_id,
+        nombre: est ? `${est.apellidos || ''} ${est.nombres || ''}`.trim() : '—',
+        cedula: est?.cedula || '',
+        grado: gradosById[m.grado_id]?.nombre || '',
+        paralelo: par?.nombre || '',
+        especialidad: par?.especialidad || '',
+        promocion: periodosById[m.periodo_id]?.nombre || '',
+        fechaEgreso: m.fecha_salida,
+        observacion: m.motivo_cambio || ''
+      };
+    })
+    .sort((a, b) => (b.fechaEgreso || '').localeCompare(a.fechaEgreso || ''));
+}
+
 export async function fetchCargasDocente(profileId, institucionId) {
   const docentesRows = await sel('docentes', 'id', q => q.eq('profile_id', profileId).eq('institucion_id', institucionId));
   if (!docentesRows.length) return [];
