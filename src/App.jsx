@@ -24,6 +24,8 @@ import Configuracion from './pages/Configuracion.jsx';
 import Calendario from './pages/Calendario.jsx';
 import Justificaciones from './pages/Justificaciones.jsx';
 import Inasistencias from './pages/Inasistencias.jsx';
+import PromocionMatriculas from './pages/PromocionMatriculas.jsx';
+import ReportesMatriculas from './pages/ReportesMatriculas.jsx';
 import Placeholder from './pages/Placeholder.jsx';
 function AccesoDenegado() {
   return (
@@ -65,6 +67,8 @@ function Gate() {
         <Route path="/docentes" element={<Protegida path="/docentes"><Docentes /></Protegida>} />
         <Route path="/academico" element={<Protegida path="/academico"><Academico /></Protegida>} />
         <Route path="/estudiantes" element={<Protegida path="/estudiantes"><Estudiantes /></Protegida>} />
+        <Route path="/matriculas" element={<Protegida path="/matriculas"><PromocionMatriculas /></Protegida>} />
+        <Route path="/reportes-matriculas" element={<Protegida path="/reportes-matriculas"><ReportesMatriculas /></Protegida>} />
         <Route path="/usuarios" element={<Protegida path="/usuarios"><Usuarios /></Protegida>} />
         <Route path="/financiero" element={<Protegida path="/financiero"><Placeholder title="Financiero" /></Protegida>} />
         <Route path="/configuracion" element={<Configuracion />} />

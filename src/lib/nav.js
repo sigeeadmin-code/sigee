@@ -12,6 +12,8 @@ export const NAV_BY_ROL = {
     ]},
     { cat: 'Académico', items: [
       { to: '/academico', label: 'Materias y Cursos', icon: 'ti ti-books' },
+      { to: '/matriculas', label: 'Promoción y traslados', icon: 'ti ti-arrow-up-circle' },
+      { to: '/reportes-matriculas', label: 'Reportes de matrícula', icon: 'ti ti-report' },
       { to: '/tareas', label: 'Tareas y avisos', icon: 'ti ti-clipboard-list' },
       { to: '/asistencia', label: 'Asistencia', icon: 'ti ti-calendar-check' },
       { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' },
@@ -42,6 +44,8 @@ export const NAV_BY_ROL = {
     ]},
     { cat: 'Académico', items: [
       { to: '/academico', label: 'Materias y Cursos', icon: 'ti ti-books' },
+      { to: '/matriculas', label: 'Promoción y traslados', icon: 'ti ti-arrow-up-circle' },
+      { to: '/reportes-matriculas', label: 'Reportes de matrícula', icon: 'ti ti-report' },
       { to: '/tareas', label: 'Tareas y avisos', icon: 'ti ti-clipboard-list' },
       { to: '/asistencia', label: 'Asistencia', icon: 'ti ti-calendar-check' },
       { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' },
@@ -64,6 +68,8 @@ export const NAV_BY_ROL = {
     ]},
     { cat: 'Académico', items: [
       { to: '/estudiantes', label: 'Estudiantes', icon: 'ti ti-users' },
+      { to: '/matriculas', label: 'Promoción y traslados', icon: 'ti ti-arrow-up-circle' },
+      { to: '/reportes-matriculas', label: 'Reportes de matrícula', icon: 'ti ti-report' },
       { to: '/tareas', label: 'Tareas y avisos', icon: 'ti ti-clipboard-list' },
       { to: '/asistencia', label: 'Asistencia', icon: 'ti ti-calendar-check' },
       { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' },

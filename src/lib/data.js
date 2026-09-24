@@ -81,6 +81,7 @@ export async function fetchInstitucionData(institucionId) {
       id: e.id, nombre: `${e.apellidos || ''} ${e.nombres || ''}`.trim(),
       cedula: e.cedula, curso: gr ? gr.nombre : '—', paralelo: par ? par.nombre : '',
       gradoId: mat ? mat.grado_id : null, paraleloId: mat ? mat.paralelo_id : null,
+      matriculaId: mat ? mat.id : null,
       genero: e.genero || '', estado: mat ? mat.estado : 'Sin matrícula',
       representante: rep ? `${rep.apellidos || ''} ${rep.nombres || ''}`.trim() : '',
       rep_tel: rep ? rep.telefono : '', activo: !!e.activo, acceso: !!e.profile_id
@@ -729,6 +730,61 @@ export async function crearMatricula(estudianteId, periodoId, gradoId, paraleloI
 export async function actualizarMatricula(id, cambios) {
   const { error } = await supabase.from('matriculas').update(cambios).eq('id', id);
   if (error) throw error;
+}
+
+// --- Promoción / repitencia / traslados (individual o masivo) ---------------
+
+// Catálogo de instituciones activas (incluye las de toda la Zona 7) para elegir
+// destino de un traslado. Búsqueda opcional por nombre.
+export async function fetchInstitucionesCatalogo(busqueda) {
+  let q = supabase.from('instituciones').select('id, nombre, amie, canton, provincia').eq('activo', true).order('nombre').limit(30);
+  if (busqueda) q = q.ilike('nombre', `%${busqueda}%`);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+}
+
+// Cierra la matrícula activa de un estudiante con el resultado indicado
+// (promovida | repite | trasladada | egresada | retirada) y, si corresponde
+// (promovida/repite), abre la matrícula nueva en el grado/paralelo/período
+// destino. loteId agrupa los cambios hechos en una misma corrida masiva.
+export async function cambiarEstadoMatricula(estudianteId, matriculaId, tipo, opciones = {}) {
+  const { motivo, loteId, institucionDestinoId, institucionDestinoExterna,
+    gradoDestinoId, paraleloDestinoId, periodoDestinoId } = opciones;
+  const fechaSalida = new Date().toISOString().slice(0, 10);
+  const cambios = { estado: tipo, motivo_cambio: motivo || null, lote_id: loteId || null, fecha_salida: fechaSalida };
+  if (tipo === 'trasladada') {
+    cambios.institucion_destino_id = institucionDestinoId || null;
+    cambios.institucion_destino_externa = institucionDestinoExterna || null;
+  }
+  const { error } = await supabase.from('matriculas').update(cambios).eq('id', matriculaId);
+  if (error) throw error;
+
+  if ((tipo === 'promovida' || tipo === 'repite') && gradoDestinoId && paraleloDestinoId && periodoDestinoId) {
+    const { error: err2 } = await supabase.from('matriculas').insert({
+      estudiante_id: estudianteId, periodo_id: periodoDestinoId,
+      grado_id: gradoDestinoId, paralelo_id: paraleloDestinoId,
+      estado: 'activa', lote_id: loteId || null
+    });
+    if (err2) throw err2;
+  }
+}
+
+// Historial/reporte de cambios de matrícula (promociones, repitencias y
+// traslados). Se lee directo de la tabla auditoria, que ya registra por
+// trigger cada INSERT/UPDATE de matriculas — no hace falta tabla nueva.
+export async function fetchReporteCambiosMatricula(institucionId, filtros = {}) {
+  let q = supabase.from('auditoria').select('*')
+    .eq('entidad', 'matriculas').eq('institucion_id', institucionId)
+    .in('accion', ['INSERT', 'UPDATE'])
+    .order('created_at', { ascending: false }).limit(500);
+  if (filtros.desde) q = q.gte('created_at', filtros.desde);
+  if (filtros.hasta) q = q.lte('created_at', filtros.hasta + 'T23:59:59');
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data || [])
+    .map(r => ({ ...r, estadoNuevo: r.cambios?.new?.estado, estudianteId: r.cambios?.new?.estudiante_id || r.cambios?.old?.estudiante_id }))
+    .filter(r => r.estadoNuevo && r.estadoNuevo !== 'activa' && (!filtros.tipo || r.estadoNuevo === filtros.tipo));
 }
 export async function fetchCargasDocente(profileId, institucionId) {
   const docentesRows = await sel('docentes', 'id', q => q.eq('profile_id', profileId).eq('institucion_id', institucionId));

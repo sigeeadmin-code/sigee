@@ -27,6 +27,18 @@ export function descargarPlantillaExcel(nombreArchivo, columnas, filaEjemplo) {
   XLSX.writeFile(wb, nombreArchivo);
 }
 
+// Exporta filas de datos (array de objetos) a un .xlsx, usando las claves del
+// primer objeto como encabezados. Para reportes (ej. cambios de matrícula).
+export function exportarFilasExcel(nombreArchivo, filas, columnas) {
+  const cols = columnas || (filas[0] ? Object.keys(filas[0]) : []);
+  const aoa = [cols, ...filas.map(f => cols.map(c => f[c] ?? ''))];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = cols.map(c => ({ wch: Math.max(14, String(c).length + 2) }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Reporte');
+  XLSX.writeFile(wb, nombreArchivo);
+}
+
 // Lee un archivo .xlsx/.xls/.csv subido por el usuario y devuelve un array de objetos
 // (una fila = un objeto, usando la primera fila como encabezados)
 export async function leerExcel(file) {
