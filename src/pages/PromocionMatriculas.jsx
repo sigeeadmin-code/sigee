@@ -178,8 +178,13 @@ export default function PromocionMatriculas() {
                   <label className="fl">Período lectivo destino</label>
                   <select className="fc" value={periodoDestinoId} onChange={e => setPeriodoDestinoId(e.target.value)}>
                     <option value="">Seleccione…</option>
-                    {periodos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                    {periodos.filter(p => p.id !== data?.periodoActivo?.id).map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                   </select>
+                  {periodos.filter(p => p.id !== data?.periodoActivo?.id).length === 0 && (
+                    <p style={{ fontSize: 12, color: 'var(--red)', marginTop: 4 }}>
+                      No hay otro período lectivo creado aún. Crea el siguiente año lectivo en Configuración antes de promover o marcar repitencia.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="fl">Paralelo destino ({gradoDestino?.nombre})</label>
