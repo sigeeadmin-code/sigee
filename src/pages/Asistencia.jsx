@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchGradosConParalelos, fetchMateriasParalelo, fetchEstudiantesParaleloDetalle,
@@ -389,12 +388,6 @@ function ConsultasEstadisticas() {
   const totales = filaEstudiantes.reduce((acc, a) => ({
     presente: acc.presente + a.presente, atraso: acc.atraso + a.atraso, ausente: acc.ausente + a.ausente, justificado: acc.justificado + a.justificado
   }), { presente: 0, atraso: 0, ausente: 0, justificado: 0 });
-  const datosGrafico = [
-    { name: 'Presente', value: totales.presente, color: '#22c55e' },
-    { name: 'Atraso', value: totales.atraso, color: '#f59e0b' },
-    { name: 'Ausente', value: totales.ausente, color: '#ef4444' },
-    { name: 'Justificado', value: totales.justificado, color: '#94a3b8' }
-  ].filter(d => d.value > 0);
 
   const estudianteSel = filaEstudiantes.find(a => a.id === estudianteId);
 
@@ -428,18 +421,24 @@ function ConsultasEstadisticas() {
 
       {loading ? <p style={{ fontSize: 13, color: 'var(--slate)' }}>Cargando…</p> : modo === 'curso' ? (
         <>
-          {datosGrafico.length > 0 && (
+          {(totales.presente + totales.atraso + totales.ausente + totales.justificado) > 0 && (
             <div className="card" style={{ marginBottom: 14 }}>
               <div className="ch"><h3>Distribución general</h3></div>
-              <div className="cb" style={{ height: 220 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={datosGrafico} dataKey="value" nameKey="name" outerRadius={80} label>
-                      {datosGrafico.map((d, i) => <Cell key={i} fill={d.color} />)}
-                    </Pie>
-                    <Tooltip /><Legend />
-                  </PieChart>
-                </ResponsiveContainer>
+              <div className="cb" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
+                {[
+                  { label: 'PRESENTE', valor: totales.presente, color: '#22c55e' },
+                  { label: 'ATRASO', valor: totales.atraso, color: '#f59e0b' },
+                  { label: 'AUSENTE', valor: totales.ausente, color: '#ef4444' },
+                  { label: 'JUSTIFICADO', valor: totales.justificado, color: '#3b82f6' }
+                ].map(s => (
+                  <div key={s.label} style={{
+                    borderLeft: `4px solid ${s.color}`, borderRadius: 8, background: 'var(--card, #fff)',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.06)', padding: '14px 16px'
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.4, color: 'var(--slate)' }}>{s.label}</div>
+                    <div style={{ fontSize: 26, fontWeight: 800, marginTop: 4 }}>{s.valor}</div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
