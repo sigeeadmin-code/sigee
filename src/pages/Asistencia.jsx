@@ -1,9 +1,11 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchGradosConParalelos, fetchMateriasParalelo, fetchEstudiantesParaleloDetalle,
   fetchAsistencia, guardarAsistencia, fetchCargasDocente, fetchAsistenciaReciente,
-  fetchEstadisticasCurso, fetchHistorialEstudiante
+  fetchEstadisticasCurso, fetchHistorialEstudiante, fetchHorarioParalelo,
+  fetchAsistenciaInstitucion
 } from '../lib/data.js';
 import { mensajeAsistencia } from '../lib/calendario.js';
 
@@ -23,9 +25,138 @@ function linkWhatsapp(telefono, nombreAlumno) {
   return `https://wa.me/593${tel}?text=${msg}`;
 }
 
+const ROLES_VISTA_AMPLIA = ['super_admin', 'admin_plantel', 'secretario', 'inspector_general', 'supervisor_plantel'];
+const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+// Una fila de "Todos los cursos": resuelve sola, vía horario_bloques, qué
+// materia/docente corresponde a este paralelo HOY (según el día de la
+// semana) — la asistencia sigue perteneciendo a una materia concreta,
+// nunca a un registro genérico sin dueño. Si el paralelo tiene más de una
+// clase ese día, se puede elegir cuál (fallback manual, nunca se adivina).
+function GrupoAsistenciaParalelo({ grado, paralelo, periodoActivo, fecha, profile, gate, onConteo }) {
+  const [cargas, setCargas] = useState([]);
+  const [docenteMateriaId, setDocenteMateriaId] = useState('');
+  const [alumnos, setAlumnos] = useState([]);
+  const [registros, setRegistros] = useState({});
+  const [obs, setObs] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    let activo = true;
+    (async () => {
+      setLoading(true);
+      const [cs, bs] = await Promise.all([
+        fetchMateriasParalelo(paralelo.id, periodoActivo.id),
+        fetchHorarioParalelo(paralelo.id)
+      ]);
+      if (!activo) return;
+      setCargas(cs);
+      const diaTexto = DIAS_SEMANA[new Date(fecha + 'T12:00:00').getDay()];
+      const bloquesHoy = bs.filter(b => b.dia === diaTexto).sort((a, b) => a.franja.localeCompare(b.franja));
+      setDocenteMateriaId(bloquesHoy[0]?.docente_materia_id || cs[0]?.id || '');
+      setLoading(false);
+    })();
+    return () => { activo = false; };
+  }, [paralelo.id, periodoActivo.id, fecha]);
+
+  useEffect(() => {
+    let activo = true;
+    if (!docenteMateriaId) { setAlumnos([]); onConteo(paralelo.id, null); return; }
+    (async () => {
+      const [als, asis] = await Promise.all([
+        fetchEstudiantesParaleloDetalle(paralelo.id, periodoActivo.id),
+        fetchAsistencia(docenteMateriaId, fecha)
+      ]);
+      if (!activo) return;
+      setAlumnos(als);
+      const map = {}; const om = {};
+      asis.forEach(a => { map[a.estudiante_id] = a.estado; om[a.estudiante_id] = a.observacion || ''; });
+      setRegistros(map); setObs(om);
+    })();
+    return () => { activo = false; };
+  }, [docenteMateriaId, fecha, paralelo.id, periodoActivo.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const c = { presente: 0, atraso: 0, ausente: 0, justificado: 0, sin: 0 };
+    alumnos.forEach(a => { const st = registros[a.id]; if (st) c[st] = (c[st] || 0) + 1; else c.sin++; });
+    onConteo(paralelo.id, c);
+  }, [alumnos, registros]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => onConteo(paralelo.id, null), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function marcar(estId, estado) { setRegistros(r => ({ ...r, [estId]: estado })); }
+
+  async function guardar() {
+    if (!docenteMateriaId) return;
+    setGuardando(true);
+    try {
+      const lista = alumnos.filter(a => registros[a.id]).map(a => ({ estudiante_id: a.id, estado: registros[a.id], observacion: obs[a.id] || '' }));
+      await guardarAsistencia(docenteMateriaId, fecha, lista, profile.id);
+      setMsg({ ok: true, t: 'Guardado.' });
+    } catch (err) {
+      setMsg({ ok: false, t: err.message || 'No se pudo guardar.' });
+    }
+    setGuardando(false);
+    setTimeout(() => setMsg(null), 2500);
+  }
+
+  const cargaSel = cargas.find(c => c.id === docenteMateriaId);
+  if (loading) return null;
+
+  return (
+    <div className="card" style={{ marginBottom: 14 }}>
+      <div className="ch" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <h3>{grado.nombre} {paralelo.nombre}</h3>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {cargas.length > 1 ? (
+            <select className="fc" style={{ fontSize: 12 }} value={docenteMateriaId} onChange={e => setDocenteMateriaId(e.target.value)}>
+              {cargas.map(c => <option key={c.id} value={c.id}>{c.materiaNombre}{c.docenteNombre ? ' — ' + c.docenteNombre : ''}</option>)}
+            </select>
+          ) : cargaSel ? (
+            <span style={{ fontSize: 12, color: 'var(--slate)' }}>{cargaSel.materiaNombre}{cargaSel.docenteNombre ? ' — ' + cargaSel.docenteNombre : ''}</span>
+          ) : null}
+          <button className="btn btn-primary btn-sm" disabled={!gate.ok || guardando || !docenteMateriaId} onClick={guardar}>
+            {guardando ? 'Guardando…' : 'Guardar'}
+          </button>
+        </div>
+      </div>
+      <div className="cb" style={{ padding: 0, overflowX: 'auto' }}>
+        {!docenteMateriaId ? (
+          <p style={{ fontSize: 13, color: 'var(--slate)', padding: 14 }}>Este paralelo no tiene materias/horario configurado todavía.</p>
+        ) : alumnos.length === 0 ? (
+          <p style={{ fontSize: 13, color: 'var(--slate)', padding: 14 }}>Sin alumnos matriculados.</p>
+        ) : (
+          <table className="data" style={{ width: '100%' }}>
+            <thead><tr><th>#</th><th>Estudiante</th><th>Representante</th>{ESTADOS.map(e => <th key={e.v} style={{ textAlign: 'center' }}>{e.label}</th>)}<th>Obs.</th></tr></thead>
+            <tbody>
+              {alumnos.map((a, i) => (
+                <tr key={a.id}>
+                  <td>{i + 1}</td>
+                  <td><strong>{a.apellidos} {a.nombres}</strong></td>
+                  <td style={{ fontSize: 12 }}>{a.representante || '—'}</td>
+                  {ESTADOS.map(e => (
+                    <td key={e.v} style={{ textAlign: 'center' }}>
+                      <input type="radio" name={'g_' + paralelo.id + '_' + a.id} checked={registros[a.id] === e.v} onChange={() => marcar(a.id, e.v)} />
+                    </td>
+                  ))}
+                  <td><input className="fc" style={{ minWidth: 100, padding: '4px 8px', fontSize: 12 }} value={obs[a.id] || ''} onChange={ev => setObs(o => ({ ...o, [a.id]: ev.target.value }))} placeholder="—" /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+      {msg && <div style={{ padding: '6px 14px', fontSize: 12, color: msg.ok ? 'var(--green)' : 'var(--red)' }}>{msg.t}</div>}
+    </div>
+  );
+}
+
 function RegistroDiario() {
   const { profile, institucion, data } = useSession();
+  const navigate = useNavigate();
   const esDocente = profile.rolDb === 'docente';
+  const vistaAmplia = ROLES_VISTA_AMPLIA.includes(profile.rolDb); // puede ver "Todos los cursos" a la vez (solo consulta, no marca sin materia)
   const institucionId = institucion?.id;
   const periodoActivo = data?.periodoActivo;
 
@@ -71,13 +202,15 @@ function RegistroDiario() {
         const primerParaleloId = cd[0]?.paraleloId;
         const gradoDeEsePar = gr.find(g => g.paralelos.some(p => p.id === primerParaleloId));
         if (gradoDeEsePar) { setGradoId(gradoDeEsePar.id); setParaleloId(primerParaleloId); }
+      } else if (vistaAmplia) {
+        // admin/secretaría: arranca en "Todos los cursos" (consulta), no en un curso al azar
       } else if (gr.length) {
         setGradoId(gr[0].id);
         setParaleloId(gr[0].paralelos[0]?.id || '');
       }
     }
     setLoading(false);
-  }, [institucionId, esDocente, profile.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [institucionId, esDocente, vistaAmplia, profile.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { cargarBase(); }, [cargarBase]);
 
@@ -164,6 +297,41 @@ function RegistroDiario() {
     return c;
   }, [alumnos, registros]);
 
+  // --- Modo "Todos los cursos" (vistaAmplia): solo consulta/monitoreo. La
+  // marcación real sigue siendo por materia — cada GrupoAsistenciaParalelo
+  // resuelve sola la materia del día vía horario_bloques y guarda ahí.
+  const modoTodos = vistaAmplia && gradoId === '';
+  const [conteosPorParalelo, setConteosPorParalelo] = useState({});
+  const onConteoParalelo = useCallback((pId, c) => {
+    setConteosPorParalelo(prev => {
+      if (c === null) { const { [pId]: _omit, ...resto } = prev; return resto; }
+      return { ...prev, [pId]: c };
+    });
+  }, []);
+  const conteoTodos = useMemo(() => {
+    const t = { presente: 0, atraso: 0, ausente: 0, justificado: 0, sin: 0 };
+    Object.values(conteosPorParalelo).forEach(c => { Object.keys(t).forEach(k => { t[k] += c[k] || 0; }); });
+    return t;
+  }, [conteosPorParalelo]);
+  const conteoMostrado = modoTodos ? conteoTodos : conteo;
+
+  const [recienteInst, setRecienteInst] = useState([]);
+  useEffect(() => {
+    if (!modoTodos || !institucionId) return;
+    let activo = true;
+    fetchAsistenciaInstitucion(institucionId, haceDias(7)).then(rows => {
+      if (!activo) return;
+      const porEstudiante = Object.fromEntries((data?.estudiantes || []).map(e => [e.id, e]));
+      setRecienteInst(
+        rows.filter(r => r.fecha !== fecha)
+          .map(r => ({ ...r, estudiante: porEstudiante[r.estudiante_id] }))
+          .sort((a, b) => b.fecha.localeCompare(a.fecha))
+          .slice(0, 60)
+      );
+    });
+    return () => { activo = false; };
+  }, [modoTodos, institucionId, fecha, data?.estudiantes]);
+
   if (loading) return <p style={{ fontSize: 13, color: 'var(--slate)' }}>Cargando…</p>;
   if (!periodoActivo) return <div className="card"><div className="cb"><p className="muted">No hay un período lectivo activo. Actívalo primero en Académico → Configuración.</p></div></div>;
 
@@ -174,9 +342,12 @@ function RegistroDiario() {
           <h2 style={{ margin: '0 0 4px' }}>Asistencia diaria</h2>
           <div style={{ fontSize: 13, color: 'var(--slate)' }}>{institucion?.nombre} · {periodoActivo.nombre}</div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-success btn-sm" disabled={!gate.ok} onClick={() => marcarTodos('presente')}>✓ Todos presentes</button>
-          <button className="btn btn-primary btn-sm" disabled={guardando || !gate.ok} onClick={guardar}>{guardando ? 'Guardando…' : '💾 Guardar día'}</button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {vistaAmplia && <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate('/calendario')}>📅 Calendario</button>}
+          {vistaAmplia && <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate('/justificaciones')}>📄 Justificaciones</button>}
+          {vistaAmplia && <button type="button" className="btn btn-primary btn-sm" onClick={() => navigate('/inasistencias')}>💬 Inasistencias WA</button>}
+          {!modoTodos && <button className="btn btn-success btn-sm" disabled={!gate.ok} onClick={() => marcarTodos('presente')}>✓ Todos presentes</button>}
+          {!modoTodos && <button className="btn btn-primary btn-sm" disabled={guardando || !gate.ok} onClick={guardar}>{guardando ? 'Guardando…' : '💾 Guardar día'}</button>}
         </div>
       </div>
 
@@ -192,23 +363,27 @@ function RegistroDiario() {
           <div>
             <label className="fl">Curso</label>
             <select className="fc" value={gradoId} onChange={e => { setGradoId(e.target.value); const g = gradosVisibles.find(x => x.id === e.target.value); setParaleloId(g?.paralelos[0]?.id || ''); }}>
+              {vistaAmplia && <option value="">Todos los cursos</option>}
               {gradosVisibles.length === 0 && <option value="">Sin cursos asignados</option>}
               {gradosVisibles.map(g => <option key={g.id} value={g.id}>{g.nombre}</option>)}
             </select>
+            {modoTodos && <div style={{ fontSize: 11, color: 'var(--slate)', marginTop: 4 }}>
+              {gradosVisibles.reduce((n, g) => n + g.paralelos.length, 0)} curso(s) — solo consulta; para marcar, entra a un curso específico
+            </div>}
           </div>
-          <div>
+          {!modoTodos && <div>
             <label className="fl">Paralelo</label>
             <select className="fc" value={paraleloId} onChange={e => setParaleloId(e.target.value)}>
               {(gradoSel?.paralelos || []).map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
             </select>
-          </div>
-          <div>
+          </div>}
+          {!modoTodos && <div>
             <label className="fl">Materia (carga)</label>
             <select className="fc" value={docenteMateriaId} onChange={e => setDocenteMateriaId(e.target.value)}>
               {cargas.length === 0 && <option value="">Sin materias asignadas aquí</option>}
               {cargas.map(c => <option key={c.id} value={c.id}>{c.materiaNombre}{c.docenteNombre ? ' — ' + c.docenteNombre : ''}</option>)}
             </select>
-          </div>
+          </div>}
           <div>
             <label className="fl">Fecha</label>
             <input className="fc" type="date" value={fecha} onChange={e => setFecha(e.target.value)} />
@@ -217,12 +392,50 @@ function RegistroDiario() {
       </div></div>
 
       <div className="grid-4">
-        <div className="metric m-green"><div className="m-lbl">Presentes</div><div className="m-val">{conteo.presente}</div></div>
-        <div className="metric m-amber"><div className="m-lbl">Atrasos</div><div className="m-val">{conteo.atraso}</div></div>
-        <div className="metric m-red"><div className="m-lbl">Ausentes</div><div className="m-val">{conteo.ausente}</div></div>
-        <div className="metric m-blue"><div className="m-lbl">Sin marcar / Justif.</div><div className="m-val" style={{ fontSize: 18 }}>{conteo.sin} / {conteo.justificado}</div></div>
+        <div className="metric m-green"><div className="m-lbl">Presentes</div><div className="m-val">{conteoMostrado.presente}</div></div>
+        <div className="metric m-amber"><div className="m-lbl">Atrasos</div><div className="m-val">{conteoMostrado.atraso}</div></div>
+        <div className="metric m-red"><div className="m-lbl">Ausentes</div><div className="m-val">{conteoMostrado.ausente}</div></div>
+        <div className="metric m-blue"><div className="m-lbl">Sin marcar / Justif.</div><div className="m-val" style={{ fontSize: 18 }}>{conteoMostrado.sin} / {conteoMostrado.justificado}</div></div>
       </div>
 
+
+      {modoTodos ? (
+        <>
+          {gradosVisibles.every(g => g.paralelos.length === 0) ? (
+            <div className="empty"><span className="ti ti-users" /><p>No hay cursos/paralelos configurados.</p></div>
+          ) : (
+            gradosVisibles.map(g => g.paralelos.map(p => (
+              <GrupoAsistenciaParalelo key={p.id} grado={g} paralelo={p} periodoActivo={periodoActivo}
+                fecha={fecha} profile={profile} gate={gate} onConteo={onConteoParalelo} />
+            )))
+          )}
+
+          <div className="card" style={{ marginTop: 14 }}>
+            <div className="ch"><h3>Resumen reciente (últimos 7 días, todos los cursos)</h3></div>
+            <div className="cb" style={{ padding: 0 }}>
+              {recienteInst.length === 0 ? (
+                <p style={{ fontSize: 13, color: 'var(--slate)', padding: 14 }}>Sin registros anteriores.</p>
+              ) : (
+                <table className="data" style={{ width: '100%' }}>
+                  <thead><tr><th>Fecha</th><th>Estudiante</th><th>Curso</th><th>Estado</th><th>Observación</th></tr></thead>
+                  <tbody>
+                    {recienteInst.map((r, i) => (
+                      <tr key={i}>
+                        <td className="mono">{r.fecha}</td>
+                        <td>{r.estudiante ? `${r.estudiante.nombre}` : '—'}</td>
+                        <td>{r.estudiante ? `${r.estudiante.curso} ${r.estudiante.paralelo}` : '—'}</td>
+                        <td><span className={'badge ' + (r.estado === 'presente' ? 'b-ok' : r.estado === 'ausente' ? 'b-err' : r.estado === 'atraso' ? 'b-warn' : 'b-muted')}>{ESTADOS.find(e => e.v === r.estado)?.label || r.estado}</span></td>
+                        <td style={{ fontSize: 12 }}>{r.observacion || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </>
+      ) : (
+      <>
       {!docenteMateriaId ? (
         <div className="empty"><span className="ti ti-calendar-check" /><p>Selecciona una materia/carga para tomar asistencia.</p></div>
       ) : alumnos.length === 0 ? (
@@ -291,13 +504,13 @@ function RegistroDiario() {
           </div>
         </div>
       )}
+      </>
+      )}
 
       {toast && <div className={'toast ' + (toast.tipo === 'ok' ? 'ok' : 'err')}>{toast.msg}</div>}
     </div>
   );
 }
-
-const ROLES_VISTA_AMPLIA = ['super_admin', 'admin_plantel', 'secretario', 'inspector_general', 'supervisor_plantel'];
 
 function ConsultasEstadisticas() {
   const { profile, institucion, data } = useSession();
