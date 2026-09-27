@@ -92,7 +92,7 @@ function GrupoAsistenciaParalelo({ grado, paralelo, periodoActivo, fecha, profil
     setGuardando(true);
     try {
       const lista = alumnos.filter(a => registros[a.id]).map(a => ({ estudiante_id: a.id, estado: registros[a.id], observacion: obs[a.id] || '' }));
-      await guardarAsistencia(docenteMateriaId, fecha, lista, profile.id);
+      await guardarAsistencia(docenteMateriaId, fecha, lista, profile.id, paralelo.id);
       setMsg({ ok: true, t: 'Guardado.' });
     } catch (err) {
       setMsg({ ok: false, t: err.message || 'No se pudo guardar.' });
@@ -272,7 +272,7 @@ function RegistroDiario() {
     setGuardando(true);
     try {
       const lista = alumnos.filter(a => registros[a.id]).map(a => ({ estudiante_id: a.id, estado: registros[a.id], observacion: obs[a.id] || '' }));
-      await guardarAsistencia(docenteMateriaId, fecha, lista, profile.id);
+      await guardarAsistencia(docenteMateriaId, fecha, lista, profile.id, paraleloId);
 
       // Nota: el aviso a representantes se registra manualmente desde
       // Inasistencias (ahí se envía el WhatsApp y luego se confirma el envío),

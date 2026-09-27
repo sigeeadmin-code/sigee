@@ -7,10 +7,25 @@ export const asistenciaRouter = Router();
 
 const ESTADOS_VALIDOS = ['presente', 'ausente', 'atraso', 'justificado'];
 
+// Este backend usa la service_role key (se salta el RLS de la base por
+// completo), así que el filtro por institución que normalmente hace el RLS
+// hay que aplicarlo a mano acá — nunca confiar en que el cliente no manda
+// un docente_materia_id de otra institución.
+async function cargaDeMiInstitucion(docenteMateriaId) {
+  const { data, error } = await supabase
+    .from('docente_materia')
+    .select('id, docente_id, docentes!inner(profile_id), paralelo:paralelos!inner(grado:grados!inner(institucion_id))')
+    .eq('id', docenteMateriaId).single();
+  if (error || !data) return null;
+  return { docenteProfileId: data.docentes.profile_id, institucionId: data.paralelo.grado.institucion_id };
+}
+
 // POST /asistencia
-// body: { docente_materia_id, fecha, paralelo_id, registros: [{estudiante_id, estado}] }
+// body: { docente_materia_id, fecha, paralelo_id, registros: [{estudiante_id, estado, observacion}] }
 // El backend vuelve a evaluar el calendario académico — nunca confía en que
 // el frontend ya lo validó. Si el día no es lectivo, rechaza todo el lote.
+// Guarda TODO el curso en una sola escritura (upsert por lote), en vez de
+// una petición por alumno.
 asistenciaRouter.post('/', requireAuth, async (req, res) => {
   const { docente_materia_id, fecha, paralelo_id, registros } = req.body || {};
   if (!docente_materia_id || !fecha || !Array.isArray(registros) || registros.length === 0) {
@@ -22,6 +37,16 @@ asistenciaRouter.post('/', requireAuth, async (req, res) => {
     }
   }
 
+  const carga = await cargaDeMiInstitucion(docente_materia_id);
+  if (!carga) return res.status(404).json({ error: 'Carga docente no encontrada.' });
+  if (req.profile.rol !== 'super_admin' && carga.institucionId !== req.profile.institucion_id) {
+    return res.status(403).json({ error: 'Esa carga académica no pertenece a tu institución.' });
+  }
+  // Si es docente, además confirma que esa carga es suya (no la de otro colega).
+  if (req.profile.rol === 'docente' && carga.docenteProfileId !== req.profile.id) {
+    return res.status(403).json({ error: 'Esa carga académica no te pertenece.' });
+  }
+
   try {
     const gate = await evaluarDiaInstitucion(req.profile.institucion_id, fecha, paralelo_id || null);
     if (!gate.ok) return res.status(422).json({ error: 'Día no lectivo: ' + gate.msg });
@@ -29,21 +54,9 @@ asistenciaRouter.post('/', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'No se pudo validar el calendario: ' + err.message });
   }
 
-  // Si es docente, confirma que esa carga (docente_materia) realmente es suya
-  // antes de dejarlo escribir asistencia a nombre de otro.
-  if (req.profile.rol === 'docente') {
-    const { data: carga, error: eCarga } = await supabase
-      .from('docente_materia').select('docente_id, docentes!inner(profile_id)')
-      .eq('id', docente_materia_id).single();
-    if (eCarga || !carga) return res.status(404).json({ error: 'Carga docente no encontrada.' });
-    if (carga.docentes.profile_id !== req.profile.id) {
-      return res.status(403).json({ error: 'Esa carga académica no te pertenece.' });
-    }
-  }
-
   const filas = registros.map(r => ({
     docente_materia_id, fecha, estudiante_id: r.estudiante_id, estado: r.estado,
-    registrado_por: req.profile.id
+    observacion: r.observacion || null, registrado_por: req.profile.id
   }));
 
   const { data, error } = await supabase
@@ -59,6 +72,13 @@ asistenciaRouter.post('/', requireAuth, async (req, res) => {
 asistenciaRouter.get('/', requireAuth, async (req, res) => {
   const { docente_materia_id, fecha } = req.query;
   if (!docente_materia_id || !fecha) return res.status(400).json({ error: 'Faltan docente_materia_id o fecha.' });
+
+  const carga = await cargaDeMiInstitucion(docente_materia_id);
+  if (!carga) return res.status(404).json({ error: 'Carga docente no encontrada.' });
+  if (req.profile.rol !== 'super_admin' && carga.institucionId !== req.profile.institucion_id) {
+    return res.status(403).json({ error: 'Esa carga académica no pertenece a tu institución.' });
+  }
+
   const { data, error } = await supabase
     .from('asistencia').select('*')
     .eq('docente_materia_id', docente_materia_id).eq('fecha', fecha);

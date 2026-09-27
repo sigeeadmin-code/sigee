@@ -1,5 +1,8 @@
 import { supabase, ROLE_GROUP, ROLE_LABELS } from './supabase.js';
 
+const API_URL = import.meta.env.VITE_API_URL || 'https://sigee-backend-production.up.railway.app';
+
+
 async function sel(table, cols, build) {
   let q = supabase.from(table).select(cols);
   if (build) q = build(q);
@@ -126,35 +129,23 @@ export async function fetchAsistencia(docenteMateriaId, fecha) {
   return sel('asistencia', '*', q => q.eq('docente_materia_id', docenteMateriaId).eq('fecha', fecha));
 }
 
-export async function guardarAsistencia(docenteMateriaId, fecha, registros, registradoPor) {
-  const existentes = await fetchAsistencia(docenteMateriaId, fecha);
-  const existentesPorEstudiante = Object.fromEntries(existentes.map(r => [r.estudiante_id, r]));
-  const aInsertar = [];
-  const aActualizar = [];
-  registros.forEach(r => {
-    const prev = existentesPorEstudiante[r.estudiante_id];
-    if (prev) {
-      const cambios = {};
-      if (prev.estado !== r.estado) cambios.estado = r.estado;
-      if ((prev.observacion || '') !== (r.observacion || '')) cambios.observacion = r.observacion || null;
-      if (Object.keys(cambios).length) aActualizar.push({ id: prev.id, ...cambios });
-    } else {
-      aInsertar.push({
-        estudiante_id: r.estudiante_id, docente_materia_id: docenteMateriaId,
-        fecha, estado: r.estado, observacion: r.observacion || null, registrado_por: registradoPor
-      });
-    }
+// Guarda asistencia de un curso completo en UNA sola petición al backend de
+// Railway (antes: hasta N peticiones sueltas directo a Supabase, una por
+// alumno). El backend revalida el calendario académico y la pertenencia de
+// la carga — nunca confía en lo que ya validó el navegador.
+export async function guardarAsistencia(docenteMateriaId, fecha, registros, registradoPor, paraleloId) {
+  const { data: sesion } = await supabase.auth.getSession();
+  const token = sesion?.session?.access_token;
+  if (!token) throw new Error('Sesión expirada. Vuelve a iniciar sesión.');
+
+  const resp = await fetch(`${API_URL}/asistencia`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ docente_materia_id: docenteMateriaId, fecha, paralelo_id: paraleloId || null, registros })
   });
-  if (aInsertar.length) {
-    const { error } = await supabase.from('asistencia').insert(aInsertar);
-    if (error) throw error;
-  }
-  for (const upd of aActualizar) {
-    const { id, ...cambios } = upd;
-    const { error } = await supabase.from('asistencia').update(cambios).eq('id', id);
-    if (error) throw error;
-  }
-  return true;
+  const body = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(body.error || `Error del servidor (${resp.status}) al guardar asistencia.`);
+  return body;
 }
 
 export async function fetchAsistenciaReciente(docenteMateriaId, dias = 7) {
