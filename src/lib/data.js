@@ -138,14 +138,33 @@ export async function guardarAsistencia(docenteMateriaId, fecha, registros, regi
   const token = sesion?.session?.access_token;
   if (!token) throw new Error('Sesión expirada. Vuelve a iniciar sesión.');
 
-  const resp = await fetch(`${API_URL}/asistencia`, {
+  const opciones = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ docente_materia_id: docenteMateriaId, fecha, paralelo_id: paraleloId || null, registros })
-  });
-  const body = await resp.json().catch(() => ({}));
-  if (!resp.ok) throw new Error(body.error || `Error del servidor (${resp.status}) al guardar asistencia.`);
-  return body;
+  };
+
+  // El backend (plan gratuito de Railway) se duerme si no hay uso; la primera
+  // petición tras dormir puede fallar o tardar mientras despierta. El guardado
+  // es un upsert (idempotente: repetirlo no duplica nada), así que es seguro
+  // reintentar automáticamente ante caídas de red o 502/503/504.
+  const ESPERAS_MS = [0, 2500, 5000];
+  let ultimoError = null;
+  for (const espera of ESPERAS_MS) {
+    if (espera) await new Promise(r => setTimeout(r, espera));
+    try {
+      const resp = await fetch(`${API_URL}/asistencia`, opciones);
+      if ([502, 503, 504].includes(resp.status)) { ultimoError = new Error('El servidor está iniciando.'); continue; }
+      const body = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw Object.assign(new Error(body.error || `Error del servidor (${resp.status}) al guardar asistencia.`), { definitivo: true });
+      return body;
+    } catch (err) {
+      if (err.definitivo) throw err; // 400/401/403/422/429: reintentar no lo arregla
+      ultimoError = err;
+    }
+  }
+  throw new Error('No se pudo conectar con el servidor de asistencia. Revisa tu internet e inténtalo de nuevo en unos segundos.' +
+    (ultimoError?.message ? ` (${ultimoError.message})` : ''));
 }
 
 export async function fetchAsistenciaReciente(docenteMateriaId, dias = 7) {

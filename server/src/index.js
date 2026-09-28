@@ -21,12 +21,14 @@ app.use(cors({
 app.use(express.json());
 
 // Colchón contra picos (ej. muchos cursos guardando asistencia a la misma
-// hora de entrada): por IP, no por institución — un plantel con muchos
-// docentes detrás del mismo NAT podría necesitar subir este número más
-// adelante si se ve que choca en la práctica.
+// hora de entrada): por IP, no por institución. Un colegio entero sale a
+// internet por la MISMA IP (NAT), así que el tope se comparte entre todos sus
+// docentes: cada guardado es 1 sola petición (upsert por lote), por lo que
+// 200/min (~3 por segundo) cubre con holgura la hora pico de un colegio
+// grande y aún frena abusos o bucles descontrolados.
 app.use(['/asistencia', '/calendario'], rateLimit({
   windowMs: 60 * 1000,
-  limit: 60,
+  limit: 200,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Demasiadas peticiones seguidas. Espera un momento y reintenta.' }
