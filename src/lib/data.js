@@ -1208,10 +1208,13 @@ export async function setPermisoRol(rol, modulo_codigo, accion, permitido) {
  * hermanos_automaticos) y vínculos manuales (tabla hermanos_manual)
  * para casos que la detección automática no cubre. */
 export async function fetchHermanosAutomaticos(institucionId) {
-  return sel('hermanos_automaticos', '*', q => q.eq('institucion_id', institucionId));
+  return sel('hermanos_automaticos', '*', q => institucionId ? q.eq('institucion_id', institucionId) : q);
 }
 export async function fetchHermanosManual(institucionId) {
-  return sel('hermanos_manual', '*', q => q.eq('institucion_id', institucionId).order('created_at', { ascending: false }));
+  return sel('hermanos_manual', '*', q => {
+    const qq = institucionId ? q.eq('institucion_id', institucionId) : q;
+    return qq.order('created_at', { ascending: false });
+  });
 }
 export async function crearHermanoManual(institucionId, estudianteA, estudianteB, motivo, creadoPor) {
   const { error } = await supabase.from('hermanos_manual').insert({
