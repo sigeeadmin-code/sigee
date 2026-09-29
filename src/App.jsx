@@ -24,6 +24,7 @@ import Configuracion from './pages/Configuracion.jsx';
 import Calendario from './pages/Calendario.jsx';
 import Justificaciones from './pages/Justificaciones.jsx';
 import Encadenamiento from './pages/Encadenamiento.jsx';
+import Licencias from './pages/Licencias.jsx';
 import Inasistencias from './pages/Inasistencias.jsx';
 import PromocionMatriculas from './pages/PromocionMatriculas.jsx';
 import ReportesMatriculas from './pages/ReportesMatriculas.jsx';
@@ -70,6 +71,7 @@ function Gate() {
         <Route path="/academico" element={<Protegida path="/academico"><Academico /></Protegida>} />
         <Route path="/estudiantes" element={<Protegida path="/estudiantes"><Estudiantes /></Protegida>} />
         <Route path="/encadenamiento" element={<Protegida path="/encadenamiento"><Encadenamiento /></Protegida>} />
+        <Route path="/licencias" element={<Protegida path="/licencias"><Licencias /></Protegida>} />
         <Route path="/matriculas" element={<Protegida path="/matriculas"><PromocionMatriculas /></Protegida>} />
         <Route path="/reportes-matriculas" element={<Protegida path="/reportes-matriculas"><ReportesMatriculas /></Protegida>} />
         <Route path="/egresados" element={<Protegida path="/egresados"><Egresados /></Protegida>} />

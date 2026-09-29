@@ -25,7 +25,8 @@ export const NAV_BY_ROL = {
       { to: '/horario', label: 'Horario', icon: 'ti ti-clock' }
     ]},
     { cat: 'Finanzas', items: [
-      { to: '/financiero', label: 'Financiero', icon: 'ti ti-cash', wip: true }
+      { to: '/financiero', label: 'Financiero', icon: 'ti ti-cash', wip: true },
+      { to: '/licencias', label: 'Licencias y activación', icon: 'ti ti-credit-card' }
     ]},
     { cat: 'Sistema', items: [
       { to: '/roles-permisos', label: 'Roles y Permisos', icon: 'ti ti-shield-lock' },
@@ -59,7 +60,8 @@ export const NAV_BY_ROL = {
       { to: '/horario', label: 'Horario', icon: 'ti ti-clock' }
     ]},
     { cat: 'Finanzas', items: [
-      { to: '/financiero', label: 'Financiero', icon: 'ti ti-cash', wip: true }
+      { to: '/financiero', label: 'Financiero', icon: 'ti ti-cash', wip: true },
+      { to: '/licencias', label: 'Licencias y activación', icon: 'ti ti-credit-card' }
     ]},
     { cat: 'Sistema', items: [
       { to: '/configuracion', label: 'Configuración', icon: 'ti ti-settings' }
@@ -82,6 +84,9 @@ export const NAV_BY_ROL = {
       { to: '/calendario', label: 'Calendario académico', icon: 'ti ti-calendar' },
       { to: '/aulas', label: 'Aulas', icon: 'ti ti-door' },
       { to: '/horario', label: 'Horario', icon: 'ti ti-clock' }
+    ]},
+    { cat: 'Finanzas', items: [
+      { to: '/licencias', label: 'Licencias y activación', icon: 'ti ti-credit-card' }
     ]},
     { cat: 'Sistema', items: [
       { to: '/configuracion', label: 'Configuración', icon: 'ti ti-settings' }

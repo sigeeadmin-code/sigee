@@ -1228,6 +1228,47 @@ export async function eliminarHermanoManual(id) {
   if (error) throw error;
 }
 
+/* ── Licencias por paralelo (activación y pago) ──────────────────
+ * Un paralelo facturable = institución + grado + paralelo. Se activa
+ * mes a mes solo cuando un pago con comprobante queda aprobado. */
+export async function fetchLicenciasParalelo(institucionId) {
+  return sel('licencias_paralelo_resumen', '*', q => institucionId ? q.eq('institucion_id', institucionId) : q);
+}
+export async function crearLicenciaParalelo(institucionId, gradoId, paraleloId, tarifaMensual, creadoPor) {
+  const { data, error } = await supabase.from('licencias_paralelo')
+    .insert({ institucion_id: institucionId, grado_id: gradoId, paralelo_id: paraleloId, tarifa_mensual: tarifaMensual, creado_por: creadoPor })
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+export async function actualizarTarifaLicencia(id, tarifaMensual) {
+  const { error } = await supabase.from('licencias_paralelo').update({ tarifa_mensual: tarifaMensual }).eq('id', id);
+  if (error) throw error;
+}
+export async function fetchPagosLicencia(licenciaId) {
+  return sel('licencias_paralelo_pagos', '*', q => q.eq('licencia_paralelo_id', licenciaId).order('anio').order('mes'));
+}
+export async function fetchPagosPendientesGlobal() {
+  return sel('licencias_paralelo_pagos', '*, licencias_paralelo!inner(institucion_id, grado_id, paralelo_id, tarifa_mensual, institucion:instituciones(nombre), grado:grados(nombre), paralelo:paralelos(nombre))',
+    q => q.eq('estado', 'pendiente_revision').order('fecha_reporte'));
+}
+export async function reportarPagoMeses(licenciaId, meses, anio, montoPorMes, comprobanteNum, reportadoPor) {
+  const filas = meses.map(mes => ({
+    licencia_paralelo_id: licenciaId, anio, mes, monto: montoPorMes,
+    comprobante_num: comprobanteNum, reportado_por: reportadoPor
+  }));
+  const { error } = await supabase.from('licencias_paralelo_pagos').insert(filas);
+  if (error) throw error;
+}
+export async function revisarPagoLicencia(pagoId, aprobado, revisadoPor, notas) {
+  const { error } = await supabase.from('licencias_paralelo_pagos').update({
+    estado: aprobado ? 'aprobado' : 'rechazado',
+    revisado_por: revisadoPor, fecha_revision: new Date().toISOString(),
+    notas_revision: notas || null
+  }).eq('id', pagoId);
+  if (error) throw error;
+}
+
 export async function copiarPermisosRol(rolOrigen, rolDestino) {
   const origen = await sel('permisos_rol', 'modulo_codigo, accion', q => q.eq('rol', rolOrigen));
   const { error: delErr } = await supabase.from('permisos_rol').delete().eq('rol', rolDestino);
