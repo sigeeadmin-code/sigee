@@ -8,6 +8,7 @@ export const NAV_BY_ROL = {
       { to: '/instituciones', label: 'Instituciones', icon: 'ti ti-building' },
       { to: '/docentes', label: 'Docentes', icon: 'ti ti-chalkboard' },
       { to: '/estudiantes', label: 'Estudiantes', icon: 'ti ti-users' },
+      { to: '/encadenamiento', label: 'Encadenamiento', icon: 'ti ti-link' },
       { to: '/usuarios', label: 'Usuarios', icon: 'ti ti-user-cog' }
     ]},
     { cat: 'Académico', items: [
@@ -41,6 +42,7 @@ export const NAV_BY_ROL = {
     { cat: 'Personas', items: [
       { to: '/docentes', label: 'Docentes', icon: 'ti ti-chalkboard' },
       { to: '/estudiantes', label: 'Estudiantes', icon: 'ti ti-users' },
+      { to: '/encadenamiento', label: 'Encadenamiento', icon: 'ti ti-link' },
       { to: '/usuarios', label: 'Usuarios', icon: 'ti ti-user-cog' }
     ]},
     { cat: 'Académico', items: [
@@ -70,6 +72,7 @@ export const NAV_BY_ROL = {
     ]},
     { cat: 'Académico', items: [
       { to: '/estudiantes', label: 'Estudiantes', icon: 'ti ti-users' },
+      { to: '/encadenamiento', label: 'Encadenamiento', icon: 'ti ti-link' },
       { to: '/matriculas', label: 'Promoción y traslados', icon: 'ti ti-arrow-up-circle' },
       { to: '/reportes-matriculas', label: 'Reportes de matrícula', icon: 'ti ti-report' },
       { to: '/egresados', label: 'Egresados', icon: 'ti ti-school' },
@@ -94,6 +97,7 @@ export const NAV_BY_ROL = {
     ]},
     { cat: 'Convivencia y asistencia', items: [
       { to: '/estudiantes', label: 'Estudiantes', icon: 'ti ti-users' },
+      { to: '/encadenamiento', label: 'Encadenamiento', icon: 'ti ti-link' },
       { to: '/reportes-asistencia', label: 'Reportes de asistencia', icon: 'ti ti-chart-bar' },
       { to: '/asistencia', label: 'Consultas de asistencia', icon: 'ti ti-calendar-check' },
       { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' },

@@ -1203,6 +1203,28 @@ export async function setPermisoRol(rol, modulo_codigo, accion, permitido) {
     if (error) throw error;
   }
 }
+/* ── Encadenamiento de hermanos ──────────────────────────────────
+ * Dos fuentes: detección automática (representante compartido, vista
+ * hermanos_automaticos) y vínculos manuales (tabla hermanos_manual)
+ * para casos que la detección automática no cubre. */
+export async function fetchHermanosAutomaticos(institucionId) {
+  return sel('hermanos_automaticos', '*', q => q.eq('institucion_id', institucionId));
+}
+export async function fetchHermanosManual(institucionId) {
+  return sel('hermanos_manual', '*', q => q.eq('institucion_id', institucionId).order('created_at', { ascending: false }));
+}
+export async function crearHermanoManual(institucionId, estudianteA, estudianteB, motivo, creadoPor) {
+  const { error } = await supabase.from('hermanos_manual').insert({
+    institucion_id: institucionId, estudiante_a: estudianteA, estudiante_b: estudianteB,
+    motivo: motivo || null, creado_por: creadoPor
+  });
+  if (error) throw error;
+}
+export async function eliminarHermanoManual(id) {
+  const { error } = await supabase.from('hermanos_manual').delete().eq('id', id);
+  if (error) throw error;
+}
+
 export async function copiarPermisosRol(rolOrigen, rolDestino) {
   const origen = await sel('permisos_rol', 'modulo_codigo, accion', q => q.eq('rol', rolOrigen));
   const { error: delErr } = await supabase.from('permisos_rol').delete().eq('rol', rolDestino);
