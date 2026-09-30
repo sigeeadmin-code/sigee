@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchMetricasGlobales, fetchEstudianteIdPorProfile, fetchHijosDeRepresentante, fetchProgramacionEstudiante,
-  fetchCargasDocente, fetchHorarioDocente, fetchResumenAsistenciaDocente
+  fetchCargasDocente, fetchHorarioDocente, fetchResumenAsistenciaDocente,
+  fetchPanelInspector, fetchResumenAcademicoEstudiante, fetchHorarioAlumno, fetchTareasAlumno
 } from '../lib/data.js';
 
 const SOST_LABEL = { Fiscal: 'Fiscal', Particular: 'Particular', Fiscomisional: 'Fiscomisional', Municipal: 'Municipal' };
@@ -216,6 +217,161 @@ function DashboardInstitucion() {
 const ESTADO_LABEL = { presente: 'Presente', atraso: 'Atraso', ausente: 'Ausente', justificado: 'Justificado' };
 const ESTADO_BADGE = { presente: 'b-ok', atraso: 'b-warn', ausente: 'b-err', justificado: 'b-muted' };
 
+/** Mini gráfico de línea (SVG) para la tendencia de asistencia de 14 días — sin librerías. */
+function TendenciaSVG({ puntos }) {
+  const validos = puntos.filter(p => p.pct !== null);
+  if (!validos.length) return <div className="empty" style={{ padding: 20 }}><p style={{ fontSize: 13 }}>Sin datos de asistencia en el período.</p></div>;
+  const w = 520, h = 140, pad = 20, minY = 70, maxY = 100;
+  const coords = puntos.map((p, i) => ({
+    x: pad + (i / (puntos.length - 1 || 1)) * (w - 2 * pad),
+    y: p.pct === null ? null : pad + (1 - (Math.max(minY, Math.min(maxY, p.pct)) - minY) / (maxY - minY)) * (h - 2 * pad)
+  }));
+  let path = '';
+  coords.forEach(c => { if (c.y !== null) path += (path ? ' L ' : 'M ') + c.x.toFixed(1) + ' ' + c.y.toFixed(1); });
+  const last = [...coords].reverse().find(c => c.y !== null);
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} preserveAspectRatio="none">
+      <path d={path} fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      {last && <circle cx={last.x} cy={last.y} r="4" fill="#2563eb" />}
+    </svg>
+  );
+}
+
+function BarrasMaterias({ datos }) {
+  if (!datos.length) return <div className="empty" style={{ padding: 20 }}><p style={{ fontSize: 13 }}>Sin promedios aún.</p></div>;
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 160, padding: '8px 4px 0' }}>
+      {datos.slice(0, 8).map(s => {
+        const h = Math.round((s.promedio / 10) * 130);
+        const col = s.promedio >= 9 ? '#10b981' : s.promedio >= 7 ? '#3b82f6' : '#ef4444';
+        return (
+          <div key={s.nombre} style={{ flex: 1, textAlign: 'center' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, marginBottom: 4 }}>{s.promedio.toFixed(1)}</div>
+            <div style={{ height: h, background: col, borderRadius: '6px 6px 0 0', margin: '0 auto', maxWidth: 36 }} />
+            <div style={{ fontSize: 10, color: 'var(--slate)', marginTop: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.nombre.slice(0, 6)}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Panel del Inspector General: KPIs de asistencia/riesgo/cobertura del plantel,
+ * tendencia de 14 días, promedio por materia, y notificaciones recientes. */
+function DashboardInspector() {
+  const { profile, institucion, data } = useSession();
+  const institucionId = institucion?.id;
+  const [panel, setPanel] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let activo = true;
+    (async () => {
+      if (!institucionId) return;
+      setLoading(true);
+      const estudianteIds = (data?.estudiantes || []).map(e => e.id);
+      const p = await fetchPanelInspector(institucionId, estudianteIds);
+      if (activo) { setPanel(p); setLoading(false); }
+    })();
+    return () => { activo = false; };
+  }, [institucionId, data]);
+
+  if (loading || !panel) return <p style={{ fontSize: 13, color: 'var(--slate)' }}>Cargando…</p>;
+
+  const docentes = data?.docentes || [];
+  const estudiantes = data?.estudiantes || [];
+  const grados = data?.grados || [];
+  const paralelos = (data?.paralelos || []).filter(p => grados.some(g => g.id === p.grado_id));
+  const paralelosConCarga = new Set();
+  docentes.forEach(d => (d.cargas || []).forEach(c => paralelosConCarga.add(c.paraleloId)));
+  const cobertura = { total: paralelos.length, cubiertos: paralelos.filter(p => paralelosConCarga.has(p.id)).length };
+  const coberturaPct = cobertura.total ? Math.round(1000 * cobertura.cubiertos / cobertura.total) / 10 : 100;
+
+  const materiaNombrePorCarga = {};
+  docentes.forEach(d => (d.cargas || []).forEach(c => { materiaNombrePorCarga[c.id] = c.materiaNombre; }));
+  const porMateria = {};
+  panel.calificacionesRaw.forEach(c => {
+    const nombre = materiaNombrePorCarga[c.docente_materia_id] || null;
+    if (!nombre) return;
+    (porMateria[nombre] ||= []).push(Number(c.nota));
+  });
+  const barrasMaterias = Object.entries(porMateria).map(([nombre, arr]) => ({ nombre, promedio: arr.reduce((s, n) => s + n, 0) / arr.length }));
+
+  const tareas = data?.tareas || [];
+  const tareasPorCalificar = tareas.filter(t => t.entregados < t.total).length;
+
+  return (
+    <div>
+      <div style={{ marginBottom: 4, fontSize: 12, color: 'var(--slate)' }}>Panel de inspectoría · autonomía del plantel</div>
+      <h2 style={{ margin: '0 0 4px' }}>Dashboard</h2>
+      <div style={{ fontSize: 13, color: 'var(--slate)', marginBottom: 18 }}>
+        {institucion ? `${institucion.nombre}${institucion.amie ? ' · AMIE ' + institucion.amie : ''}` : ''}
+      </div>
+
+      <div className="grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }}>
+        <div className="card" style={{ padding: 18 }}>
+          <div style={{ fontSize: 12, color: 'var(--slate)', fontWeight: 600 }}>Tasa de Asistencia</div>
+          <div style={{ fontSize: 32, fontWeight: 800, color: '#2563eb', margin: '6px 0' }}>{panel.asistenciaHoy.pct === null ? '—' : panel.asistenciaHoy.pct + '%'}</div>
+          <div style={{ fontSize: 12, color: 'var(--slate)' }}>{panel.asistenciaHoy.presentes} / {panel.asistenciaHoy.total} alumnos presentes hoy</div>
+        </div>
+        <div className="card" style={{ padding: 18 }}>
+          <div style={{ fontSize: 12, color: 'var(--slate)', fontWeight: 600 }}>Alumnos en Riesgo</div>
+          <div style={{ fontSize: 32, fontWeight: 800, margin: '6px 0' }}>{panel.alumnosRiesgo}</div>
+          <div style={{ fontSize: 12, color: '#d97706' }}>Calificación promedio &lt; 7.0</div>
+        </div>
+        <div className="card" style={{ padding: 18 }}>
+          <div style={{ fontSize: 12, color: 'var(--slate)', fontWeight: 600 }}>Cobertura Docente</div>
+          <div style={{ fontSize: 32, fontWeight: 800, color: '#d97706', margin: '6px 0' }}>{coberturaPct}%</div>
+          <div style={{ fontSize: 12, color: 'var(--slate)' }}>{cobertura.cubiertos} de {cobertura.total} paralelos con carga</div>
+        </div>
+      </div>
+
+      <div className="grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 14 }}>
+        <div className="card" style={{ padding: 18 }}>
+          <div style={{ fontSize: 12, color: 'var(--slate)', fontWeight: 600 }}>Estudiantes matriculados</div>
+          <div style={{ fontSize: 28, fontWeight: 800, margin: '6px 0' }}>{estudiantes.length}</div>
+        </div>
+        <div className="card" style={{ padding: 18 }}>
+          <div style={{ fontSize: 12, color: 'var(--slate)', fontWeight: 600 }}>Tareas por calificar</div>
+          <div style={{ fontSize: 28, fontWeight: 800, margin: '6px 0' }}>{tareasPorCalificar}</div>
+          <div style={{ fontSize: 12, color: 'var(--slate)' }}>Entregas / tareas activas</div>
+        </div>
+        <div className="card" style={{ padding: 18 }}>
+          <div style={{ fontSize: 12, color: 'var(--slate)', fontWeight: 600 }}>Notificaciones activas</div>
+          <div style={{ fontSize: 28, fontWeight: 800, margin: '6px 0' }}>{panel.notificaciones.length}</div>
+          <div style={{ fontSize: 12, color: 'var(--slate)' }}>Comunicados y alertas</div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 14, marginBottom: 14 }}>
+        <div className="card">
+          <div className="ch"><div><h3 style={{ margin: 0 }}>Tendencia de Asistencia</h3><div style={{ fontSize: 11, color: 'var(--slate)' }}>Últimos 14 días · plantel</div></div><span className="badge b-ok">En tiempo real</span></div>
+          <div className="cb"><TendenciaSVG puntos={panel.tendencia14} /></div>
+        </div>
+        <div className="card">
+          <div className="ch"><div><h3 style={{ margin: 0 }}>Promedio por Materia</h3><div style={{ fontSize: 11, color: 'var(--slate)' }}>Notas registradas</div></div></div>
+          <div className="cb"><BarrasMaterias datos={barrasMaterias} /></div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="ch"><h3>Notificaciones recientes</h3><span className="badge b-muted">Comunicados</span></div>
+        <div className="cb" style={{ padding: '8px 12px' }}>
+          {panel.notificaciones.length === 0 ? (
+            <div className="empty" style={{ padding: 16 }}><p>Sin notificaciones registradas.</p></div>
+          ) : panel.notificaciones.map(n => (
+            <div key={n.id} style={{ padding: '10px 4px', borderBottom: '1px solid var(--line)' }}>
+              <strong style={{ fontSize: 13 }}>{n.titulo}</strong>
+              <div style={{ fontSize: 12, color: 'var(--slate)', marginTop: 2 }}>{n.cuerpo}</div>
+              <div style={{ fontSize: 11, color: 'var(--slateL)', marginTop: 4 }}>{new Date(n.created_at).toLocaleDateString()}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Vista compartida por padre y estudiante: ambos ven exactamente lo mismo
  * respecto al hijo/a sí mismo — su curso, su asistencia y sus tareas
@@ -227,6 +383,9 @@ function DashboardEstudiante() {
   const [hijos, setHijos] = useState([]);
   const [estudianteId, setEstudianteId] = useState(null);
   const [prog, setProg] = useState(null);
+  const [resumen, setResumen] = useState(null);
+  const [horario, setHorario] = useState([]);
+  const [tareasPend, setTareasPend] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -255,6 +414,23 @@ function DashboardEstudiante() {
     return () => { activo = false; };
   }, [estudianteId]);
 
+  useEffect(() => {
+    let activo = true;
+    if (!estudianteId || !prog) return;
+    (async () => {
+      const [res, hor, tareas] = await Promise.all([
+        fetchResumenAcademicoEstudiante(estudianteId, prog.matricula?.paralelo_id, prog.matricula?.periodo_id),
+        fetchHorarioAlumno(prog.matricula?.paralelo_id),
+        fetchTareasAlumno(estudianteId)
+      ]);
+      if (!activo) return;
+      setResumen(res);
+      setHorario(hor);
+      setTareasPend(tareas.filter(t => !t.miEntrega || t.miEntrega.estado === 'pendiente'));
+    })();
+    return () => { activo = false; };
+  }, [estudianteId, prog]);
+
   if (loading) return <p style={{ fontSize: 13, color: 'var(--slate)' }}>Cargando…</p>;
 
   if (esPadre && hijos.length === 0) {
@@ -265,7 +441,7 @@ function DashboardEstudiante() {
   return (
     <div>
       <div style={{ marginBottom: 4, fontSize: 12, color: 'var(--slate)' }}>{esPadre ? 'Panel de representante' : 'Mi panel'}</div>
-      <h2 style={{ margin: '0 0 4px' }}>{prog.estudiante.nombres} {prog.estudiante.apellidos}</h2>
+      <h2 style={{ margin: '0 0 4px' }}>{esPadre ? `${prog.estudiante.nombres} ${prog.estudiante.apellidos}` : `Hola, ${prog.estudiante.apellidos} 👋`}</h2>
       <div style={{ fontSize: 13, color: 'var(--slate)', marginBottom: 18 }}>
         {institucion?.nombre} · {prog.curso ? `${prog.curso.grado} "${prog.curso.paralelo}"` : 'Sin curso matriculado'}
       </div>
@@ -281,33 +457,96 @@ function DashboardEstudiante() {
         </div>
       )}
 
-      <div className="grid-4">
-        <div className="metric m-green"><div className="m-lbl">Presente</div><div className="m-val">{prog.resumenAsistencia.presente}</div></div>
-        <div className="metric m-amber"><div className="m-lbl">Atrasos</div><div className="m-val">{prog.resumenAsistencia.atraso}</div></div>
-        <div className="metric m-red"><div className="m-lbl">Ausencias</div><div className="m-val">{prog.resumenAsistencia.ausente}</div></div>
-        <div className="metric m-blue"><div className="m-lbl">Justificadas</div><div className="m-val">{prog.resumenAsistencia.justificado}</div></div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 14 }}>
+        <div className="card" style={{ padding: 16 }}>
+          <div style={{ fontSize: 12, color: 'var(--slate)' }}>Promedio general</div>
+          <div style={{ fontSize: 26, fontWeight: 800, margin: '6px 0' }}>{resumen?.promedioGeneral != null ? resumen.promedioGeneral.toFixed(1) : '—'}</div>
+        </div>
+        <div className="card" style={{ padding: 16 }}>
+          <div style={{ fontSize: 12, color: 'var(--slate)' }}>Asistencia</div>
+          <div style={{ fontSize: 26, fontWeight: 800, margin: '6px 0', color: '#16a34a' }}>
+            {(() => { const r = prog.resumenAsistencia, tot = r.presente + r.atraso + r.ausente + r.justificado; return tot ? Math.round(100 * (r.presente + r.atraso) / tot) + '%' : '—'; })()}
+          </div>
+        </div>
+        <div className="card" style={{ padding: 16 }}>
+          <div style={{ fontSize: 12, color: 'var(--slate)' }}>Tareas pendientes</div>
+          <div style={{ fontSize: 26, fontWeight: 800, margin: '6px 0', color: '#d97706' }}>{tareasPend.length}</div>
+        </div>
+        <div className="card" style={{ padding: 16 }}>
+          <div style={{ fontSize: 12, color: 'var(--slate)' }}>Posición</div>
+          <div style={{ fontSize: 26, fontWeight: 800, margin: '6px 0' }}>{resumen?.posicion ? `${resumen.posicion}º` : '—'}</div>
+          {resumen?.totalCurso > 0 && <div style={{ fontSize: 11, color: 'var(--slate)' }}>de {resumen.totalCurso}</div>}
+        </div>
       </div>
-      <div style={{ fontSize: 11, color: 'var(--slate)', marginTop: -8, marginBottom: 18 }}>Basado en los últimos {prog.asistenciaReciente.length} registros de asistencia.</div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+        <div className="card">
+          <div className="ch"><h3>Mis calificaciones</h3></div>
+          <div className="cb">
+            {!resumen || resumen.materias.length === 0 ? (
+              <div className="empty" style={{ padding: 16 }}><p style={{ fontSize: 13 }}>Sin materias con calificaciones registradas en tu curso.</p></div>
+            ) : (
+              <table className="data" style={{ width: '100%' }}>
+                <thead><tr><th>Materia</th><th>Promedio</th></tr></thead>
+                <tbody>
+                  {resumen.materias.map(m => (
+                    <tr key={m.nombre}><td>{m.nombre}</td><td><span className={'badge ' + (m.promedio >= 7 ? 'b-ok' : 'b-err')}>{m.promedio.toFixed(1)}</span></td></tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+        <div className="card">
+          <div className="ch"><h3>Horario semanal</h3></div>
+          <div className="cb">
+            {horario.length === 0 ? (
+              <div className="empty" style={{ padding: 16 }}><p style={{ fontSize: 13 }}>Horario aún no publicado para tu curso.</p></div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {[...horario].sort((a, b) => (a.dia + a.franja).localeCompare(b.dia + b.franja)).map(b => (
+                  <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, padding: '6px 0', borderBottom: '1px solid var(--line)' }}>
+                    <span>{b.dia} · {b.franja}</span><strong>{b.materia}</strong>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       <div className="card" style={{ marginBottom: 14 }}>
-        <div className="ch"><h3>Tareas programadas</h3></div>
+        <div className="ch"><h3>Tareas pendientes</h3></div>
         <div className="cb">
-          {prog.tareas.length === 0 ? (
-            <p style={{ fontSize: 13, color: 'var(--slate)' }}>Sin tareas próximas registradas para este curso.</p>
+          {tareasPend.length === 0 ? (
+            <p style={{ fontSize: 13, color: 'var(--slate)' }}>No tienes tareas pendientes por entregar.</p>
           ) : (
             <table className="data" style={{ width: '100%' }}>
               <thead><tr><th>Tarea</th><th>Materia</th><th>Fecha límite</th></tr></thead>
               <tbody>
-                {prog.tareas.map(t => (
+                {tareasPend.map(t => (
                   <tr key={t.id}>
                     <td>{t.titulo}</td>
                     <td>{t.materias?.nombre || '—'}</td>
-                    <td className="mono">{t.fecha_limite}{t.hora_limite ? ' · ' + t.hora_limite.slice(0, 5) : ''}</td>
+                    <td className="mono">{t.fecha_limite || 'Sin fecha'}{t.hora_limite ? ' · ' + t.hora_limite.slice(0, 5) : ''}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="ch"><h3>Detalle de asistencia</h3></div>
+        <div className="cb">
+          <div className="grid-4">
+            <div className="metric m-green"><div className="m-lbl">Presente</div><div className="m-val">{prog.resumenAsistencia.presente}</div></div>
+            <div className="metric m-amber"><div className="m-lbl">Atrasos</div><div className="m-val">{prog.resumenAsistencia.atraso}</div></div>
+            <div className="metric m-red"><div className="m-lbl">Ausencias</div><div className="m-val">{prog.resumenAsistencia.ausente}</div></div>
+            <div className="metric m-blue"><div className="m-lbl">Justificadas</div><div className="m-val">{prog.resumenAsistencia.justificado}</div></div>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--slate)', marginTop: 8 }}>Basado en los últimos {prog.asistenciaReciente.length} registros de asistencia.</div>
         </div>
       </div>
 
@@ -446,5 +685,6 @@ export default function Dashboard() {
   if (profile.rolDb === 'super_admin') return <DashboardGlobal />;
   if (profile.rolDb === 'padre' || profile.rolDb === 'estudiante') return <DashboardEstudiante />;
   if (profile.rolDb === 'docente') return <DashboardDocente />;
+  if (profile.rolDb === 'inspector_general') return <DashboardInspector />;
   return <DashboardInstitucion />;
 }

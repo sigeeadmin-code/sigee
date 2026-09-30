@@ -1331,6 +1331,65 @@ export async function entregarTarea(tareaId, institucionId, estudianteId, { arch
   if (error) throw error;
 }
 
+/* ── Panel de Inspectoría (KPIs de asistencia/calificaciones/notificaciones) ── */
+export async function fetchPanelInspector(institucionId, estudianteIds) {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const hace14 = new Date(Date.now() - 13 * 86400000).toISOString().slice(0, 10);
+  const ids = estudianteIds.length ? estudianteIds : ['00000000-0000-0000-0000-000000000000'];
+  const [asisHoy, asis14, califs, notificaciones] = await Promise.all([
+    sel('asistencia', 'estado', q => q.in('estudiante_id', ids).eq('fecha', hoy)),
+    sel('asistencia', 'fecha, estado', q => q.in('estudiante_id', ids).gte('fecha', hace14)),
+    sel('calificaciones', 'estudiante_id, nota, docente_materia_id', q => q.in('estudiante_id', ids)),
+    sel('notificaciones', '*', q => q.eq('institucion_id', institucionId).order('created_at', { ascending: false }).limit(8))
+  ]);
+  const presentesHoy = asisHoy.filter(a => a.estado === 'presente' || a.estado === 'atraso').length;
+  const asistenciaHoy = { total: ids.length, marcados: asisHoy.length, presentes: presentesHoy, pct: asisHoy.length ? Math.round(1000 * presentesHoy / asisHoy.length) / 10 : null };
+
+  const porDia = {};
+  asis14.forEach(a => { (porDia[a.fecha] ||= { ok: 0, tot: 0 }); porDia[a.fecha].tot++; if (a.estado === 'presente' || a.estado === 'atraso') porDia[a.fecha].ok++; });
+  const tendencia14 = Object.entries(porDia).sort((a, b) => a[0] < b[0] ? -1 : 1).map(([fecha, v]) => ({ fecha, pct: v.tot ? Math.round(1000 * v.ok / v.tot) / 10 : null }));
+
+  const porEst = {};
+  califs.forEach(c => { (porEst[c.estudiante_id] ||= []).push(Number(c.nota)); });
+  const alumnosRiesgo = Object.values(porEst).filter(arr => arr.length && (arr.reduce((s, n) => s + n, 0) / arr.length) < 7).length;
+
+  return { asistenciaHoy, tendencia14, alumnosRiesgo, calificacionesRaw: califs, notificaciones };
+}
+
+/* ── Resumen académico y horario del propio estudiante ── */
+export async function fetchResumenAcademicoEstudiante(estudianteId, paraleloId, periodoId) {
+  const [misCalifs, companeros] = await Promise.all([
+    sel('calificaciones', '*, docente_materia(materia_id, materias(nombre))', q => q.eq('estudiante_id', estudianteId)),
+    paraleloId ? sel('matriculas', 'estudiante_id', q => q.eq('paralelo_id', paraleloId).eq('periodo_id', periodoId)) : Promise.resolve([])
+  ]);
+  const porMateria = {};
+  misCalifs.forEach(c => { const nombre = c.docente_materia?.materias?.nombre || '—'; (porMateria[nombre] ||= []).push(Number(c.nota)); });
+  const materias = Object.entries(porMateria).map(([nombre, arr]) => ({ nombre, promedio: arr.reduce((s, n) => s + n, 0) / arr.length }));
+  const promedioGeneral = materias.length ? materias.reduce((s, m) => s + m.promedio, 0) / materias.length : null;
+
+  let posicion = null, totalCurso = 0;
+  if (companeros.length) {
+    const ids = companeros.map(c => c.estudiante_id);
+    const notasCurso = await sel('calificaciones', 'estudiante_id, nota', q => q.in('estudiante_id', ids));
+    const porEst = {};
+    notasCurso.forEach(c => { (porEst[c.estudiante_id] ||= []).push(Number(c.nota)); });
+    const promedios = Object.entries(porEst).map(([id, arr]) => ({ id, prom: arr.reduce((s, n) => s + n, 0) / arr.length })).sort((a, b) => b.prom - a.prom);
+    totalCurso = promedios.length;
+    const idx = promedios.findIndex(p => p.id === estudianteId);
+    posicion = idx >= 0 ? idx + 1 : null;
+  }
+  return { materias, promedioGeneral, posicion, totalCurso };
+}
+export async function fetchHorarioAlumno(paraleloId) {
+  if (!paraleloId) return [];
+  const dm = await sel('docente_materia', 'id, materia_id, materias(nombre)', q => q.eq('paralelo_id', paraleloId));
+  const dmIds = dm.map(d => d.id);
+  if (!dmIds.length) return [];
+  const bloques = await sel('horario_bloques', '*', q => q.in('docente_materia_id', dmIds));
+  const dmMap = Object.fromEntries(dm.map(d => [d.id, d.materias?.nombre || '—']));
+  return bloques.map(b => ({ ...b, materia: dmMap[b.docente_materia_id] || '—' }));
+}
+
 export async function copiarPermisosRol(rolOrigen, rolDestino) {
   const origen = await sel('permisos_rol', 'modulo_codigo, accion', q => q.eq('rol', rolOrigen));
   const { error: delErr } = await supabase.from('permisos_rol').delete().eq('rol', rolDestino);
