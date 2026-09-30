@@ -1269,6 +1269,68 @@ export async function revisarPagoLicencia(pagoId, aprobado, revisadoPor, notas) 
   if (error) throw error;
 }
 
+/* ── Tareas y avisos (docente crea/califica, alumno ve/entrega) ── */
+export async function fetchTareasDocente(docenteId) {
+  const tareas = await sel(
+    'tareas',
+    '*, materias(nombre), paralelos(nombre, grado_id, grados(nombre))',
+    q => q.eq('docente_id', docenteId).order('fecha_limite', { ascending: false })
+  );
+  const tareaIds = tareas.map(t => t.id);
+  const entregas = tareaIds.length
+    ? await sel('tarea_entregas', '*, estudiantes(nombres, apellidos)', q => q.in('tarea_id', tareaIds))
+    : [];
+  const entregasPorTarea = {};
+  entregas.forEach(e => (entregasPorTarea[e.tarea_id] ||= []).push(e));
+  return tareas.map(t => ({ ...t, entregas: entregasPorTarea[t.id] || [] }));
+}
+export async function crearTarea(institucionId, payload, creadoPor) {
+  const { data, error } = await supabase.from('tareas')
+    .insert({ institucion_id: institucionId, ...payload, created_by: creadoPor })
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+export async function actualizarTarea(id, cambios) {
+  const { error } = await supabase.from('tareas').update(cambios).eq('id', id);
+  if (error) throw error;
+}
+export async function eliminarTarea(id) {
+  const { error } = await supabase.from('tareas').delete().eq('id', id);
+  if (error) throw error;
+}
+export async function calificarEntrega(entregaId, nota, comentario, calificadoPor) {
+  const { error } = await supabase.from('tarea_entregas').update({
+    nota: nota === '' || nota === null ? null : Number(nota),
+    comentario: comentario || null, calificado_por: calificadoPor
+  }).eq('id', entregaId);
+  if (error) throw error;
+}
+
+export async function fetchTareasAlumno(estudianteId) {
+  const matricula = (await sel('matriculas', '*', q => q.eq('estudiante_id', estudianteId).order('fecha_matricula', { ascending: false }).limit(1)))[0];
+  if (!matricula?.paralelo_id) return [];
+  const tareas = await sel(
+    'tareas', '*, materias(nombre)',
+    q => q.eq('paralelo_id', matricula.paralelo_id).order('fecha_limite', { ascending: false })
+  );
+  const tareaIds = tareas.map(t => t.id);
+  const misEntregas = tareaIds.length
+    ? await sel('tarea_entregas', '*', q => q.eq('estudiante_id', estudianteId).in('tarea_id', tareaIds))
+    : [];
+  const entregaPorTarea = Object.fromEntries(misEntregas.map(e => [e.tarea_id, e]));
+  return tareas.map(t => ({ ...t, miEntrega: entregaPorTarea[t.id] || null }));
+}
+export async function entregarTarea(tareaId, institucionId, estudianteId, { archivoUrl, archivoNombre, comentario, tardio }) {
+  const { error } = await supabase.from('tarea_entregas').upsert({
+    tarea_id: tareaId, institucion_id: institucionId, estudiante_id: estudianteId,
+    estado: tardio ? 'tardio' : 'entregado',
+    archivo_url: archivoUrl || null, archivo_nombre: archivoNombre || null,
+    comentario: comentario || null, fecha_entrega: new Date().toISOString()
+  }, { onConflict: 'tarea_id,estudiante_id' });
+  if (error) throw error;
+}
+
 export async function copiarPermisosRol(rolOrigen, rolDestino) {
   const origen = await sel('permisos_rol', 'modulo_codigo, accion', q => q.eq('rol', rolOrigen));
   const { error: delErr } = await supabase.from('permisos_rol').delete().eq('rol', rolDestino);
