@@ -4,7 +4,10 @@
 
 export const TRIMESTRES = ['T1', 'T2', 'T3'];
 export const NOTA_MINIMA_APROBAR = 7;
-export const NOTA_MINIMA_SUPLETORIO = 4.01;
+export const NOTA_MINIMA_PA = 4.01;          // límite inferior de la escala PA (solo para la escala DA/AA/PA/NA)
+// Art. 212 del Reglamento LOEI: supletorio para promedio anual de 5.00 a 6.99; con menos de 5
+// (4.99 o menos) o si no aprueba el supletorio, el estudiante pasa a examen REMEDIAL.
+export const NOTA_MINIMA_SUPLETORIO = 5;
 
 // Modo de aproximación a 2 decimales. El mockup institucional usa TRUNCAR (8.999 -> 8.99).
 // Si el reglamento pide redondear, cambiar solo esta constante.
@@ -128,29 +131,28 @@ export function escalaDAAPA(n) {
   if (n === null || n === undefined || Number.isNaN(n)) return { c: 'NE', label: 'No evaluado', cls: 'b-muted' };
   if (n >= 9) return { c: 'DA', label: 'Domina los Aprendizajes', cls: 'b-ok' };
   if (n >= 7) return { c: 'AA', label: 'Alcanza los Aprendizajes', cls: 'b-info' };
-  if (n >= NOTA_MINIMA_SUPLETORIO) return { c: 'PA', label: 'Próximo a Alcanzar', cls: 'b-warn' };
+  if (n >= NOTA_MINIMA_PA) return { c: 'PA', label: 'Próximo a Alcanzar', cls: 'b-warn' };
   return { c: 'NA', label: 'No Alcanza los Aprendizajes', cls: 'b-err' };
 }
 
 /**
  * Promedio anual de una materia. notasTrim = [t1,t2,t3] (notas ya con mejora, null si falta);
  * supletorio = nota del examen supletorio o null.
- * Devuelve { promedio, final, estado } con estado: 'pendiente' | 'aprobado' | 'supletorio' | 'reprobado'
- * CORRECCIÓN respecto del mockup: el supletorio solo sube la nota a 7.00 si el alumno sacó >= 7;
- * si rindió y sacó menos, queda reprobado (antes quedaba en 7.00 con cualquier valor).
+ * Devuelve { promedio, final, estado } con estado:
+ *   'pendiente' (faltan trimestres) | 'aprobado' | 'supletorio' (puede rendirlo, aún sin nota)
+ *   | 'remedial' (promedio < 5, o rindió el supletorio y sacó menos de 7)
+ * El supletorio solo sube la nota a 7.00 si el estudiante sacó >= 7 (el mockup lo daba por aprobado con cualquier nota).
+ * El resultado del remedial / gracia aún no se modela (siguiente fase).
  */
 export function calcAnual(notasTrim, supletorio = null) {
   const vals = (notasTrim || []).filter(n => n !== null && n !== undefined);
   if (!vals.length) return { promedio: null, final: null, estado: 'pendiente' };
   const promedio = aDos(vals.reduce((a, b) => a + b, 0) / vals.length);
-  const completo = vals.length === TRIMESTRES.length;
-  if (promedio >= NOTA_MINIMA_APROBAR) return { promedio, final: promedio, estado: completo ? 'aprobado' : 'pendiente' };
-  if (!completo) return { promedio, final: promedio, estado: 'pendiente' };
-  if (promedio >= NOTA_MINIMA_SUPLETORIO) {
-    if (!esNum(supletorio)) return { promedio, final: promedio, estado: 'supletorio' };
-    return Number(supletorio) >= NOTA_MINIMA_APROBAR
-      ? { promedio, final: NOTA_MINIMA_APROBAR, estado: 'aprobado' }
-      : { promedio, final: promedio, estado: 'reprobado' };
-  }
-  return { promedio, final: promedio, estado: 'reprobado' };
+  if (vals.length < TRIMESTRES.length) return { promedio, final: promedio, estado: 'pendiente' };
+  if (promedio >= NOTA_MINIMA_APROBAR) return { promedio, final: promedio, estado: 'aprobado' };
+  if (promedio < NOTA_MINIMA_SUPLETORIO) return { promedio, final: promedio, estado: 'remedial' };
+  if (!esNum(supletorio)) return { promedio, final: promedio, estado: 'supletorio' };
+  return Number(supletorio) >= NOTA_MINIMA_APROBAR
+    ? { promedio, final: NOTA_MINIMA_APROBAR, estado: 'aprobado' }
+    : { promedio, final: promedio, estado: 'remedial' };
 }

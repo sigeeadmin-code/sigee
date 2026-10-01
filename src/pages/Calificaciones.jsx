@@ -12,8 +12,8 @@ import Placeholder from './Placeholder.jsx';
 const ROLES_EDITAN = ['super_admin', 'admin_plantel', 'secretario', 'docente'];
 const ROLES_CONSULTA = ['inspector_general', 'supervisor_plantel', 'supervisor_general', 'contador_general', 'contador_plantel', 'administrativo'];
 const TRIM_LABEL = { T1: 'Trimestre 1', T2: 'Trimestre 2', T3: 'Trimestre 3' };
-const ESTADO_BADGE = { aprobado: 'b-ok', supletorio: 'b-warn', reprobado: 'b-err', pendiente: 'b-muted' };
-const ESTADO_LABEL = { aprobado: 'Aprobado', supletorio: 'Supletorio', reprobado: 'Reprobado', pendiente: 'En curso' };
+const ESTADO_BADGE = { aprobado: 'b-ok', supletorio: 'b-warn', remedial: 'b-err', pendiente: 'b-muted' };
+const ESTADO_LABEL = { aprobado: 'Aprobado', supletorio: 'Supletorio', remedial: 'Remedial', pendiente: 'En curso' };
 const fmt = n => (n === null || n === undefined ? '—' : Number(n).toFixed(2));
 
 function gridVacio(cfg) {
@@ -344,7 +344,7 @@ function CuadroParalelo({ paraleloId, cargas, periodoActivo }) {
       const vals = porMateria.map(valor).filter(v => v !== null);
       const general = vals.length ? aDos(vals.reduce((x, y) => x + y, 0) / vals.length) : null;
       const estados = porMateria.map(m => m.anual.estado);
-      const estado = estados.includes('reprobado') ? 'reprobado'
+      const estado = estados.includes('remedial') ? 'remedial'
         : estados.includes('supletorio') ? 'supletorio'
         : estados.length && estados.every(e => e === 'aprobado') ? 'aprobado' : 'pendiente';
       return { a, porMateria, valor, general, estado };

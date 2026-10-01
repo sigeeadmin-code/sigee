@@ -49,9 +49,13 @@ assert.equal(C.escalaDAAPA(4.01).c, 'PA'); assert.equal(C.escalaDAAPA(4).c, 'NA'
 assert.deepEqual(C.calcAnual([8, 8, 8]), { promedio: 8, final: 8, estado: 'aprobado' });
 assert.equal(C.calcAnual([8, 8]).estado, 'pendiente');
 assert.equal(C.calcAnual([6, 6, 6]).estado, 'supletorio');
+assert.equal(C.calcAnual([5, 5, 5]).estado, 'supletorio');         // 5.00 puede rendir supletorio
+assert.equal(C.calcAnual([6.99, 6.99, 6.99]).estado, 'supletorio');
+assert.equal(C.calcAnual([4.99, 4.99, 4.99]).estado, 'remedial');   // < 5 va directo a remedial
 assert.deepEqual(C.calcAnual([6, 6, 6], 7), { promedio: 6, final: 7, estado: 'aprobado' });
 // BUG del mockup corregido: supletorio < 7 NO aprueba
-assert.deepEqual(C.calcAnual([6, 6, 6], 3), { promedio: 6, final: 6, estado: 'reprobado' });
-assert.equal(C.calcAnual([3, 3, 3]).estado, 'reprobado');
+assert.deepEqual(C.calcAnual([6, 6, 6], 3), { promedio: 6, final: 6, estado: 'remedial' });
+assert.deepEqual(C.calcAnual([6, 6, 6], 6.99), { promedio: 6, final: 6, estado: 'remedial' });
+assert.equal(C.calcAnual([3, 3, 3]).estado, 'remedial');
 assert.equal(C.calcAnual([null, null, null]).estado, 'pendiente');
 console.log('OK calificaciones: todas las pruebas pasaron');
