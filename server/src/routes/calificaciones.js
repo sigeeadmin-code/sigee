@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../lib/auth.js';
 import { supabase } from '../lib/supabase.js';
 import {
-  TRIMESTRES, configPorDefecto, validarConfig, calcTrimestre, aplicarMejora
+  TRIMESTRES, configPorDefecto, validarConfig, calcTrimestre, aplicarMejora, calcAnual
 } from '../lib/calificaciones.js';
 
 export const calificacionesRouter = Router();
@@ -189,4 +189,64 @@ calificacionesRouter.put('/config', requireAuth, async (req, res) => {
     : await supabase.from('config_evaluacion').insert(fila);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
+});
+
+// POST /calificaciones/supletorio
+// body: { docente_materia_id, registros: [{ estudiante_id, supletorio: número | null }] }
+// Solo se admite si el promedio anual del estudiante en esa materia está entre 5.00 y 6.99
+// (se recalcula aquí con las notas guardadas; el cliente no decide quién rinde supletorio).
+calificacionesRouter.post('/supletorio', requireAuth, async (req, res) => {
+  const { docente_materia_id, registros } = req.body || {};
+  if (!docente_materia_id || !Array.isArray(registros) || !registros.length) {
+    return res.status(400).json({ error: 'Faltan docente_materia_id o registros.' });
+  }
+  if (!ROLES_ESCRITURA.includes(req.profile.rol)) {
+    return res.status(403).json({ error: `Rol '${req.profile.rol}' no puede registrar supletorios.` });
+  }
+  const carga = await cargarCarga(docente_materia_id);
+  if (!carga) return res.status(404).json({ error: 'Carga docente no encontrada.' });
+  if (req.profile.rol !== 'super_admin' && carga.institucionId !== req.profile.institucion_id) {
+    return res.status(403).json({ error: 'Esa carga académica no pertenece a tu institución.' });
+  }
+  if (req.profile.rol === 'docente' && carga.docenteProfileId !== req.profile.id) {
+    return res.status(403).json({ error: 'Esa carga académica no te pertenece.' });
+  }
+  if (carga.nivel !== 'BGU') {
+    return res.status(422).json({ error: `Este módulo solo admite Bachillerato (BGU); el curso es '${carga.nivel}'.` });
+  }
+
+  const ids = registros.map(r => r.estudiante_id);
+  const { data: notas, error: nErr } = await supabase.from('calificaciones')
+    .select('estudiante_id, periodo_evaluativo, nota').eq('docente_materia_id', docente_materia_id).in('estudiante_id', ids);
+  if (nErr) return res.status(500).json({ error: nErr.message });
+
+  const guardar = [], borrar = [];
+  for (const r of registros) {
+    const trims = TRIMESTRES.map(t => {
+      const n = (notas || []).find(x => x.estudiante_id === r.estudiante_id && x.periodo_evaluativo === t);
+      return n ? Number(n.nota) : null;
+    });
+    const vacio = r.supletorio === null || r.supletorio === undefined || r.supletorio === '';
+    if (vacio) { borrar.push(r.estudiante_id); continue; }
+    if (!valorValido(r.supletorio)) return res.status(400).json({ error: `Nota de supletorio inválida (${r.supletorio}): debe estar entre 0 y 10.` });
+    const anual = calcAnual(trims);
+    if (anual.estado !== 'supletorio') {
+      return res.status(422).json({ error: `El estudiante ${r.estudiante_id} no puede rendir supletorio en esta materia (estado: ${anual.estado}; el supletorio es para promedios de 5.00 a 6.99 con los 3 trimestres cerrados).` });
+    }
+    guardar.push({
+      estudiante_id: r.estudiante_id, docente_materia_id, periodo_evaluativo: 'SUP',
+      supletorio: Number(r.supletorio), registrado_por: req.profile.id, updated_at: new Date().toISOString()
+    });
+  }
+  if (guardar.length) {
+    const { error } = await supabase.from('calificaciones_mejoras')
+      .upsert(guardar, { onConflict: 'estudiante_id,docente_materia_id,periodo_evaluativo' });
+    if (error) return res.status(500).json({ error: error.message });
+  }
+  if (borrar.length) {
+    const { error } = await supabase.from('calificaciones_mejoras').delete()
+      .eq('docente_materia_id', docente_materia_id).eq('periodo_evaluativo', 'SUP').in('estudiante_id', borrar);
+    if (error) return res.status(500).json({ error: error.message });
+  }
+  res.status(201).json({ guardados: guardar.length, eliminados: borrar.length });
 });

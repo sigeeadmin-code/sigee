@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchGradosConParalelos, fetchCargasDocente, fetchTodasCargas, fetchEstudiantesParalelo,
-  fetchAportesCarga, fetchConfigEvaluacion, fetchNotasParalelo, guardarNotasTrimestre
+  fetchAportesCarga, fetchConfigEvaluacion, fetchNotasParalelo, guardarNotasTrimestre, guardarSupletorios
 } from '../lib/data.js';
 import {
   TRIMESTRES, configPorDefecto, validarConfig, calcTrimestre, aplicarMejora, escalaDAAPA, calcAnual, aDos
@@ -236,7 +236,7 @@ function CuadroCalificaciones() {
 
       {vista === 'registro'
         ? <RegistroNotas {...{ cfg, alumnos, grid, calculos, editable, cargandoNotas, sucios, setCelda, setMejora }} />
-        : <CuadroParalelo paraleloId={paraleloId} cargas={cargasParalelo} periodoActivo={periodoActivo} />}
+        : <CuadroParalelo paraleloId={paraleloId} cargas={cargasParalelo} periodoActivo={periodoActivo} puedeEditar={puedeEditar} />}
     </div>
   );
 }
@@ -310,11 +310,15 @@ function RegistroNotas({ cfg, alumnos, grid, calculos, editable, cargandoNotas, 
   );
 }
 
-function CuadroParalelo({ paraleloId, cargas, periodoActivo }) {
+function CuadroParalelo({ paraleloId, cargas, periodoActivo, puedeEditar }) {
   const [alumnos, setAlumnos] = useState([]);
   const [datos, setDatos] = useState({ notas: [], mejoras: [] });
   const [cargando, setCargando] = useState(false);
   const [modo, setModo] = useState('anual'); // 'T1' | 'T2' | 'T3' | 'anual'
+  const [recarga, setRecarga] = useState(0);
+  const [supEdit, setSupEdit] = useState({});   // { 'cargaId|estId': 'texto' }
+  const [guardandoSup, setGuardandoSup] = useState(null);
+  const [aviso, setAviso] = useState(null);
   const idsCargas = cargas.map(c => c.id).join(',');
 
   useEffect(() => {
@@ -323,10 +327,27 @@ function CuadroParalelo({ paraleloId, cargas, periodoActivo }) {
     setCargando(true);
     Promise.all([fetchEstudiantesParalelo(paraleloId, periodoActivo.id), fetchNotasParalelo(idsCargas ? idsCargas.split(',') : [])]).then(([al, d]) => {
       if (!activo) return;
-      setAlumnos(al); setDatos(d); setCargando(false);
+      setAlumnos(al); setDatos(d); setSupEdit({}); setCargando(false);
     });
     return () => { activo = false; };
-  }, [paraleloId, periodoActivo?.id, idsCargas]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [paraleloId, periodoActivo?.id, idsCargas, recarga]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const guardarSup = async carga => {
+    const regs = Object.entries(supEdit)
+      .filter(([k]) => k.startsWith(carga.id + '|'))
+      .map(([k, v]) => ({ estudiante_id: k.split('|')[1], supletorio: v.replace(',', '.').trim() }));
+    if (regs.some(r => r.supletorio !== '' && !(Number.isFinite(Number(r.supletorio)) && Number(r.supletorio) >= 0 && Number(r.supletorio) <= 10))) {
+      setAviso({ ok: false, t: 'Hay notas de supletorio fuera de rango (0 a 10).' }); return;
+    }
+    if (!regs.length) { setAviso({ ok: true, t: 'No hay cambios por guardar.' }); return; }
+    setGuardandoSup(carga.id);
+    try {
+      const r = await guardarSupletorios(carga.id, regs);
+      setAviso({ ok: true, t: `Supletorio guardado en ${carga.materiaNombre}: ${r.guardados} nota(s).` });
+      setRecarga(x => x + 1);
+    } catch (e) { setAviso({ ok: false, t: e.message }); }
+    setGuardandoSup(null);
+  };
 
   const filas = useMemo(() => {
     const notaDe = (est, carga, t) => {
@@ -386,8 +407,53 @@ function CuadroParalelo({ paraleloId, cargas, periodoActivo }) {
           </tbody>
         </table>
       </div>
+      {modo === 'anual' && (() => {
+        const tieneSup = (estId, cargaId) => datos.mejoras.some(x => x.estudiante_id === estId && x.docente_materia_id === cargaId && x.periodo_evaluativo === 'SUP' && x.supletorio != null);
+        const bloques = cargas.map(c => ({
+          carga: c,
+          filas: filas.map(f => ({ f, m: f.porMateria.find(x => x.carga.id === c.id) }))
+            .filter(({ f, m }) => m.anual.estado === 'supletorio' || tieneSup(f.a.id, c.id))
+        })).filter(b => b.filas.length);
+        return (
+          <div className="cb" style={{ borderTop: '1px solid var(--line)' }}>
+            <h3 style={{ margin: '0 0 6px', fontSize: 15 }}>Examen supletorio</h3>
+            <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--slate)' }}>
+              Pueden rendirlo los estudiantes con promedio anual de 5.00 a 6.99 y los 3 trimestres cerrados. Con 7 o más aprueban con 7.00; con menos pasan a remedial.
+            </p>
+            {aviso && <div style={{ marginBottom: 10, fontSize: 13, color: aviso.ok ? 'var(--green)' : 'var(--red)' }}>{aviso.t}</div>}
+            {bloques.length === 0 && <p className="muted" style={{ margin: 0 }}>Ningún estudiante de este paralelo está en supletorio por ahora.</p>}
+            {bloques.map(({ carga, filas: fs }) => (
+              <div key={carga.id} style={{ marginBottom: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <strong style={{ fontSize: 13 }}>{carga.materiaNombre}</strong>
+                  {puedeEditar && <button className="btn btn-success btn-sm" disabled={guardandoSup === carga.id} onClick={() => guardarSup(carga)}>{guardandoSup === carga.id ? 'Guardando…' : '💾 Guardar supletorio'}</button>}
+                </div>
+                <table className="data"><thead><tr><th>Estudiante</th><th style={{ textAlign: 'center' }}>Promedio anual</th><th style={{ textAlign: 'center' }}>Supletorio</th><th style={{ textAlign: 'center' }}>Resultado</th></tr></thead>
+                  <tbody>{fs.map(({ f, m }) => {
+                    const llave = carga.id + '|' + f.a.id;
+                    const guardado = datos.mejoras.find(x => x.estudiante_id === f.a.id && x.docente_materia_id === carga.id && x.periodo_evaluativo === 'SUP');
+                    const valor = supEdit[llave] ?? (guardado?.supletorio == null ? '' : String(Number(guardado.supletorio)));
+                    const ok = valor === '' || (Number.isFinite(Number(valor)) && Number(valor) >= 0 && Number(valor) <= 10);
+                    return (
+                      <tr key={f.a.id}>
+                        <td>{f.a.nombre}</td>
+                        <td style={{ textAlign: 'center' }}>{fmt(m.anual.promedio)}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <input inputMode="decimal" disabled={!puedeEditar} value={valor}
+                            onChange={e => setSupEdit(p => ({ ...p, [llave]: e.target.value }))}
+                            style={{ width: 54, textAlign: 'center', padding: '4px 2px', fontSize: 12, border: '1px solid ' + (ok ? 'var(--line)' : 'var(--red)'), borderRadius: 6 }} />
+                        </td>
+                        <td style={{ textAlign: 'center' }}><span className={'badge ' + ESTADO_BADGE[m.anual.estado]}>{ESTADO_LABEL[m.anual.estado]}</span></td>
+                      </tr>
+                    );
+                  })}</tbody></table>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
       <div style={{ padding: '10px 14px', fontSize: 12, color: 'var(--slate)' }}>
-        Solo se muestran notas definitivas del trimestre. El supletorio y la boleta imprimible se agregan en la siguiente fase.
+        Solo se muestran notas definitivas del trimestre. La boleta imprimible y el remedial se agregan en la siguiente fase.
       </div>
     </div>
   );

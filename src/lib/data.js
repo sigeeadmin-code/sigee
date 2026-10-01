@@ -1447,3 +1447,29 @@ export async function guardarNotasTrimestre(docenteMateriaId, periodoEvaluativo,
   }
   throw new Error('No se pudo conectar con el servidor. Revisa tu internet e inténtalo de nuevo.' + (ultimoError?.message ? ` (${ultimoError.message})` : ''));
 }
+
+export async function guardarSupletorios(docenteMateriaId, registros) {
+  const { data: sesion } = await supabase.auth.getSession();
+  const token = sesion?.session?.access_token;
+  if (!token) throw new Error('Sesión expirada. Vuelve a iniciar sesión.');
+  const opciones = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ docente_materia_id: docenteMateriaId, registros })
+  };
+  let ultimoError = null;
+  for (const espera of [0, 2500, 5000]) {
+    if (espera) await new Promise(r => setTimeout(r, espera));
+    try {
+      const resp = await fetch(`${API_URL}/calificaciones/supletorio`, opciones);
+      if ([502, 503, 504].includes(resp.status)) { ultimoError = new Error('El servidor está iniciando.'); continue; }
+      const body = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw Object.assign(new Error(body.error || `Error del servidor (${resp.status}) al guardar el supletorio.`), { definitivo: true });
+      return body;
+    } catch (err) {
+      if (err.definitivo) throw err;
+      ultimoError = err;
+    }
+  }
+  throw new Error('No se pudo conectar con el servidor. Revisa tu internet e inténtalo de nuevo.' + (ultimoError?.message ? ` (${ultimoError.message})` : ''));
+}
