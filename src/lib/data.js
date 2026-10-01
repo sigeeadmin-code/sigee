@@ -1400,3 +1400,50 @@ export async function copiarPermisosRol(rolOrigen, rolDestino) {
     if (insErr) throw insErr;
   }
 }
+
+/* ── Calificaciones BGU (aportes por trimestre; la nota la recalcula el backend) ── */
+export async function fetchAportesCarga(docenteMateriaId, periodoEvaluativo) {
+  const [aportes, mejoras] = await Promise.all([
+    sel('calificaciones_aportes', '*', q => q.eq('docente_materia_id', docenteMateriaId).eq('periodo_evaluativo', periodoEvaluativo)),
+    sel('calificaciones_mejoras', '*', q => q.eq('docente_materia_id', docenteMateriaId).eq('periodo_evaluativo', periodoEvaluativo))
+  ]);
+  return { aportes, mejoras };
+}
+export async function fetchConfigEvaluacion(institucionId, paraleloId) {
+  const rows = await sel('config_evaluacion', 'paralelo_id, config', q => q.eq('institucion_id', institucionId));
+  return (rows.find(r => r.paralelo_id === paraleloId) || rows.find(r => r.paralelo_id === null))?.config || null;
+}
+export async function fetchNotasParalelo(cargaIds) {
+  if (!cargaIds.length) return { notas: [], mejoras: [] };
+  const [notas, mejoras] = await Promise.all([
+    sel('calificaciones', 'estudiante_id, docente_materia_id, periodo_evaluativo, nota', q => q.in('docente_materia_id', cargaIds)),
+    sel('calificaciones_mejoras', 'estudiante_id, docente_materia_id, periodo_evaluativo, supletorio', q => q.in('docente_materia_id', cargaIds))
+  ]);
+  return { notas, mejoras };
+}
+export async function guardarNotasTrimestre(docenteMateriaId, periodoEvaluativo, registros) {
+  const { data: sesion } = await supabase.auth.getSession();
+  const token = sesion?.session?.access_token;
+  if (!token) throw new Error('Sesión expirada. Vuelve a iniciar sesión.');
+  const opciones = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ docente_materia_id: docenteMateriaId, periodo_evaluativo: periodoEvaluativo, registros })
+  };
+  // El guardado es un upsert idempotente: reintentar ante 502/503/504 (backend dormido) es seguro.
+  let ultimoError = null;
+  for (const espera of [0, 2500, 5000]) {
+    if (espera) await new Promise(r => setTimeout(r, espera));
+    try {
+      const resp = await fetch(`${API_URL}/calificaciones`, opciones);
+      if ([502, 503, 504].includes(resp.status)) { ultimoError = new Error('El servidor está iniciando.'); continue; }
+      const body = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw Object.assign(new Error(body.error || `Error del servidor (${resp.status}) al guardar calificaciones.`), { definitivo: true });
+      return body;
+    } catch (err) {
+      if (err.definitivo) throw err;
+      ultimoError = err;
+    }
+  }
+  throw new Error('No se pudo conectar con el servidor. Revisa tu internet e inténtalo de nuevo.' + (ultimoError?.message ? ` (${ultimoError.message})` : ''));
+}

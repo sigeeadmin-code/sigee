@@ -3,6 +3,7 @@ import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { calendarioRouter } from './routes/calendario.js';
 import { asistenciaRouter } from './routes/asistencia.js';
+import { calificacionesRouter } from './routes/calificaciones.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -26,7 +27,7 @@ app.use(express.json());
 // docentes: cada guardado es 1 sola petición (upsert por lote), por lo que
 // 200/min (~3 por segundo) cubre con holgura la hora pico de un colegio
 // grande y aún frena abusos o bucles descontrolados.
-app.use(['/asistencia', '/calendario'], rateLimit({
+app.use(['/asistencia', '/calendario', '/calificaciones'], rateLimit({
   windowMs: 60 * 1000,
   limit: 200,
   standardHeaders: true,
@@ -38,6 +39,7 @@ app.get('/health', (_req, res) => res.json({ ok: true, service: 'sigee-backend',
 
 app.use('/calendario', calendarioRouter);
 app.use('/asistencia', asistenciaRouter);
+app.use('/calificaciones', calificacionesRouter);
 
 app.use((req, res) => res.status(404).json({ error: 'Ruta no encontrada: ' + req.method + ' ' + req.path }));
 
