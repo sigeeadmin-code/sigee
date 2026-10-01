@@ -2,11 +2,13 @@ import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchGradosConParalelos, fetchCargasDocente, fetchTodasCargas, fetchEstudiantesParalelo,
-  fetchAportesCarga, fetchConfigEvaluacion, fetchNotasParalelo, guardarNotasTrimestre, guardarSupletorios, guardarCasilleros
+  fetchAportesCarga, fetchConfigEvaluacion, fetchNotasParalelo, guardarNotasTrimestre, guardarSupletorios, guardarCasilleros,
+  fetchCedulasEstudiantes, fetchNombreDocente
 } from '../lib/data.js';
 import {
   TRIMESTRES, configPorDefecto, validarConfig, calcTrimestre, aplicarMejora, escalaDAAPA, calcAnual, aDos
 } from '../lib/calificaciones.js';
+import { documentoBoletas } from '../lib/boletaHTML.js';
 import Placeholder from './Placeholder.jsx';
 
 const ROLES_EDITAN = ['super_admin', 'admin_plantel', 'secretario', 'docente'];
@@ -291,7 +293,9 @@ function CuadroCalificaciones() {
 
       {vista === 'registro'
         ? <RegistroNotas {...{ cfg, alumnos, grid, calculos, editable, cargandoNotas, sucios, setCelda, setMejora }} />
-        : <CuadroParalelo paraleloId={paraleloId} cargas={cargasParalelo} periodoActivo={periodoActivo} puedeEditar={puedeEditar} />}
+        : <CuadroParalelo paraleloId={paraleloId} cargas={cargasParalelo} periodoActivo={periodoActivo} puedeEditar={puedeEditar}
+            institucion={institucion} cursoNombre={gradoSel?.nombre || ''} paraleloNombre={paralelosVisibles.find(p => p.id === paraleloId)?.nombre || ''}
+            tutorId={paralelosVisibles.find(p => p.id === paraleloId)?.tutor_docente_id || null} />}
     </div>
   );
 }
@@ -365,7 +369,7 @@ function RegistroNotas({ cfg, alumnos, grid, calculos, editable, cargandoNotas, 
   );
 }
 
-function CuadroParalelo({ paraleloId, cargas, periodoActivo, puedeEditar }) {
+function CuadroParalelo({ paraleloId, cargas, periodoActivo, puedeEditar, institucion, cursoNombre, paraleloNombre, tutorId }) {
   const [alumnos, setAlumnos] = useState([]);
   const [datos, setDatos] = useState({ notas: [], mejoras: [] });
   const [cargando, setCargando] = useState(false);
@@ -386,6 +390,34 @@ function CuadroParalelo({ paraleloId, cargas, periodoActivo, puedeEditar }) {
     });
     return () => { activo = false; };
   }, [paraleloId, periodoActivo?.id, idsCargas, recarga]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const imprimirBoletas = async soloEstudianteId => {
+    // La ventana se abre YA (dentro del clic) para que el navegador no la bloquee
+    const w = window.open('', '_blank');
+    if (!w) { setAviso({ ok: false, t: 'El navegador bloqueó la ventana. Permite ventanas emergentes para este sitio e inténtalo de nuevo.' }); return; }
+    w.document.write('<p style="font-family:sans-serif;padding:20px">Generando boletas…</p>');
+    try {
+      const lista = filas.filter(f => !soloEstudianteId || f.a.id === soloEstudianteId);
+      const [cedulas, tutorNombre] = await Promise.all([fetchCedulasEstudiantes(lista.map(f => f.a.id)), fetchNombreDocente(tutorId)]);
+      const fecha = new Date().toLocaleDateString('es-EC', { year: 'numeric', month: 'long', day: 'numeric' });
+      const datos = lista.map(f => ({
+        institucion, periodoNombre: periodoActivo.nombre, cursoNombre, paraleloNombre, tutorNombre,
+        tipo: modo, fechaEmision: fecha,
+        estudiante: { nombre: f.a.nombre, cedula: cedulas[f.a.id] || '' },
+        materias: f.porMateria.map(m => ({
+          nombre: m.carga.materiaNombre, trims: m.trims, promedio: m.anual.promedio,
+          final: m.anual.final, estado: m.anual.estado, supletorio: m.sup
+        }))
+      }));
+      w.document.open();
+      w.document.write(documentoBoletas(datos, `Boletas ${cursoNombre} ${paraleloNombre}`));
+      w.document.close();
+      setTimeout(() => { try { w.focus(); w.print(); } catch (e) { /* el usuario puede imprimir manualmente */ } }, 500);
+    } catch (e) {
+      w.close();
+      setAviso({ ok: false, t: 'No se pudieron generar las boletas: ' + (e.message || e) });
+    }
+  };
 
   const guardarSup = async carga => {
     const regs = Object.entries(supEdit)
@@ -414,7 +446,7 @@ function CuadroParalelo({ paraleloId, cargas, periodoActivo, puedeEditar }) {
         const trims = TRIMESTRES.map(t => notaDe(a.id, c.id, t));
         const sup = datos.mejoras.find(m => m.estudiante_id === a.id && m.docente_materia_id === c.id && m.periodo_evaluativo === 'SUP');
         const anual = calcAnual(trims, sup?.supletorio == null ? null : Number(sup.supletorio));
-        return { carga: c, trims, anual };
+        return { carga: c, trims, anual, sup: sup?.supletorio == null ? null : Number(sup.supletorio) };
       });
       const valor = m => (modo === 'anual' ? m.anual.final : m.trims[TRIMESTRES.indexOf(modo)]);
       const vals = porMateria.map(valor).filter(v => v !== null);
@@ -437,6 +469,10 @@ function CuadroParalelo({ paraleloId, cargas, periodoActivo, puedeEditar }) {
         {['T1', 'T2', 'T3', 'anual'].map(m => (
           <button key={m} className={'btn btn-sm ' + (modo === m ? 'btn-primary' : 'btn-secondary')} onClick={() => setModo(m)}>{m === 'anual' ? 'Promedio anual' : TRIM_LABEL[m]}</button>
         ))}
+        <span style={{ flex: 1 }} />
+        <button className="btn btn-secondary btn-sm" onClick={() => imprimirBoletas(null)} title="Imprime las boletas del período que está seleccionado arriba">
+          🖨 Imprimir boletas ({modo === 'anual' ? 'informe anual' : TRIM_LABEL[modo]})
+        </button>
       </div>
       <div className="cb" style={{ padding: 0, overflowX: 'auto' }}>
         <table className="data">
@@ -445,6 +481,7 @@ function CuadroParalelo({ paraleloId, cargas, periodoActivo, puedeEditar }) {
             {cargas.map(c => <th key={c.id} style={{ textAlign: 'center' }}>{c.materiaNombre}</th>)}
             <th style={{ textAlign: 'center' }}>Promedio</th>
             <th style={{ textAlign: 'center' }}>Estado</th>
+            <th style={{ textAlign: 'center' }}>Boleta</th>
           </tr></thead>
           <tbody>
             {filas.map(f => (
@@ -457,6 +494,7 @@ function CuadroParalelo({ paraleloId, cargas, periodoActivo, puedeEditar }) {
                 })}
                 <td style={{ textAlign: 'center', fontWeight: 700 }}>{fmt(f.general)}</td>
                 <td style={{ textAlign: 'center' }}><span className={'badge ' + ESTADO_BADGE[f.estado]}>{ESTADO_LABEL[f.estado]}</span></td>
+                <td style={{ textAlign: 'center' }}><button className="btn btn-secondary btn-sm" title="Ver / imprimir la boleta de este estudiante" onClick={() => imprimirBoletas(f.a.id)}>📄</button></td>
               </tr>
             ))}
           </tbody>

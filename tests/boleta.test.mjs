@@ -1,0 +1,38 @@
+import assert from 'node:assert/strict';
+import { boletaHTML, documentoBoletas, esc } from '../src/lib/boletaHTML.js';
+
+const base = {
+  institucion: { nombre: 'Colegio <Lumen>', amie: '07H00001', logo_url: 'javascript:alert(1)', rector: 'Mgs. Ana' },
+  periodoNombre: '2026-2027', cursoNombre: '1ro BGU', paraleloNombre: 'A', tutorNombre: 'Juan "Tutor"',
+  fechaEmision: '1 de octubre de 2026',
+  estudiante: { nombre: 'Pérez <script>alert(1)</script> Ana', cedula: '0102030405' },
+  materias: [
+    { nombre: 'Matemática', trims: [8, 8, 8], promedio: 8, final: 8, estado: 'aprobado', supletorio: null },
+    { nombre: 'Física', trims: [6, 6, 6], promedio: 6, final: 7, estado: 'aprobado', supletorio: 7 },
+    { nombre: 'Química', trims: [3, 3, null], promedio: 3, final: 3, estado: 'pendiente', supletorio: null }
+  ]
+};
+assert.equal(esc('<a href="x">&</a>'), '&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;');
+
+let h = boletaHTML({ ...base, tipo: 'anual' });
+assert.ok(!h.includes('<script>'), 'el nombre del estudiante debe escaparse');
+assert.ok(!h.includes('javascript:'), 'un logo con esquema no http(s) no se incluye');
+assert.ok(h.includes('COLEGIO &lt;LUMEN&gt;'));
+assert.ok(h.includes('INFORME FINAL ANUAL'));
+assert.ok(h.includes('Juan &quot;Tutor&quot;'));
+assert.ok(h.includes('Año lectivo 2026-2027'));
+// promedio general = (8 + 7 + 3)/3 = 6.00 (usa el final, no el promedio)
+assert.ok(h.includes('>6.00<'), 'promedio general anual');
+assert.ok(h.includes('Año lectivo en curso'), 'resumen con notas pendientes');
+
+h = boletaHTML({ ...base, tipo: 'T2', institucion: { ...base.institucion, logo_url: 'https://x.test/logo.png' } });
+assert.ok(h.includes('INFORME DE PROGRESO · 2DO TRIMESTRE'));
+assert.ok(h.includes('<img src="https://x.test/logo.png"'));
+assert.ok(!h.includes('>NE<'), 'en T2 todas las materias tienen nota');
+h = boletaHTML({ ...base, tipo: 'T3' });
+assert.ok(h.includes('>NE<'), 'Química sin nota en T3 muestra NE');
+
+const doc = documentoBoletas([{ ...base, tipo: 'anual' }, { ...base, tipo: 'anual' }]);
+assert.equal((doc.match(/<section class="boleta">/g) || []).length, 2);
+assert.ok(doc.includes('page-break-after'));
+console.log('OK boleta: todas las pruebas pasaron');

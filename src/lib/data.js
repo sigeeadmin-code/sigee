@@ -1502,3 +1502,16 @@ export async function guardarCasilleros(docenteMateriaId, casilleros) {
   }
   throw new Error('No se pudo conectar con el servidor. Revisa tu internet e inténtalo de nuevo.' + (ultimoError?.message ? ` (${ultimoError.message})` : ''));
 }
+
+/* ── Boletas: datos extra (solo lectura) ── */
+export async function fetchCedulasEstudiantes(ids) {
+  if (!ids.length) return {};
+  const rows = await sel('estudiantes', 'id, cedula', q => q.in('id', ids));
+  return Object.fromEntries(rows.map(r => [r.id, r.cedula || '']));
+}
+export async function fetchNombreDocente(docenteId) {
+  if (!docenteId) return '';
+  const rows = await sel('docentes', 'id, nombres, apellidos', q => q.eq('id', docenteId));
+  const r = rows[0];
+  return r ? `${r.nombres || ''} ${r.apellidos || ''}`.trim() : '';
+}
