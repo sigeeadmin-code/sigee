@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchGradosConParalelos, fetchCargasDocente, fetchTodasCargas, fetchEstudiantesParalelo,
-  fetchAportesCarga, fetchConfigEvaluacion, fetchNotasParalelo, guardarNotasTrimestre, guardarSupletorios
+  fetchAportesCarga, fetchConfigEvaluacion, fetchNotasParalelo, guardarNotasTrimestre, guardarSupletorios, guardarCasilleros
 } from '../lib/data.js';
 import {
   TRIMESTRES, configPorDefecto, validarConfig, calcTrimestre, aplicarMejora, escalaDAAPA, calcAnual, aDos
@@ -59,6 +59,9 @@ function CuadroCalificaciones() {
   const [cargandoNotas, setCargandoNotas] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [toast, setToast] = useState(null);
+  const [panelCas, setPanelCas] = useState(false);
+  const [casEdit, setCasEdit] = useState(null);
+  const [guardandoCas, setGuardandoCas] = useState(false);
 
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t); }, [toast]);
 
@@ -94,12 +97,13 @@ function CuadroCalificaciones() {
   const cargasParalelo = useMemo(() => cargasTodas.filter(c => c.paraleloId === paraleloId), [cargasTodas, paraleloId]);
 
   useEffect(() => { setCargaId(cargasParalelo[0]?.id || ''); }, [cargasParalelo]);
+  useEffect(() => { setPanelCas(false); }, [cargaId, vista]);
 
   // Configuración de evaluación del paralelo (o la general de la institución, o la de MAQUETA)
   useEffect(() => {
     if (!institucionId || !paraleloId) return;
-    fetchConfigEvaluacion(institucionId, paraleloId).then(c => setCfg(c && validarConfig(c).length === 0 ? c : configPorDefecto()));
-  }, [institucionId, paraleloId]);
+    fetchConfigEvaluacion(institucionId, paraleloId, cargaId || null).then(c => setCfg(c && validarConfig(c).length === 0 ? c : configPorDefecto()));
+  }, [institucionId, paraleloId, cargaId]);
 
   // Notas guardadas de la carga + trimestre
   const cargarNotas = useCallback(async () => {
@@ -161,6 +165,25 @@ function CuadroCalificaciones() {
     ['ind', 'grp', 'sum'].some(t => r[t].some(arr => arr.some(v => !celdaValida(v)))) ||
     Object.values(r.mejora).some(v => !celdaValida(v))), [grid]);
 
+  const abrirCasilleros = () => {
+    if (hayCambios) { setToast({ ok: false, t: 'Primero guarda las notas pendientes y luego cambia los casilleros.' }); return; }
+    setCasEdit({ ind: cfg.ind.map(g => String(g.n)), grp: cfg.grp.map(g => String(g.n)), sum: cfg.sum.map(g => String(g.n)) });
+    setPanelCas(true);
+  };
+  const guardarCas = async () => {
+    const todos = [...casEdit.ind, ...casEdit.grp, ...casEdit.sum];
+    if (todos.some(v => !(Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= 10))) {
+      setToast({ ok: false, t: 'Cada rubro debe tener entre 1 y 10 casilleros.' }); return;
+    }
+    setGuardandoCas(true);
+    try {
+      const r = await guardarCasilleros(cargaId, { ind: casEdit.ind.map(Number), grp: casEdit.grp.map(Number), sum: casEdit.sum.map(Number) });
+      setCfg(r.config); setPanelCas(false);
+      setToast({ ok: true, t: 'Casilleros actualizados para esta materia. Las notas ya guardadas no cambian.' });
+    } catch (e) { setToast({ ok: false, t: e.message }); }
+    setGuardandoCas(false);
+  };
+
   const guardar = async () => {
     if (hayInvalidas) { setToast({ ok: false, t: 'Hay notas fuera de rango (0 a 10). Corrígelas antes de guardar.' }); return; }
     const registros = alumnos.filter(a => sucios[a.id]).map(a => ({ estudiante_id: a.id, aportes: grid[a.id], mejora: grid[a.id].mejora }));
@@ -189,6 +212,9 @@ function CuadroCalificaciones() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className={'btn btn-sm ' + (vista === 'registro' ? 'btn-primary' : 'btn-secondary')} onClick={() => { if (confirmarDescarte()) setVista('registro'); }}>Registro de notas</button>
           <button className={'btn btn-sm ' + (vista === 'cuadro' ? 'btn-primary' : 'btn-secondary')} onClick={() => { if (confirmarDescarte()) setVista('cuadro'); }}>Cuadro del paralelo</button>
+          {vista === 'registro' && editable && (
+            <button className="btn btn-secondary btn-sm" onClick={() => (panelCas ? setPanelCas(false) : abrirCasilleros())}>⚙ Casilleros</button>
+          )}
           {vista === 'registro' && editable && (
             <button className="btn btn-success btn-sm" disabled={guardando || !hayCambios} onClick={guardar}>{guardando ? 'Guardando…' : '💾 Guardar trimestre'}</button>
           )}
@@ -233,6 +259,35 @@ function CuadroCalificaciones() {
           </div>}
         </div>
       </div></div>
+
+      {vista === 'registro' && panelCas && casEdit && (
+        <div className="card" style={{ marginBottom: 14 }}><div className="cb">
+          <h3 style={{ margin: '0 0 4px', fontSize: 15 }}>Casilleros por rubro · esta materia</h3>
+          <p style={{ margin: '0 0 12px', fontSize: 12, color: 'var(--slate)' }}>
+            Elige cuántas notas vas a registrar en cada rubro (de 1 a 10). El peso de cada rubro lo define la administración y no cambia.
+            No puedes quitar casilleros que ya tengan notas guardadas.
+          </p>
+          {[['ind', 'Individuales'], ['grp', 'Grupales'], ['sum', 'Sumativas']].map(([tipo, titulo]) => (
+            <div key={tipo} style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--slate)', textTransform: 'uppercase', marginBottom: 6 }}>{titulo}</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                {cfg[tipo].map((g, i) => (
+                  <label key={g.nombre} style={{ fontSize: 12 }}>
+                    <div style={{ marginBottom: 3 }}>{g.nombre} <span style={{ color: 'var(--slate)' }}>(peso {g.peso})</span></div>
+                    <input type="number" min="1" max="10" value={casEdit[tipo][i]}
+                      onChange={e => setCasEdit(p => ({ ...p, [tipo]: p[tipo].map((v, k) => (k === i ? e.target.value : v)) }))}
+                      style={{ width: 64, textAlign: 'center', padding: '5px 4px', border: '1px solid var(--line)', borderRadius: 6 }} />
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+          <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+            <button className="btn btn-success btn-sm" disabled={guardandoCas} onClick={guardarCas}>{guardandoCas ? 'Guardando…' : 'Aplicar casilleros'}</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setPanelCas(false)}>Cancelar</button>
+          </div>
+        </div></div>
+      )}
 
       {vista === 'registro'
         ? <RegistroNotas {...{ cfg, alumnos, grid, calculos, editable, cargandoNotas, sucios, setCelda, setMejora }} />

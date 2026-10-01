@@ -1409,9 +1409,12 @@ export async function fetchAportesCarga(docenteMateriaId, periodoEvaluativo) {
   ]);
   return { aportes, mejoras };
 }
-export async function fetchConfigEvaluacion(institucionId, paraleloId) {
-  const rows = await sel('config_evaluacion', 'paralelo_id, config', q => q.eq('institucion_id', institucionId));
-  return (rows.find(r => r.paralelo_id === paraleloId) || rows.find(r => r.paralelo_id === null))?.config || null;
+export async function fetchConfigEvaluacion(institucionId, paraleloId, docenteMateriaId = null) {
+  const rows = await sel('config_evaluacion', 'paralelo_id, docente_materia_id, config', q => q.eq('institucion_id', institucionId));
+  const deCarga = docenteMateriaId && rows.find(r => r.docente_materia_id === docenteMateriaId);
+  const deParalelo = rows.find(r => !r.docente_materia_id && r.paralelo_id === paraleloId);
+  const general = rows.find(r => !r.docente_materia_id && r.paralelo_id === null);
+  return (deCarga || deParalelo || general)?.config || null;
 }
 export async function fetchNotasParalelo(cargaIds) {
   if (!cargaIds.length) return { notas: [], mejoras: [] };
@@ -1465,6 +1468,32 @@ export async function guardarSupletorios(docenteMateriaId, registros) {
       if ([502, 503, 504].includes(resp.status)) { ultimoError = new Error('El servidor está iniciando.'); continue; }
       const body = await resp.json().catch(() => ({}));
       if (!resp.ok) throw Object.assign(new Error(body.error || `Error del servidor (${resp.status}) al guardar el supletorio.`), { definitivo: true });
+      return body;
+    } catch (err) {
+      if (err.definitivo) throw err;
+      ultimoError = err;
+    }
+  }
+  throw new Error('No se pudo conectar con el servidor. Revisa tu internet e inténtalo de nuevo.' + (ultimoError?.message ? ` (${ultimoError.message})` : ''));
+}
+
+export async function guardarCasilleros(docenteMateriaId, casilleros) {
+  const { data: sesion } = await supabase.auth.getSession();
+  const token = sesion?.session?.access_token;
+  if (!token) throw new Error('Sesión expirada. Vuelve a iniciar sesión.');
+  const opciones = {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ docente_materia_id: docenteMateriaId, casilleros })
+  };
+  let ultimoError = null;
+  for (const espera of [0, 2500, 5000]) {
+    if (espera) await new Promise(r => setTimeout(r, espera));
+    try {
+      const resp = await fetch(`${API_URL}/calificaciones/config-carga`, opciones);
+      if ([502, 503, 504].includes(resp.status)) { ultimoError = new Error('El servidor está iniciando.'); continue; }
+      const body = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw Object.assign(new Error(body.error || `Error del servidor (${resp.status}) al guardar los casilleros.`), { definitivo: true });
       return body;
     } catch (err) {
       if (err.definitivo) throw err;

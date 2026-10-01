@@ -26,12 +26,14 @@ async function cargarCarga(docenteMateriaId) {
   };
 }
 
-async function configEfectiva(institucionId, paraleloId) {
+async function configEfectiva(institucionId, paraleloId, docenteMateriaId = null) {
   const { data } = await supabase.from('config_evaluacion')
-    .select('paralelo_id, config').eq('institucion_id', institucionId);
-  const propia = (data || []).find(r => r.paralelo_id === paraleloId);
-  const general = (data || []).find(r => r.paralelo_id === null);
-  return (propia || general)?.config || configPorDefecto();
+    .select('paralelo_id, docente_materia_id, config').eq('institucion_id', institucionId);
+  const filas = data || [];
+  const deCarga = docenteMateriaId && filas.find(r => r.docente_materia_id === docenteMateriaId);
+  const deParalelo = filas.find(r => !r.docente_materia_id && r.paralelo_id === paraleloId);
+  const general = filas.find(r => !r.docente_materia_id && r.paralelo_id === null);
+  return (deCarga || deParalelo || general)?.config || configPorDefecto();
 }
 
 const esVacio = v => v === null || v === undefined || v === '';
@@ -68,7 +70,7 @@ calificacionesRouter.post('/', requireAuth, async (req, res) => {
   if (mErr) return res.status(500).json({ error: mErr.message });
   const permitidos = new Set((mats || []).map(m => m.estudiante_id));
 
-  const cfg = await configEfectiva(carga.institucionId, carga.paraleloId);
+  const cfg = await configEfectiva(carga.institucionId, carga.paraleloId, carga.id);
   const errCfg = validarConfig(cfg);
   if (errCfg.length) return res.status(500).json({ error: 'Configuración de evaluación inválida: ' + errCfg.join(' ') });
 
@@ -182,7 +184,7 @@ calificacionesRouter.put('/config', requireAuth, async (req, res) => {
   }
   const inst = req.profile.institucion_id;
   const { data: ya } = await supabase.from('config_evaluacion').select('id').eq('institucion_id', inst)
-    [paralelo_id ? 'eq' : 'is']('paralelo_id', paralelo_id).maybeSingle();
+    .is('docente_materia_id', null)[paralelo_id ? 'eq' : 'is']('paralelo_id', paralelo_id).maybeSingle();
   const fila = { institucion_id: inst, paralelo_id, config, updated_by: req.profile.id, updated_at: new Date().toISOString() };
   const { error } = ya
     ? await supabase.from('config_evaluacion').update(fila).eq('id', ya.id)
@@ -249,4 +251,62 @@ calificacionesRouter.post('/supletorio', requireAuth, async (req, res) => {
     if (error) return res.status(500).json({ error: error.message });
   }
   res.status(201).json({ guardados: guardar.length, eliminados: borrar.length });
+});
+
+// PUT /calificaciones/config-carga
+// body: { docente_materia_id, casilleros: { ind:[n,...], grp:[n,...], sum:[n,...] } }
+// El docente elige SOLO cuántos casilleros usa en cada rubro. Nombres y pesos se heredan de la
+// configuración vigente del paralelo/institución (los pesos 70/30 los define administración).
+// Nunca se permite reducir un rubro por debajo de la última casilla que ya tiene notas.
+calificacionesRouter.put('/config-carga', requireAuth, async (req, res) => {
+  const { docente_materia_id, casilleros } = req.body || {};
+  if (!docente_materia_id || !casilleros) return res.status(400).json({ error: 'Faltan docente_materia_id o casilleros.' });
+  if (!ROLES_ESCRITURA.includes(req.profile.rol)) return res.status(403).json({ error: 'Tu rol no puede configurar casilleros.' });
+  const carga = await cargarCarga(docente_materia_id);
+  if (!carga) return res.status(404).json({ error: 'Carga docente no encontrada.' });
+  if (req.profile.rol !== 'super_admin' && carga.institucionId !== req.profile.institucion_id) {
+    return res.status(403).json({ error: 'Esa carga académica no pertenece a tu institución.' });
+  }
+  if (req.profile.rol === 'docente' && carga.docenteProfileId !== req.profile.id) {
+    return res.status(403).json({ error: 'Esa carga académica no te pertenece.' });
+  }
+  if (carga.nivel !== 'BGU') return res.status(422).json({ error: 'Por ahora solo Bachillerato (BGU).' });
+
+  const base = await configEfectiva(carga.institucionId, carga.paraleloId, null);
+  const nueva = JSON.parse(JSON.stringify(base));
+  for (const tipo of TIPOS) {
+    const ns = casilleros[tipo];
+    if (!Array.isArray(ns) || ns.length !== base[tipo].length) {
+      return res.status(400).json({ error: `Se esperaban ${base[tipo].length} valores en '${tipo}'.` });
+    }
+    ns.forEach((n, i) => { nueva[tipo][i].n = Number(n); });
+  }
+  const errores = validarConfig(nueva);
+  if (errores.length) return res.status(400).json({ error: errores.join(' ') });
+
+  // Protección de datos: no se puede quitar un casillero que ya tiene una nota guardada
+  for (const tipo of TIPOS) {
+    for (let g = 0; g < nueva[tipo].length; g++) {
+      if (nueva[tipo][g].n >= 10) continue; // 10 es el máximo: no puede haber notas más allá
+      const { count, error } = await supabase.from('calificaciones_aportes')
+        .select('id', { count: 'exact', head: true })
+        .eq('docente_materia_id', docente_materia_id).eq('tipo', tipo).eq('grupo', g).gte('actividad', nueva[tipo][g].n);
+      if (error) return res.status(500).json({ error: error.message });
+      if (count > 0) {
+        return res.status(422).json({ error: `No se puede reducir '${nueva[tipo][g].nombre}' a ${nueva[tipo][g].n} casillero(s): ya hay ${count} nota(s) guardadas en casilleros posteriores. Bórralas primero si realmente quieres quitarlos.` });
+      }
+    }
+  }
+
+  const { data: ya } = await supabase.from('config_evaluacion').select('id')
+    .eq('institucion_id', carga.institucionId).eq('docente_materia_id', docente_materia_id).maybeSingle();
+  const fila = {
+    institucion_id: carga.institucionId, paralelo_id: carga.paraleloId, docente_materia_id,
+    config: nueva, updated_by: req.profile.id, updated_at: new Date().toISOString()
+  };
+  const { error } = ya
+    ? await supabase.from('config_evaluacion').update(fila).eq('id', ya.id)
+    : await supabase.from('config_evaluacion').insert(fila);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true, config: nueva });
 });
