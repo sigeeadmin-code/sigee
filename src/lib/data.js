@@ -1515,3 +1515,22 @@ export async function fetchNombreDocente(docenteId) {
   const r = rows[0];
   return r ? `${r.nombres || ''} ${r.apellidos || ''}`.trim() : '';
 }
+
+/* ── Vista de estudiante / representante: sus propias notas y datos para la boleta ── */
+export async function fetchBoletaEstudiante(estudianteId, periodoId) {
+  const { data: est } = await supabase.from('estudiantes').select('id, nombres, apellidos, cedula').eq('id', estudianteId).single();
+  if (!est) return null;
+  const matricula = (await sel('matriculas', '*', q => q.eq('estudiante_id', estudianteId).eq('periodo_id', periodoId).eq('estado', 'activa').limit(1)))[0] || null;
+  if (!matricula?.paralelo_id) return { estudiante: est, matricula: null };
+  const [{ data: paralelo }, { data: grado }, cargas] = await Promise.all([
+    supabase.from('paralelos').select('id, nombre, tutor_docente_id').eq('id', matricula.paralelo_id).single(),
+    matricula.grado_id ? supabase.from('grados').select('id, nombre, nivel').eq('id', matricula.grado_id).single() : Promise.resolve({ data: null }),
+    fetchMateriasParalelo(matricula.paralelo_id, periodoId)
+  ]);
+  const ids = cargas.map(c => c.id);
+  const [notas, mejoras] = ids.length ? await Promise.all([
+    sel('calificaciones', 'docente_materia_id, periodo_evaluativo, nota', q => q.eq('estudiante_id', estudianteId).in('docente_materia_id', ids)),
+    sel('calificaciones_mejoras', 'docente_materia_id, periodo_evaluativo, supletorio', q => q.eq('estudiante_id', estudianteId).eq('periodo_evaluativo', 'SUP').in('docente_materia_id', ids))
+  ]) : [[], []];
+  return { estudiante: est, matricula, paralelo, grado, cargas, notas, mejoras };
+}

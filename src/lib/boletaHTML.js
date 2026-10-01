@@ -1,6 +1,6 @@
 // Genera el HTML imprimible de la boleta (informe de aprendizaje) de un estudiante de Bachillerato.
 // Módulo puro: recibe datos ya calculados y devuelve texto. Todo dato libre se escapa.
-import { escalaDAAPA } from './calificaciones.js';
+import { escalaDAAPA, calcAnual, TRIMESTRES } from './calificaciones.js';
 
 export const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const f2 = n => (n === null || n === undefined ? '—' : Number(n).toFixed(2));
@@ -118,4 +118,19 @@ export function boletaHTML(d) {
 
 export function documentoBoletas(listaDatos, tituloVentana = 'Boletas') {
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${esc(tituloVentana)}</title><style>${ESTILOS_BOLETA}</style></head><body>${listaDatos.map(boletaHTML).join('\n')}</body></html>`;
+}
+
+// Arma las filas de materias de UN estudiante a partir de las cargas, sus notas definitivas y sus supletorios.
+// cargas: [{ id, materiaNombre }] · notas: [{ docente_materia_id, periodo_evaluativo, nota }] · mejoras: [{ docente_materia_id, supletorio }]
+export function materiasParaBoleta(cargas, notas, mejoras) {
+  return cargas.map(c => {
+    const trims = TRIMESTRES.map(t => {
+      const n = notas.find(x => x.docente_materia_id === c.id && x.periodo_evaluativo === t);
+      return n ? Number(n.nota) : null;
+    });
+    const sup = mejoras.find(x => x.docente_materia_id === c.id && x.supletorio != null);
+    const supletorio = sup ? Number(sup.supletorio) : null;
+    const anual = calcAnual(trims, supletorio);
+    return { nombre: c.materiaNombre, trims, promedio: anual.promedio, final: anual.final, estado: anual.estado, supletorio };
+  });
 }

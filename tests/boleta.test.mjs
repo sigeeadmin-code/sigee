@@ -36,3 +36,19 @@ const doc = documentoBoletas([{ ...base, tipo: 'anual' }, { ...base, tipo: 'anua
 assert.equal((doc.match(/<section class="boleta">/g) || []).length, 2);
 assert.ok(doc.includes('page-break-after'));
 console.log('OK boleta: todas las pruebas pasaron');
+
+// materiasParaBoleta
+import { materiasParaBoleta } from '../src/lib/boletaHTML.js';
+const m = materiasParaBoleta(
+  [{ id: 'a', materiaNombre: 'Matemática' }, { id: 'b', materiaNombre: 'Física' }, { id: 'c', materiaNombre: 'Química' }],
+  [
+    ...['T1', 'T2', 'T3'].map(t => ({ docente_materia_id: 'a', periodo_evaluativo: t, nota: '8.50' })),
+    ...['T1', 'T2', 'T3'].map(t => ({ docente_materia_id: 'b', periodo_evaluativo: t, nota: 6 })),
+    { docente_materia_id: 'c', periodo_evaluativo: 'T1', nota: 9 }
+  ],
+  [{ docente_materia_id: 'b', supletorio: '7.5' }]
+);
+assert.equal(m[0].final, 8.5); assert.equal(m[0].estado, 'aprobado');
+assert.equal(m[1].final, 7); assert.equal(m[1].estado, 'aprobado'); assert.equal(m[1].supletorio, 7.5);
+assert.equal(m[2].estado, 'pendiente'); assert.deepEqual(m[2].trims, [9, null, null]);
+console.log('OK boleta: materiasParaBoleta');

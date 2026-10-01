@@ -9,6 +9,7 @@ import {
   TRIMESTRES, configPorDefecto, validarConfig, calcTrimestre, aplicarMejora, escalaDAAPA, calcAnual, aDos
 } from '../lib/calificaciones.js';
 import { documentoBoletas } from '../lib/boletaHTML.js';
+import MisCalificaciones from './MisCalificaciones.jsx';
 import Placeholder from './Placeholder.jsx';
 
 const ROLES_EDITAN = ['super_admin', 'admin_plantel', 'secretario', 'docente'];
@@ -32,8 +33,9 @@ const aNum = v => (v === '' || v === null || v === undefined ? null : Number(v))
 export default function Calificaciones() {
   const { profile } = useSession();
   const rolDb = profile?.rolDb;
+  if (rolDb === 'estudiante' || rolDb === 'padre') return <MisCalificaciones />;
   if (!ROLES_EDITAN.includes(rolDb) && !ROLES_CONSULTA.includes(rolDb)) {
-    return <Placeholder title="Calificaciones — vista de estudiantes y representantes (próxima fase)" />;
+    return <Placeholder title="Calificaciones" />;
   }
   return <CuadroCalificaciones />;
 }
