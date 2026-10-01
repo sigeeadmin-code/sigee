@@ -3,7 +3,7 @@ import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchDocentePerfil, crearDocente, guardarDocentePerfil, subirArchivo,
   fetchCargasPorDocenteId, crearCargaDocente, eliminarCargaDocente,
-  fetchMaterias, fetchGradosConParalelos, fetchPeriodos
+  fetchMaterias, fetchGradosConParalelos, fetchPeriodos, crearUsuario
 } from '../lib/data.js';
 import { descargarPlantillaExcel, leerExcel, normalizarFecha, validarCedulaEC } from '../lib/cargaMasiva.js';
 
@@ -84,6 +84,7 @@ export default function Docentes() {
   const [cargas, setCargas] = useState([]);
   const [catalogo, setCatalogo] = useState({ materias: [], grados: [], periodos: [] });
   const [nuevaCarga, setNuevaCarga] = useState({ materiaId: '', gradoId: '', paraleloId: '', periodoId: '' });
+  const [acceso, setAcceso] = useState(null); // { docente, email, password, guardando, error, creado }
   const [masivo, setMasivo] = useState(null); // { filas: [{payload, errores, fila}], subiendo, resultado }
 
   useEffect(() => { setDocentes(data?.docentes || []); }, [data]);
@@ -222,6 +223,41 @@ export default function Docentes() {
     setMasivo(m => ({ ...m, subiendo: false, resultado: { creados, fallos } }));
   }
 
+  function generarClave() {
+    const letras = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+    const bytes = new Uint32Array(10);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, b => letras[b % letras.length]).join('');
+  }
+  function abrirDarAcceso(d) {
+    setAcceso({ docente: d, email: d.email || '', password: generarClave(), guardando: false, error: '', creado: false });
+  }
+  async function crearAcceso(e) {
+    e.preventDefault();
+    const a = acceso;
+    const email = a.email.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email)) { setAcceso({ ...a, error: 'Escribe un correo válido (con él iniciará sesión).' }); return; }
+    if (a.password.length < 8) { setAcceso({ ...a, error: 'La contraseña debe tener al menos 8 caracteres.' }); return; }
+    setAcceso({ ...a, guardando: true, error: '' });
+    try {
+      const perfil = await fetchDocentePerfil(a.docente.id);
+      if (!perfil) throw new Error('No se pudo leer la ficha del docente.');
+      await crearUsuario({
+        email, password: a.password, rol: 'docente', docente_id: a.docente.id,
+        nombres: perfil.nombres || a.docente.nombre, apellidos: perfil.apellidos || a.docente.nombre,
+        cedula: perfil.cedula || undefined, telefono: perfil.telefono || undefined
+      });
+      setAcceso(x => ({ ...x, guardando: false, creado: true, email }));
+      setDocentes(ds => ds.map(x => x.id === a.docente.id ? { ...x, acceso: true, email } : x));
+      refrescarDatos();
+    } catch (err) {
+      let msg = err.message || 'No se pudo crear el acceso.';
+      // las funciones de Supabase devuelven el detalle dentro de la respuesta
+      try { const j = await err.context?.json?.(); if (j?.error) msg = j.error; } catch (_) { /* se queda el mensaje genérico */ }
+      setAcceso(x => ({ ...x, guardando: false, error: msg }));
+    }
+  }
+
   async function toggleActivo(d) {
     if (!puedeActivarDesactivar) return;
     const nuevoValor = !d.activo;
@@ -333,6 +369,55 @@ export default function Docentes() {
         </select>
       </div>
 
+      {acceso && (
+        <div className="modal-bg open" onClick={ev => { if (ev.target === ev.currentTarget && !acceso.guardando) setAcceso(null); }}>
+          {!acceso.creado ? (
+            <form className="modal" onSubmit={crearAcceso} style={{ maxWidth: 480 }}>
+              <div className="modal-h"><h3>Dar acceso a {acceso.docente.nombre}</h3></div>
+              <div className="modal-b">
+                <p style={{ fontSize: 13, marginBottom: 12 }}>
+                  Se creará un usuario con rol <strong>Docente</strong> enlazado a su ficha, para que vea sus cursos y materias.
+                </p>
+                <div className="form-grid">
+                  <div className="full">
+                    <label className="fl">Correo (será su usuario)</label>
+                    <input className="fc" type="email" value={acceso.email} onChange={ev => setAcceso(a => ({ ...a, email: ev.target.value }))} placeholder="docente@correo.com" autoFocus />
+                  </div>
+                  <div className="full">
+                    <label className="fl">Contraseña inicial</label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input className="fc" style={{ fontFamily: 'monospace' }} value={acceso.password} onChange={ev => setAcceso(a => ({ ...a, password: ev.target.value }))} />
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAcceso(a => ({ ...a, password: generarClave() }))}>Generar otra</button>
+                    </div>
+                  </div>
+                </div>
+                {acceso.error && <p style={{ color: 'var(--red)', fontSize: 13, marginTop: 10 }}>{acceso.error}</p>}
+              </div>
+              <div className="modal-f">
+                <button type="button" className="btn btn-secondary" disabled={acceso.guardando} onClick={() => setAcceso(null)}>Cancelar</button>
+                <button type="submit" className="btn btn-primary" disabled={acceso.guardando}>{acceso.guardando ? 'Creando…' : 'Crear acceso'}</button>
+              </div>
+            </form>
+          ) : (
+            <div className="modal" style={{ maxWidth: 460 }}>
+              <div className="modal-h"><h3>Acceso creado</h3></div>
+              <div className="modal-b">
+                <p style={{ fontSize: 13, marginBottom: 12 }}>
+                  Copia estos datos ahora y entrégalos al docente por un canal seguro: la contraseña no se puede volver a consultar. Le conviene cambiarla al entrar por primera vez.
+                </p>
+                <div className="form-grid">
+                  <div className="full"><label className="fl">Correo</label><input className="fc" readOnly value={acceso.email} onFocus={ev => ev.target.select()} /></div>
+                  <div className="full"><label className="fl">Contraseña</label><input className="fc" readOnly style={{ fontFamily: 'monospace' }} value={acceso.password} onFocus={ev => ev.target.select()} /></div>
+                </div>
+              </div>
+              <div className="modal-f">
+                <button type="button" className="btn btn-primary" onClick={() => { navigator.clipboard?.writeText(`Correo: ${acceso.email}\nContraseña: ${acceso.password}`); setAcceso(null); }}>Copiar y cerrar</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="card">
         <table className="data" style={{ width: '100%' }}>
           <thead>
@@ -355,7 +440,13 @@ export default function Docentes() {
                 <td style={{ fontSize: 11 }}>{d.especialidad || (d.materias || [])[0] || '—'}</td>
                 <td style={{ fontSize: 11 }}>{d.area || '—'}</td>
                 <td style={{ color: 'var(--green)', fontWeight: 700 }}>{anios(d.fechaIngreso)}</td>
-                <td>{d.acceso ? <span className="badge b-ok">Activo</span> : <span className="badge b-muted">Sin acceso</span>}</td>
+                <td>
+                  {d.acceso
+                    ? <span className="badge b-ok">Activo</span>
+                    : (puedeActivarDesactivar && d.activo
+                        ? <button className="btn btn-secondary btn-sm" title="Crear usuario y contraseña para este docente" onClick={() => abrirDarAcceso(d)}>🔑 Dar acceso</button>
+                        : <span className="badge b-muted">Sin acceso</span>)}
+                </td>
                 <td>
                   {puedeActivarDesactivar ? (
                     <button
