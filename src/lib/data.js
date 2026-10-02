@@ -1534,3 +1534,47 @@ export async function fetchBoletaEstudiante(estudianteId, periodoId) {
   ]) : [[], []];
   return { estudiante: est, matricula, paralelo, grado, cargas, notas, mejoras };
 }
+
+/* ── Horario: jornada (franjas y recreos), cargas para el generador y aplicación atómica ── */
+export async function fetchHorarioConfig(institucionId) {
+  if (!institucionId) return null;
+  const rows = await sel('horario_config', 'franjas', q => q.eq('institucion_id', institucionId));
+  return rows[0]?.franjas || null;
+}
+export async function guardarHorarioConfig(institucionId, franjas, profileId) {
+  const { error } = await supabase.from('horario_config')
+    .upsert({ institucion_id: institucionId, franjas, updated_by: profileId || null, updated_at: new Date().toISOString() });
+  if (error) throw error;
+}
+export async function eliminarBloquesHorario(ids) {
+  if (!ids.length) return;
+  const { error } = await supabase.from('horario_bloques').delete().in('id', ids);
+  if (error) throw error;
+}
+/** Todas las cargas (con o sin docente) de los paralelos indicados en el período, con horas por semana. */
+export async function fetchCargasHorario(institucionId, periodoId, paraleloIds) {
+  if (!paraleloIds.length) return [];
+  const [cargas, materias, docentes] = await Promise.all([
+    sel('docente_materia', '*', q => q.in('paralelo_id', paraleloIds).eq('periodo_id', periodoId)),
+    sel('materias', 'id, nombre', q => q.eq('institucion_id', institucionId)),
+    sel('docentes', 'id, nombres, apellidos', q => q.eq('institucion_id', institucionId))
+  ]);
+  const matById = Object.fromEntries(materias.map(m => [m.id, m]));
+  const docById = Object.fromEntries(docentes.map(d => [d.id, d]));
+  return cargas.map(c => ({
+    id: c.id, paraleloId: c.paralelo_id, materiaNombre: matById[c.materia_id]?.nombre || 'Materia',
+    docenteId: c.docente_id || null,
+    docenteNombre: c.docente_id && docById[c.docente_id] ? `${docById[c.docente_id].apellidos || ''} ${docById[c.docente_id].nombres || ''}`.trim() : '',
+    horasSemana: c.horas_semana || 0
+  }));
+}
+export async function actualizarHorasCarga(id, horas) {
+  const { error } = await supabase.from('docente_materia').update({ horas_semana: horas }).eq('id', id);
+  if (error) throw error;
+}
+/** Borra (si se pide) y crea los bloques en UNA transacción: si algo choca, no cambia nada. */
+export async function aplicarHorario(paraleloIds, bloques, reemplazar) {
+  const { data, error } = await supabase.rpc('aplicar_horario', { p_paralelos: paraleloIds, p_bloques: bloques, p_reemplazar: !!reemplazar });
+  if (error) throw error;
+  return data;
+}

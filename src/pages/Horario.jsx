@@ -3,31 +3,28 @@ import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchGradosConParalelos, fetchMateriasParalelo, fetchHorario, fetchHorarioDocente, fetchHorarioParalelo,
   guardarBloqueHorario, eliminarBloqueHorario, fetchAulas, fetchCargasDocente,
-  fetchEstudianteIdPorProfile, fetchHijosDeRepresentante, fetchProgramacionEstudiante
+  fetchEstudianteIdPorProfile, fetchHijosDeRepresentante, fetchProgramacionEstudiante, fetchHorarioConfig
 } from '../lib/data.js';
+import { FRANJAS_DEFAULT, normalizarFranjas } from '../lib/horarioAuto.js';
+import { colorDeMateria } from '../lib/horarioUI.js';
+import { JornadaModal, GeneradorModal } from './HorarioModales.jsx';
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
-const FRANJAS = ['07:00–07:40', '07:40–08:20', '08:20–09:00', '09:20–10:00', '10:00–10:40', '10:40–11:20', '11:20–12:00'];
 const HOY_NOMBRE = DIAS[new Date().getDay() - 1] || null; // domingo/sábado -> null, no resalta ningún día
 
-// Paleta fija y determinística por materia (por nombre, no por índice de lista)
-// — así el color de "Matemática" no cambia si se reordena el arreglo de cargas.
-const PALETA = [
-  { bg: '#eef2ff', bd: '#c7d2fe', tx: '#3730a3' }, // índigo
-  { bg: '#ecfdf5', bd: '#a7f3d0', tx: '#065f46' }, // esmeralda
-  { bg: '#fff7ed', bd: '#fed7aa', tx: '#9a3412' }, // ámbar
-  { bg: '#fdf2f8', bd: '#fbcfe8', tx: '#9d174d' }, // rosa
-  { bg: '#f0f9ff', bd: '#bae6fd', tx: '#075985' }, // celeste
-  { bg: '#f7fee7', bd: '#d9f99d', tx: '#3f6212' }, // lima
-  { bg: '#faf5ff', bd: '#e9d5ff', tx: '#6b21a8' }, // violeta
-];
-function colorDeMateria(nombre) {
-  let h = 0;
-  for (let i = 0; i < (nombre || '').length; i++) h = (h * 31 + nombre.charCodeAt(i)) % PALETA.length;
-  return PALETA[h];
+/** Jornada del plantel (franjas de clase y recreos). Si no se configuró, usa la jornada por defecto. */
+function useFranjas(institucionId) {
+  const [franjas, setFranjas] = useState(FRANJAS_DEFAULT);
+  const cargar = useCallback(async () => {
+    if (!institucionId) return;
+    try { setFranjas(normalizarFranjas(await fetchHorarioConfig(institucionId))); }
+    catch (e) { setFranjas(FRANJAS_DEFAULT); }
+  }, [institucionId]);
+  useEffect(() => { cargar(); }, [cargar]);
+  return [franjas, cargar];
 }
 
-function GrillaHorario({ bloques, resolverEtiqueta, aulaEtiqueta, alto = 56 }) {
+function GrillaHorario({ bloques, resolverEtiqueta, aulaEtiqueta, alto = 56, franjas = FRANJAS_DEFAULT }) {
   const bloqueEn = (dia, franja) => bloques.find(b => b.dia === dia && b.franja === franja);
   return (
     <div className="card"><div className="cb" style={{ padding: 0, overflowX: 'auto' }}>
@@ -43,11 +40,16 @@ function GrillaHorario({ bloques, resolverEtiqueta, aulaEtiqueta, alto = 56 }) {
           </tr>
         </thead>
         <tbody>
-          {FRANJAS.map(fr => (
-            <tr key={fr}>
-              <td style={{ fontSize: 11, color: 'var(--slate)', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>{fr}</td>
+          {franjas.map(f => f.tipo === 'recreo' ? (
+            <tr key={f.label}>
+              <td style={{ fontSize: 11, color: 'var(--slate)', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>{f.label}</td>
+              <td colSpan={DIAS.length} style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, background: '#fff7ed', color: '#9a3412', padding: '6px 0' }}>☕ Recreo</td>
+            </tr>
+          ) : (
+            <tr key={f.label}>
+              <td style={{ fontSize: 11, color: 'var(--slate)', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>{f.label}</td>
               {DIAS.map(dia => {
-                const b = bloqueEn(dia, fr);
+                const b = bloqueEn(dia, f.label);
                 const info = b ? resolverEtiqueta(b) : null;
                 const c = info ? colorDeMateria(info.materia) : null;
                 return (
@@ -92,6 +94,7 @@ function Leyenda({ items }) {
 function MiHorarioDocente() {
   const { profile, institucion, data } = useSession();
   const institucionId = institucion?.id;
+  const [franjas] = useFranjas(institucionId);
   const [cargas, setCargas] = useState([]);
   const [bloques, setBloques] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -125,6 +128,7 @@ function MiHorarioDocente() {
       </div>
       <Leyenda items={materiasUnicas} />
       <GrillaHorario
+        franjas={franjas}
         bloques={bloques}
         resolverEtiqueta={b => { const c = cargaPorId[b.docente_materia_id]; return { materia: c?.materiaNombre || 'Materia', sub: `${c?.gradoNombre || ''} "${c?.paraleloNombre || ''}"`.trim() }; }}
         aulaEtiqueta={() => ''}
@@ -137,6 +141,7 @@ function MiHorarioDocente() {
 function MiHorarioCurso() {
   const { profile, institucion, data } = useSession();
   const esPadre = profile.rolDb === 'padre';
+  const [franjas] = useFranjas(institucion?.id);
   const [hijos, setHijos] = useState([]);
   const [estudianteId, setEstudianteId] = useState(null);
   const [prog, setProg] = useState(null);
@@ -210,6 +215,7 @@ function MiHorarioCurso() {
 
       <Leyenda items={materiasUnicas} />
       <GrillaHorario
+        franjas={franjas}
         bloques={bloques}
         resolverEtiqueta={b => { const m = materiaPorDocenteMateria[b.docente_materia_id]; return { materia: m?.materiaNombre || 'Materia', sub: m?.docenteNombre || '' }; }}
         aulaEtiqueta={() => ''}
@@ -234,6 +240,10 @@ function EditorHorario() {
   const [seleccion, setSeleccion] = useState(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
+  const [franjas, recargarFranjas] = useFranjas(institucionId);
+  const [bloquesInst, setBloquesInst] = useState([]);
+  const [modalJornada, setModalJornada] = useState(false);
+  const [modalGenerador, setModalGenerador] = useState(false);
 
   useEffect(() => {
     if (!toast) return;
@@ -262,6 +272,7 @@ function EditorHorario() {
       fetchHorario(institucionId)
     ]);
     setCargas(cargasParalelo);
+    setBloquesInst(todosBloques);
     setBloques(todosBloques.filter(b => b.paralelo_id === paraleloId));
   }, [paraleloId, periodoActivo, institucionId]);
 
@@ -293,9 +304,15 @@ function EditorHorario() {
 
   return (
     <div>
-      <div style={{ marginBottom: 14 }}>
-        <h2 style={{ margin: '0 0 4px' }}>Horario semanal</h2>
-        <div style={{ fontSize: 13, color: 'var(--slate)' }}>Elige una materia de la izquierda y haz clic en una celda vacía para asignarla · {periodoActivo.nombre}</div>
+      <div style={{ marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+        <div>
+          <h2 style={{ margin: '0 0 4px' }}>Horario semanal</h2>
+          <div style={{ fontSize: 13, color: 'var(--slate)' }}>Elige una materia de la izquierda y haz clic en una celda vacía para asignarla · {periodoActivo.nombre}</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => setModalJornada(true)}>☕ Jornada y recreos</button>
+          <button className="btn btn-primary btn-sm" disabled={!paraleloId} onClick={() => setModalGenerador(true)}>✨ Generar automáticamente</button>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 14, alignItems: 'start' }}>
@@ -343,10 +360,16 @@ function EditorHorario() {
             <table className="data" style={{ width: '100%' }}>
               <thead><tr><th style={{ width: 92 }}></th>{DIAS.map(d => <th key={d} style={{ textAlign: 'center' }}>{d}</th>)}</tr></thead>
               <tbody>
-                {FRANJAS.map(fr => (
-                  <tr key={fr}>
-                    <td style={{ fontSize: 11, color: 'var(--slate)', whiteSpace: 'nowrap' }}>{fr}</td>
+                {franjas.map(f => f.tipo === 'recreo' ? (
+                  <tr key={f.label}>
+                    <td style={{ fontSize: 11, color: 'var(--slate)', whiteSpace: 'nowrap' }}>{f.label}</td>
+                    <td colSpan={DIAS.length} style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, background: '#fff7ed', color: '#9a3412', padding: '6px 0' }}>☕ Recreo</td>
+                  </tr>
+                ) : (
+                  <tr key={f.label}>
+                    <td style={{ fontSize: 11, color: 'var(--slate)', whiteSpace: 'nowrap' }}>{f.label}</td>
                     {DIAS.map(dia => {
+                      const fr = f.label;
                       const b = bloqueEn(dia, fr);
                       if (!b) return <td key={dia} style={{ padding: 3 }}><div onClick={() => onCellClick(dia, fr)} style={{ minHeight: 52, borderRadius: 10, border: '1.5px dashed var(--line)', cursor: 'pointer' }} /></td>;
                       const carga = cargaPorId[b.docente_materia_id];
@@ -369,6 +392,22 @@ function EditorHorario() {
           </div></div>
         </div>
       </div>
+
+      {modalJornada && (
+        <JornadaModal
+          franjas={franjas} bloquesInst={bloquesInst} institucionId={institucionId}
+          onClose={() => setModalJornada(false)}
+          onSaved={async () => { setModalJornada(false); await recargarFranjas(); await cargarDetalle(); refrescarDatos(); setToast({ tipo: 'ok', msg: 'Jornada y recreos guardados.' }); }}
+        />
+      )}
+      {modalGenerador && (
+        <GeneradorModal
+          institucionId={institucionId} periodoActivo={periodoActivo} grados={grados} paraleloActualId={paraleloId}
+          franjas={franjas} bloquesInst={bloquesInst}
+          onClose={() => setModalGenerador(false)}
+          onApplied={async () => { setModalGenerador(false); await cargarDetalle(); refrescarDatos(); setToast({ tipo: 'ok', msg: 'Horario aplicado.' }); }}
+        />
+      )}
 
       {toast && <div className={'toast ' + (toast.tipo === 'ok' ? 'ok' : 'err')}>{toast.msg}</div>}
     </div>
