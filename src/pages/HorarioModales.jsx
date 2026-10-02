@@ -3,7 +3,7 @@ import { useSession } from '../lib/SessionContext.jsx';
 import {
   guardarHorarioConfig, eliminarBloquesHorario, fetchCargasHorario, actualizarHorasCarga, aplicarHorario
 } from '../lib/data.js';
-import { construirFranjas, validarJornada, generarHorario, DIAS } from '../lib/horarioAuto.js';
+import { construirFranjas, validarJornada, generarHorario, moverEnPropuesta, destinosValidos, DIAS } from '../lib/horarioAuto.js';
 import { colorDeMateria } from '../lib/horarioUI.js';
 
 /** Deduce los parámetros del constructor a partir de las franjas vigentes (para precargar el formulario). */
@@ -132,8 +132,9 @@ export function JornadaModal({ franjas, bloquesInst, institucionId, onClose, onS
 }
 
 /* ───────────────────────────── Generación automática ───────────────────────────── */
-function GrillaPropuesta({ franjas, bloques, cargaPorId }) {
+function GrillaPropuesta({ franjas, bloques, cargaPorId, tomado, setTomado, validos, onMover, motivoUltimo }) {
   const en = (dia, fr) => bloques.find(b => b.dia === dia && b.franja === fr);
+  const esValido = (dia, fr) => !!tomado && validos.has(`${dia}|${fr}`);
   return (
     <div style={{ overflowX: 'auto' }}>
       <table className="data" style={{ width: '100%' }}>
@@ -151,14 +152,32 @@ function GrillaPropuesta({ franjas, bloques, cargaPorId }) {
                 const b = en(dia, f.label);
                 const c = b ? cargaPorId[b.docente_materia_id] : null;
                 const cl = c ? colorDeMateria(c.materiaNombre) : null;
+                const esOrigen = !!tomado && tomado.dia === dia && tomado.franja === f.label;
+                const destino = esValido(dia, f.label);
+                const soltar = () => { if (tomado && !esOrigen) onMover(tomado, { dia, franja: f.label }); setTomado(null); };
                 return (
-                  <td key={dia} style={{ padding: 3 }}>
+                  <td key={dia} style={{ padding: 3 }}
+                    onDragOver={e => { if (destino) e.preventDefault(); }}
+                    onDrop={e => { e.preventDefault(); soltar(); }}
+                    onClick={() => { if (tomado && !esOrigen) soltar(); }}>
                     {c ? (
-                      <div style={{ minHeight: 44, borderRadius: 8, padding: '5px 8px', background: cl.bg, border: '1px solid ' + cl.bd }}>
-                        <div style={{ fontWeight: 700, fontSize: 11.5, color: cl.tx }}>{c.materiaNombre}</div>
+                      <div
+                        draggable={!b.fijo}
+                        onDragStart={e => { if (b.fijo) return; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'clase'); setTomado({ dia, franja: f.label }); }}
+                        onDragEnd={() => setTomado(null)}
+                        onClick={e => { if (b.fijo) return; e.stopPropagation(); if (esOrigen) setTomado(null); else if (tomado) soltar(); else setTomado({ dia, franja: f.label }); }}
+                        title={b.fijo ? 'Clase ya guardada: bloqueada en esta propuesta' : 'Arrástrala a otra celda (o haz clic y luego clic en el destino)'}
+                        style={{
+                          minHeight: 44, borderRadius: 8, padding: '5px 8px', background: cl.bg, cursor: b.fijo ? 'default' : 'grab',
+                          border: (esOrigen ? '2px solid var(--brand, #4f46e5)' : '1px solid ' + cl.bd),
+                          outline: destino ? '2px dashed #16a34a' : 'none', opacity: esOrigen ? .55 : 1, userSelect: 'none'
+                        }}>
+                        <div style={{ fontWeight: 700, fontSize: 11.5, color: cl.tx }}>{b.fijo ? '🔒 ' : ''}{c.materiaNombre}</div>
                         <div style={{ fontSize: 10, color: cl.tx, opacity: .8 }}>{c.docenteNombre || '—'}</div>
                       </div>
-                    ) : <div style={{ minHeight: 44, borderRadius: 8, border: '1.5px dashed var(--line)' }} />}
+                    ) : (
+                      <div style={{ minHeight: 44, borderRadius: 8, border: '1.5px dashed ' + (destino ? '#16a34a' : 'var(--line)'), background: destino ? 'rgba(22,163,74,.10)' : undefined }} />
+                    )}
                   </td>
                 );
               })}
@@ -166,6 +185,7 @@ function GrillaPropuesta({ franjas, bloques, cargaPorId }) {
           ))}
         </tbody>
       </table>
+      {motivoUltimo && <div style={{ marginTop: 8, fontSize: 12.5, color: '#b45309' }}>⚠ {motivoUltimo}</div>}
     </div>
   );
 }
@@ -180,6 +200,10 @@ export function GeneradorModal({ institucionId, periodoActivo, grados, paraleloA
   const [verParalelo, setVerParalelo] = useState(paraleloActualId);
   const [aplicando, setAplicando] = useState(false);
   const [error, setError] = useState('');
+  const [tomado, setTomado] = useState(null);          // clase que se está arrastrando { dia, franja }
+  const [historial, setHistorial] = useState([]);      // para deshacer los movimientos manuales
+  const [motivo, setMotivo] = useState('');
+  const [editadas, setEditadas] = useState(0);
 
   const clases = franjas.filter(f => f.tipo === 'clase').map(f => f.label);
   const paralelosAll = useMemo(
@@ -214,9 +238,10 @@ export function GeneradorModal({ institucionId, periodoActivo, grados, paraleloA
   const bloquesValidos = bloquesInst.filter(b => clases.includes(b.franja));
   const existentesEnAlcance = bloquesInst.filter(b => enAlcance.includes(b.paralelo_id));
 
-  useEffect(() => { setPropuesta(null); }, [alcance, conservar]);
+  useEffect(() => { setPropuesta(null); setHistorial([]); setEditadas(0); setMotivo(''); setTomado(null); }, [alcance, conservar]);
 
   function generar() {
+    if (propuesta && editadas > 0 && !window.confirm('Al generar otra vez se pierden los ajustes que hiciste a mano en esta propuesta. ¿Continuar?')) return;
     setError('');
     const paralelos = enAlcance.map(id => ({
       id,
@@ -228,8 +253,39 @@ export function GeneradorModal({ institucionId, periodoActivo, grados, paraleloA
       .map(b => ({ docenteId: cargaPorId[b.docente_materia_id]?.docenteId, dia: b.dia, franja: b.franja }))
       .filter(o => o.docenteId);
     const res = generarHorario({ franjas: clases, paralelos, fijos, ocupadosDocente, seed: Math.floor(Math.random() * 1e9) });
-    setPropuesta({ ...res, paralelos: enAlcance, fijos, intento: (propuesta?.intento || 0) + 1 });
+    setPropuesta({ ...res, paralelos: enAlcance, fijos, ocupadosDocente, intento: (propuesta?.intento || 0) + 1 });
+    setHistorial([]); setEditadas(0); setMotivo(''); setTomado(null);
     if (!enAlcance.includes(verParalelo)) setVerParalelo(enAlcance[0]);
+  }
+
+  const docDeCarga = useMemo(() => Object.fromEntries(cargas.map(c => [c.id, c.docenteId])), [cargas]);
+  const validos = useMemo(() => {
+    if (!propuesta || !tomado) return new Set();
+    return destinosValidos({ bloques: propuesta.bloques, fijos: propuesta.fijos, ocupadosFuera: propuesta.ocupadosDocente, docDeCarga, paraleloId: verParalelo, desde: tomado, franjas: clases });
+  }, [propuesta, tomado, docDeCarga, verParalelo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function moverClase(desde, hacia) {
+    const r = moverEnPropuesta({ bloques: propuesta.bloques, fijos: propuesta.fijos, ocupadosFuera: propuesta.ocupadosDocente, docDeCarga, paraleloId: verParalelo, desde, hacia });
+    if (!r.ok) { setMotivo(r.motivo); return; }
+    if (r.tipo === 'sin_cambios') return;
+    setMotivo('');
+    setHistorial(h => [...h, propuesta.bloques]);
+    setEditadas(n => n + 1);
+    setPropuesta(p => ({ ...p, bloques: r.bloques }));
+  }
+  function deshacer() {
+    if (!historial.length) return;
+    const previo = historial[historial.length - 1];
+    setHistorial(h => h.slice(0, -1));
+    setEditadas(n => Math.max(0, n - 1));
+    setPropuesta(p => ({ ...p, bloques: previo }));
+    setMotivo('');
+  }
+
+  // Si hay una propuesta sin guardar, pide confirmación antes de cerrar (así no se pierde por un clic de más)
+  function cerrar() {
+    if (propuesta && !aplicando && !window.confirm('Tienes una propuesta sin guardar. ¿Cerrar y descartarla?')) return;
+    onClose();
   }
 
   async function aplicar() {
@@ -253,14 +309,14 @@ export function GeneradorModal({ institucionId, periodoActivo, grados, paraleloA
 
   const capacidad = clases.length * DIAS.length;
   const totalFaltan = propuesta ? propuesta.faltantes.reduce((a, f) => a + f.faltan, 0) : 0;
-  const bloquesVista = propuesta ? [...propuesta.fijos.map(f => ({ ...f })), ...propuesta.bloques].filter(b => b.paralelo_id === verParalelo) : [];
+  const bloquesVista = propuesta ? [...propuesta.fijos.map(f => ({ ...f, fijo: true })), ...propuesta.bloques].filter(b => b.paralelo_id === verParalelo) : [];
 
   return (
-    <div style={overlay} onClick={e => { if (e.target === e.currentTarget && !aplicando) onClose(); }}>
+    <div style={overlay} onClick={e => { if (e.target === e.currentTarget && !aplicando) cerrar(); }}>
       <div style={{ ...caja, maxWidth: 980 }}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0 }}>✨ Generar horario automáticamente</h3>
-          <button className="btn btn-ghost btn-sm" onClick={onClose} disabled={aplicando}>✕</button>
+          <button className="btn btn-ghost btn-sm" onClick={cerrar} disabled={aplicando}>✕</button>
         </div>
         <div style={{ padding: 20 }}>
           <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--slate)' }}>
@@ -331,16 +387,29 @@ export function GeneradorModal({ institucionId, periodoActivo, grados, paraleloA
                       </select>
                     </div>
                   )}
-                  <GrillaPropuesta franjas={franjas} bloques={bloquesVista} cargaPorId={cargaPorId} />
+                  <div style={{ marginBottom: 10, padding: '9px 12px', borderRadius: 10, background: '#eff6ff', border: '1px solid #bfdbfe', fontSize: 12.5, color: '#1e40af', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                    <span>
+                      <strong>Vista previa — todavía no está guardado.</strong> Arrastra una clase a otra celda para moverla (si ya hay una, se intercambian). Para guardar, pulsa <strong>💾 Guardar horario</strong> abajo.
+                      {editadas > 0 && <> · {editadas} ajuste(s) a mano</>}
+                    </span>
+                    <button className="btn btn-secondary btn-sm" onClick={deshacer} disabled={!historial.length}>↩ Deshacer</button>
+                  </div>
+                  <GrillaPropuesta franjas={franjas} bloques={bloquesVista} cargaPorId={cargaPorId}
+                    tomado={tomado} setTomado={setTomado} validos={validos} onMover={moverClase} motivoUltimo={motivo} />
                 </div>
               )}
               {error && <div style={{ marginTop: 12, fontSize: 13, color: 'var(--red)' }}>{error}</div>}
             </>
           )}
         </div>
-        <div style={{ padding: '14px 20px', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button className="btn btn-secondary" onClick={onClose} disabled={aplicando}>Cancelar</button>
-          <button className="btn btn-success" onClick={aplicar} disabled={!propuesta || aplicando}>{aplicando ? 'Aplicando…' : '✅ Aplicar este horario'}</button>
+        <div style={{ position: 'sticky', bottom: 0, background: 'var(--card, #fff)', borderRadius: '0 0 14px 14px', padding: '14px 20px', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', boxShadow: '0 -6px 14px rgba(0,0,0,.06)' }}>
+          <span style={{ fontSize: 12.5, color: propuesta ? '#1e40af' : 'var(--slate)' }}>
+            {propuesta ? 'Sin guardar: nada cambia en el horario hasta que pulses Guardar.' : 'Genera una propuesta para poder guardarla.'}
+          </span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-secondary" onClick={cerrar} disabled={aplicando}>Cancelar</button>
+            <button className="btn btn-success" onClick={aplicar} disabled={!propuesta || aplicando}>{aplicando ? 'Guardando…' : '💾 Guardar horario'}</button>
+          </div>
         </div>
       </div>
     </div>

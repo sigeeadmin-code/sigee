@@ -77,4 +77,60 @@ assert.equal(ro.faltantes.length, 0); assert.ok(ro.bloques.every(b => b.franja =
 // Materia sin docente asignado también se coloca (no hay cruce que controlar)
 const rs = generarHorario({ franjas, paralelos: [{ id: 'P8', cargas: [{ id: 'S', docenteId: null, horas: 3 }] }], seed: 6 });
 assert.equal(rs.bloques.length, 3);
+
 console.log('OK horarioAuto: todas las pruebas pasaron');
+
+// ── Arrastrar y soltar dentro de la propuesta ──
+import { moverEnPropuesta, destinosValidos } from '../src/lib/horarioAuto.js';
+{
+  const F = franjas;
+  const docDeCarga = { a: 'D1', b: 'D2', x: 'D1' };            // 'x' es otra carga del docente D1 (en otro paralelo)
+  const bloques = [
+    { paralelo_id: 'P1', docente_materia_id: 'a', dia: 'Lunes', franja: F[0] },
+    { paralelo_id: 'P1', docente_materia_id: 'b', dia: 'Lunes', franja: F[1] }
+  ];
+  const base = { bloques, fijos: [], ocupadosFuera: [], docDeCarga, paraleloId: 'P1' };
+
+  // mover a una celda vacía
+  let r = moverEnPropuesta({ ...base, desde: { dia: 'Lunes', franja: F[0] }, hacia: { dia: 'Martes', franja: F[2] } });
+  assert.ok(r.ok); assert.equal(r.tipo, 'movido');
+  assert.deepEqual(r.bloques[0], { paralelo_id: 'P1', docente_materia_id: 'a', dia: 'Martes', franja: F[2] });
+  assert.deepEqual(bloques[0].dia, 'Lunes', 'no muta el original');
+
+  // intercambiar dos clases
+  r = moverEnPropuesta({ ...base, desde: { dia: 'Lunes', franja: F[0] }, hacia: { dia: 'Lunes', franja: F[1] } });
+  assert.ok(r.ok); assert.equal(r.tipo, 'intercambiado');
+  assert.equal(r.bloques[0].franja, F[1]); assert.equal(r.bloques[1].franja, F[0]);
+
+  // mismo lugar
+  assert.equal(moverEnPropuesta({ ...base, desde: { dia: 'Lunes', franja: F[0] }, hacia: { dia: 'Lunes', franja: F[0] } }).tipo, 'sin_cambios');
+  // origen vacío
+  assert.ok(!moverEnPropuesta({ ...base, desde: { dia: 'Viernes', franja: F[5] }, hacia: { dia: 'Lunes', franja: F[3] } }).ok);
+
+  // cruce de docente con una clase de OTRO paralelo fuera del alcance
+  const fuera = [{ docenteId: 'D1', dia: 'Martes', franja: F[2] }];
+  r = moverEnPropuesta({ ...base, ocupadosFuera: fuera, desde: { dia: 'Lunes', franja: F[0] }, hacia: { dia: 'Martes', franja: F[2] } });
+  assert.ok(!r.ok); assert.match(r.motivo, /docente/);
+
+  // cruce con otro paralelo que también está en la propuesta
+  const dos = [...bloques, { paralelo_id: 'P2', docente_materia_id: 'x', dia: 'Miércoles', franja: F[4] }];
+  r = moverEnPropuesta({ ...base, bloques: dos, desde: { dia: 'Lunes', franja: F[0] }, hacia: { dia: 'Miércoles', franja: F[4] } });
+  assert.ok(!r.ok);
+
+  // intercambio que deja al OTRO docente chocando en la hora de origen
+  const choque = [{ docenteId: 'D2', dia: 'Lunes', franja: F[0] }];
+  r = moverEnPropuesta({ ...base, ocupadosFuera: choque, desde: { dia: 'Lunes', franja: F[0] }, hacia: { dia: 'Lunes', franja: F[1] } });
+  assert.ok(!r.ok);
+
+  // una clase fija (ya guardada) no se mueve ni se pisa
+  const fijosX = [{ paralelo_id: 'P1', docente_materia_id: 'a', dia: 'Jueves', franja: F[0] }];
+  assert.ok(!moverEnPropuesta({ ...base, fijos: fijosX, desde: { dia: 'Jueves', franja: F[0] }, hacia: { dia: 'Jueves', franja: F[1] } }).ok);
+  assert.ok(!moverEnPropuesta({ ...base, fijos: fijosX, desde: { dia: 'Lunes', franja: F[0] }, hacia: { dia: 'Jueves', franja: F[0] } }).ok);
+
+  // destinos válidos: todas las celdas salvo el origen y las que chocan
+  const v = destinosValidos({ ...base, ocupadosFuera: fuera, desde: { dia: 'Lunes', franja: F[0] }, franjas: F });
+  assert.ok(!v.has(`Martes|${F[2]}`)); assert.ok(v.has(`Martes|${F[3]}`)); assert.ok(!v.has(`Lunes|${F[0]}`));
+  assert.ok(v.has(`Lunes|${F[1]}`), 'intercambio permitido');
+  assert.equal(v.size, 5 * 7 - 1 - 1);
+  console.log('OK horarioAuto: arrastrar y soltar');
+}

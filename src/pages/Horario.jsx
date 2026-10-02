@@ -3,9 +3,10 @@ import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchGradosConParalelos, fetchMateriasParalelo, fetchHorario, fetchHorarioDocente, fetchHorarioParalelo,
   guardarBloqueHorario, eliminarBloqueHorario, fetchAulas, fetchCargasDocente,
-  fetchEstudianteIdPorProfile, fetchHijosDeRepresentante, fetchProgramacionEstudiante, fetchHorarioConfig
+  fetchEstudianteIdPorProfile, fetchHijosDeRepresentante, fetchProgramacionEstudiante, fetchHorarioConfig,
+  moverBloqueHorario, fetchCargasHorario
 } from '../lib/data.js';
-import { FRANJAS_DEFAULT, normalizarFranjas } from '../lib/horarioAuto.js';
+import { FRANJAS_DEFAULT, normalizarFranjas, destinosValidos } from '../lib/horarioAuto.js';
 import { colorDeMateria } from '../lib/horarioUI.js';
 import { JornadaModal, GeneradorModal } from './HorarioModales.jsx';
 
@@ -244,6 +245,10 @@ function EditorHorario() {
   const [bloquesInst, setBloquesInst] = useState([]);
   const [modalJornada, setModalJornada] = useState(false);
   const [modalGenerador, setModalGenerador] = useState(false);
+  const [docDeCargaInst, setDocDeCargaInst] = useState({}); // cargaId -> docenteId (todo el plantel), para validar cruces al arrastrar
+  const [tomado, setTomado] = useState(null);                // clase que se está moviendo { id, dia, franja }
+  const [deshacer, setDeshacer] = useState(null);            // último movimiento, para poder revertirlo
+  const [moviendo, setMoviendo] = useState(false);
 
   useEffect(() => {
     if (!toast) return;
@@ -267,23 +272,66 @@ function EditorHorario() {
 
   const cargarDetalle = useCallback(async () => {
     if (!paraleloId || !periodoActivo || !institucionId) return;
-    const [cargasParalelo, todosBloques] = await Promise.all([
+    const [cargasParalelo, todosBloques, cargasInst] = await Promise.all([
       fetchMateriasParalelo(paraleloId, periodoActivo.id),
-      fetchHorario(institucionId)
+      fetchHorario(institucionId),
+      fetchCargasHorario(institucionId, periodoActivo.id, grados.flatMap(g => g.paralelos.map(p => p.id)))
     ]);
+    setDocDeCargaInst(Object.fromEntries(cargasInst.map(c => [c.id, c.docenteId])));
     setCargas(cargasParalelo);
     setBloquesInst(todosBloques);
     setBloques(todosBloques.filter(b => b.paralelo_id === paraleloId));
-  }, [paraleloId, periodoActivo, institucionId]);
+  }, [paraleloId, periodoActivo, institucionId, grados]);
 
   useEffect(() => { cargarDetalle(); }, [cargarDetalle]);
+  useEffect(() => { setTomado(null); setDeshacer(null); }, [paraleloId]);
+  useEffect(() => { if (!deshacer) return; const t = setTimeout(() => setDeshacer(null), 15000); return () => clearTimeout(t); }, [deshacer]);
 
   const cargaPorId = useMemo(() => Object.fromEntries(cargas.map(c => [c.id, c])), [cargas]);
   const materiasUnicas = useMemo(() => [...new Set(cargas.map(c => c.materiaNombre))], [cargas]);
 
   function bloqueEn(dia, franja) { return bloques.find(b => b.dia === dia && b.franja === franja); }
 
+  const clasesLabels = useMemo(() => franjas.filter(f => f.tipo === 'clase').map(f => f.label), [franjas]);
+  // Celdas a las que se puede llevar la clase tomada (sin cruces de docente) — se resaltan en verde
+  const validos = useMemo(() => {
+    if (!tomado) return new Set();
+    return destinosValidos({
+      bloques: bloques.map(b => ({ paralelo_id: b.paralelo_id, docente_materia_id: b.docente_materia_id, dia: b.dia, franja: b.franja })),
+      fijos: [],
+      ocupadosFuera: bloquesInst.filter(b => b.paralelo_id !== paraleloId)
+        .map(b => ({ docenteId: docDeCargaInst[b.docente_materia_id], dia: b.dia, franja: b.franja })).filter(o => o.docenteId),
+      docDeCarga: docDeCargaInst, paraleloId, desde: { dia: tomado.dia, franja: tomado.franja }, franjas: clasesLabels
+    });
+  }, [tomado, bloques, bloquesInst, docDeCargaInst, paraleloId, clasesLabels]);
+
+  async function soltarEn(dia, franja) {
+    const t = tomado;
+    setTomado(null);
+    if (!t || moviendo || (t.dia === dia && t.franja === franja)) return;
+    setMoviendo(true);
+    try {
+      const res = await moverBloqueHorario(t.id, dia, franja);
+      if (res !== 'sin_cambio') setDeshacer({ id: t.id, dia: t.dia, franja: t.franja, texto: res === 'intercambiado' ? 'Clases intercambiadas' : 'Clase movida' });
+      await cargarDetalle();
+      refrescarDatos();
+    } catch (err) {
+      setDeshacer(null);
+      setToast({ tipo: 'err', msg: 'No se pudo mover: ' + (err.message || 'error desconocido') });
+    }
+    setMoviendo(false);
+  }
+  async function deshacerMovimiento() {
+    const d = deshacer;
+    if (!d || moviendo) return;
+    setDeshacer(null); setMoviendo(true);
+    try { await moverBloqueHorario(d.id, d.dia, d.franja); await cargarDetalle(); refrescarDatos(); }
+    catch (err) { setToast({ tipo: 'err', msg: 'No se pudo deshacer: ' + (err.message || 'error desconocido') }); }
+    setMoviendo(false);
+  }
+
   async function onCellClick(dia, franja) {
+    if (tomado) { await soltarEn(dia, franja); return; }
     if (bloqueEn(dia, franja)) return;
     if (!seleccion) { setToast({ tipo: 'err', msg: 'Primero selecciona una materia de la lista.' }); return; }
     try {
@@ -307,13 +355,24 @@ function EditorHorario() {
       <div style={{ marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
         <div>
           <h2 style={{ margin: '0 0 4px' }}>Horario semanal</h2>
-          <div style={{ fontSize: 13, color: 'var(--slate)' }}>Elige una materia de la izquierda y haz clic en una celda vacía para asignarla · {periodoActivo.nombre}</div>
+          <div style={{ fontSize: 13, color: 'var(--slate)' }}>Elige una materia de la izquierda y haz clic en una celda vacía para asignarla, o arrastra una clase para moverla · {periodoActivo.nombre}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-secondary btn-sm" onClick={() => setModalJornada(true)}>☕ Jornada y recreos</button>
           <button className="btn btn-primary btn-sm" disabled={!paraleloId} onClick={() => setModalGenerador(true)}>✨ Generar automáticamente</button>
         </div>
       </div>
+
+      {(deshacer || tomado) && (
+        <div style={{ marginBottom: 12, padding: '9px 12px', borderRadius: 10, background: tomado ? '#eff6ff' : '#f0fdf4', border: '1px solid ' + (tomado ? '#bfdbfe' : '#bbf7d0'), fontSize: 12.5, color: tomado ? '#1e40af' : '#166534', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {tomado
+            ? <span>Suelta la clase en una celda <strong style={{ color: '#16a34a' }}>verde</strong> para moverla (si hay otra clase, se intercambian). Los cambios se guardan al soltar.</span>
+            : <span>✓ {deshacer.texto} y guardado.</span>}
+          {tomado
+            ? <button className="btn btn-secondary btn-sm" onClick={() => setTomado(null)}>Cancelar</button>
+            : <button className="btn btn-secondary btn-sm" onClick={deshacerMovimiento} disabled={moviendo}>↩ Deshacer</button>}
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 14, alignItems: 'start' }}>
         <div>
@@ -371,15 +430,33 @@ function EditorHorario() {
                     {DIAS.map(dia => {
                       const fr = f.label;
                       const b = bloqueEn(dia, fr);
-                      if (!b) return <td key={dia} style={{ padding: 3 }}><div onClick={() => onCellClick(dia, fr)} style={{ minHeight: 52, borderRadius: 10, border: '1.5px dashed var(--line)', cursor: 'pointer' }} /></td>;
+                      const destino = !!tomado && validos.has(`${dia}|${fr}`);
+                      const esOrigen = !!tomado && b && b.id === tomado.id;
+                      const celdaProps = {
+                        onDragOver: e => { if (tomado && destino) e.preventDefault(); },
+                        onDrop: e => { e.preventDefault(); soltarEn(dia, fr); }
+                      };
+                      if (!b) {
+                        return (
+                          <td key={dia} style={{ padding: 3 }} {...celdaProps}>
+                            <div onClick={() => onCellClick(dia, fr)}
+                              style={{ minHeight: 52, borderRadius: 10, border: '1.5px dashed ' + (destino ? '#16a34a' : 'var(--line)'), background: destino ? 'rgba(22,163,74,.10)' : undefined, cursor: 'pointer' }} />
+                          </td>
+                        );
+                      }
                       const carga = cargaPorId[b.docente_materia_id];
                       const cl = colorDeMateria(carga?.materiaNombre);
                       return (
-                        <td key={dia} style={{ padding: 3 }}>
-                          <div style={{ minHeight: 52, borderRadius: 10, padding: '7px 9px', background: cl.bg, border: '1px solid ' + cl.bd, position: 'relative' }}>
+                        <td key={dia} style={{ padding: 3 }} {...celdaProps} onClick={() => { if (tomado && !esOrigen) soltarEn(dia, fr); }}>
+                          <div draggable={!moviendo}
+                            onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'clase'); setTomado({ id: b.id, dia, franja: fr }); }}
+                            onDragEnd={() => setTomado(null)}
+                            onClick={() => { if (tomado) { if (esOrigen) setTomado(null); return; } setTomado({ id: b.id, dia, franja: fr }); }}
+                            title="Arrástrala a otra celda (o haz clic y luego clic en el destino)"
+                            style={{ minHeight: 52, borderRadius: 10, padding: '7px 9px', background: cl.bg, border: esOrigen ? '2px solid var(--brand, #4f46e5)' : '1px solid ' + cl.bd, position: 'relative', cursor: 'grab', opacity: esOrigen ? .55 : 1, outline: destino ? '2px dashed #16a34a' : 'none', userSelect: 'none' }}>
                             <div style={{ fontWeight: 700, fontSize: 11.5, color: cl.tx }}>{carga?.materiaNombre || 'Materia'}</div>
                             <div style={{ fontSize: 10, color: cl.tx, opacity: .8 }}>{carga?.docenteNombre || '—'}</div>
-                            <button type="button" onClick={() => quitarBloque(b.id)}
+                            <button type="button" onClick={e => { e.stopPropagation(); quitarBloque(b.id); }}
                               style={{ position: 'absolute', top: 3, right: 4, border: 'none', background: 'rgba(255,255,255,.85)', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', fontSize: 12, lineHeight: 1, color: 'var(--red)' }}>×</button>
                           </div>
                         </td>

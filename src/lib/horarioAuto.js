@@ -156,3 +156,57 @@ export function generarHorario({ dias = DIAS, franjas, paralelos, fijos = [], oc
   }
   return { bloques: mejor.bloques, faltantes: mejor.faltantes };
 }
+
+/**
+ * Mueve (o intercambia) una clase DENTRO de una propuesta, sin tocar nada guardado.
+ *  bloques: clases propuestas, movibles   [{ paralelo_id, docente_materia_id, dia, franja }]
+ *  fijos:   clases ya guardadas que se conservan (bloqueadas)
+ *  ocupadosFuera: [{ docenteId, dia, franja }] clases de paralelos fuera del alcance
+ *  docDeCarga: { cargaId: docenteId|null }
+ * Devuelve { ok, bloques, tipo: 'movido'|'intercambiado'|'sin_cambios', motivo }
+ */
+export function moverEnPropuesta({ bloques, fijos = [], ocupadosFuera = [], docDeCarga, paraleloId, desde, hacia }) {
+  const igual = (b, c) => b.paralelo_id === paraleloId && b.dia === c.dia && b.franja === c.franja;
+  const A = bloques.find(b => igual(b, desde));
+  if (!A) {
+    return { ok: false, bloques, motivo: fijos.some(f => igual(f, desde)) ? 'Esa clase ya estaba guardada y está bloqueada en la propuesta.' : 'No hay una clase en la celda de origen.' };
+  }
+  if (desde.dia === hacia.dia && desde.franja === hacia.franja) return { ok: true, bloques, tipo: 'sin_cambios' };
+  if (fijos.some(f => igual(f, hacia))) return { ok: false, bloques, motivo: 'Esa celda tiene una clase ya guardada que se conserva.' };
+  const B = bloques.find(b => igual(b, hacia)) || null;
+
+  // quién está ocupado y cuándo, SIN contar las clases que se están moviendo
+  const ocup = new Set(ocupadosFuera.filter(o => o.docenteId).map(o => `${o.docenteId}|${o.dia}|${o.franja}`));
+  fijos.forEach(f => { const d = docDeCarga[f.docente_materia_id]; if (d) ocup.add(`${d}|${f.dia}|${f.franja}`); });
+  bloques.forEach(b => { if (b === A || b === B) return; const d = docDeCarga[b.docente_materia_id]; if (d) ocup.add(`${d}|${b.dia}|${b.franja}`); });
+
+  const docA = docDeCarga[A.docente_materia_id];
+  if (docA && ocup.has(`${docA}|${hacia.dia}|${hacia.franja}`)) {
+    return { ok: false, bloques, motivo: 'El docente de esa materia ya tiene clase a esa hora en otro paralelo.' };
+  }
+  if (B) {
+    const docB = docDeCarga[B.docente_materia_id];
+    if (docB && ocup.has(`${docB}|${desde.dia}|${desde.franja}`)) {
+      return { ok: false, bloques, motivo: 'El docente de la otra materia ya tiene clase a la hora de origen en otro paralelo.' };
+    }
+  }
+  const nuevos = bloques.map(b => {
+    if (b === A) return { ...b, dia: hacia.dia, franja: hacia.franja };
+    if (B && b === B) return { ...b, dia: desde.dia, franja: desde.franja };
+    return b;
+  });
+  return { ok: true, bloques: nuevos, tipo: B ? 'intercambiado' : 'movido' };
+}
+
+/** Celdas (dia|franja) a las que la clase de `desde` puede ir — para resaltarlas mientras se arrastra. */
+export function destinosValidos({ bloques, fijos = [], ocupadosFuera = [], docDeCarga, paraleloId, desde, franjas, dias = DIAS }) {
+  const ok = new Set();
+  for (const dia of dias) {
+    for (const franja of franjas) {
+      if (dia === desde.dia && franja === desde.franja) continue;
+      const r = moverEnPropuesta({ bloques, fijos, ocupadosFuera, docDeCarga, paraleloId, desde, hacia: { dia, franja } });
+      if (r.ok) ok.add(`${dia}|${franja}`);
+    }
+  }
+  return ok;
+}

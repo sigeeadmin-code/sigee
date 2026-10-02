@@ -1578,3 +1578,10 @@ export async function aplicarHorario(paraleloIds, bloques, reemplazar) {
   if (error) throw error;
   return data;
 }
+
+/** Mueve una clase a otra celda del mismo paralelo (o intercambia si está ocupada). Devuelve 'movido' | 'intercambiado' | 'sin_cambio'. */
+export async function moverBloqueHorario(id, dia, franja) {
+  const { data, error } = await supabase.rpc('mover_bloque_horario', { p_id: id, p_dia: dia, p_franja: franja });
+  if (error) throw error;
+  return data;
+}
