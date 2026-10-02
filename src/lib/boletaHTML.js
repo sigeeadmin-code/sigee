@@ -6,8 +6,8 @@ export const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;'
 const f2 = n => (n === null || n === undefined ? '—' : Number(n).toFixed(2));
 const urlSegura = u => (typeof u === 'string' && /^https?:\/\//i.test(u.trim()) ? u.trim() : '');
 const NOMBRE_TRIM = { T1: '1er Trimestre', T2: '2do Trimestre', T3: '3er Trimestre' };
-const ESTADO_TXT = { aprobado: 'Aprobado', supletorio: 'Supletorio', remedial: 'Remedial', pendiente: 'En curso' };
-const ESTADO_COLOR = { aprobado: '#2f9e44', supletorio: '#e8590c', remedial: '#e03131', pendiente: '#6b7490' };
+const ESTADO_TXT = { aprobado: 'Aprobado', supletorio: 'Supletorio', reprobado: 'Reprobado', pendiente: 'En curso' };
+const ESTADO_COLOR = { aprobado: '#2f9e44', supletorio: '#e8590c', reprobado: '#e03131', pendiente: '#6b7490' };
 
 export const ESTILOS_BOLETA = `
   @page { size: A4; margin: 14mm; }
@@ -81,7 +81,7 @@ export function boletaHTML(d) {
   let resumen = '';
   if (anual && d.materias.length) {
     const est = d.materias.map(m => m.estado);
-    resumen = est.includes('remedial') ? 'Tiene asignaturas en examen remedial.'
+    resumen = est.includes('reprobado') ? 'Tiene asignaturas reprobadas.'
       : est.includes('supletorio') ? 'Tiene asignaturas pendientes de examen supletorio.'
       : est.every(e => e === 'aprobado') ? 'Aprobó todas las asignaturas del año lectivo.'
       : 'Año lectivo en curso: aún faltan notas definitivas.';

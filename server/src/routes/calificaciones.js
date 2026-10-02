@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../lib/auth.js';
 import { supabase } from '../lib/supabase.js';
 import {
-  TRIMESTRES, configPorDefecto, validarConfig, calcTrimestre, aplicarMejora, calcAnual
+  TRIMESTRES, configPorDefecto, validarConfig, calcTrimestre, aplicarMejora, calcAnual, claseNivelEvaluacion
 } from '../lib/calificaciones.js';
 
 export const calificacionesRouter = Router();
@@ -16,13 +16,14 @@ const TIPOS = ['ind', 'grp', 'sum'];
 async function cargarCarga(docenteMateriaId) {
   const { data, error } = await supabase
     .from('docente_materia')
-    .select('id, paralelo_id, periodo_id, docentes(profile_id), paralelo:paralelos!inner(id, grado:grados!inner(institucion_id, nivel))')
+    .select('id, paralelo_id, periodo_id, docentes(profile_id), paralelo:paralelos!inner(id, grado:grados!inner(institucion_id, nivel, nombre))')
     .eq('id', docenteMateriaId).single();
   if (error || !data) return null;
   return {
     id: data.id, paraleloId: data.paralelo_id, periodoId: data.periodo_id,
     docenteProfileId: data.docentes?.profile_id || null,
-    institucionId: data.paralelo.grado.institucion_id, nivel: data.paralelo.grado.nivel
+    institucionId: data.paralelo.grado.institucion_id, nivel: data.paralelo.grado.nivel, nombreGrado: data.paralelo.grado.nombre,
+    clase: claseNivelEvaluacion({ nivel: data.paralelo.grado.nivel, nombre: data.paralelo.grado.nombre })
   };
 }
 
@@ -60,8 +61,8 @@ calificacionesRouter.post('/', requireAuth, async (req, res) => {
   if (req.profile.rol === 'docente' && carga.docenteProfileId !== req.profile.id) {
     return res.status(403).json({ error: 'Esa carga académica no te pertenece.' });
   }
-  if (carga.nivel !== 'BGU') {
-    return res.status(422).json({ error: `Este módulo solo admite Bachillerato (BGU); el curso es '${carga.nivel}'. Los demás niveles se habilitan en fases siguientes.` });
+  if (!carga.clase) {
+    return res.status(422).json({ error: `Este módulo admite EGB Superior (8vo a 10mo) y Bachillerato; el curso es '${carga.nombreGrado}' (${carga.nivel || 'sin nivel'}). Los demás niveles se habilitan en fases siguientes.` });
   }
 
   // Los estudiantes deben tener matrícula activa en ESE paralelo y período
@@ -213,8 +214,8 @@ calificacionesRouter.post('/supletorio', requireAuth, async (req, res) => {
   if (req.profile.rol === 'docente' && carga.docenteProfileId !== req.profile.id) {
     return res.status(403).json({ error: 'Esa carga académica no te pertenece.' });
   }
-  if (carga.nivel !== 'BGU') {
-    return res.status(422).json({ error: `Este módulo solo admite Bachillerato (BGU); el curso es '${carga.nivel}'.` });
+  if (!carga.clase) {
+    return res.status(422).json({ error: `Este módulo admite EGB Superior (8vo a 10mo) y Bachillerato; el curso es '${carga.nombreGrado}'.` });
   }
 
   const ids = registros.map(r => r.estudiante_id);
@@ -233,7 +234,7 @@ calificacionesRouter.post('/supletorio', requireAuth, async (req, res) => {
     if (!valorValido(r.supletorio)) return res.status(400).json({ error: `Nota de supletorio inválida (${r.supletorio}): debe estar entre 0 y 10.` });
     const anual = calcAnual(trims);
     if (anual.estado !== 'supletorio') {
-      return res.status(422).json({ error: `El estudiante ${r.estudiante_id} no puede rendir supletorio en esta materia (estado: ${anual.estado}; el supletorio es para promedios de 5.00 a 6.99 con los 3 trimestres cerrados).` });
+      return res.status(422).json({ error: `El estudiante ${r.estudiante_id} no puede rendir supletorio en esta materia (estado: ${anual.estado}; el supletorio es para promedios de 4.01 a 6.99 con los 3 trimestres cerrados).` });
     }
     guardar.push({
       estudiante_id: r.estudiante_id, docente_materia_id, periodo_evaluativo: 'SUP',
@@ -270,7 +271,7 @@ calificacionesRouter.put('/config-carga', requireAuth, async (req, res) => {
   if (req.profile.rol === 'docente' && carga.docenteProfileId !== req.profile.id) {
     return res.status(403).json({ error: 'Esa carga académica no te pertenece.' });
   }
-  if (carga.nivel !== 'BGU') return res.status(422).json({ error: 'Por ahora solo Bachillerato (BGU).' });
+  if (!carga.clase) return res.status(422).json({ error: 'Por ahora solo EGB Superior (8vo a 10mo) y Bachillerato.' });
 
   const base = await configEfectiva(carga.institucionId, carga.paraleloId, null);
   const nueva = JSON.parse(JSON.stringify(base));

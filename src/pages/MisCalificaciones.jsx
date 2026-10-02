@@ -3,11 +3,11 @@ import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchHijosDeRepresentante, fetchEstudianteIdPorProfile, fetchBoletaEstudiante, fetchNombreDocente
 } from '../lib/data.js';
-import { escalaDAAPA, aDos } from '../lib/calificaciones.js';
+import { escalaDAAPA, aDos, usaEvaluacionNumerica } from '../lib/calificaciones.js';
 import { documentoBoletas, materiasParaBoleta } from '../lib/boletaHTML.js';
 
-const ESTADO_BADGE = { aprobado: 'b-ok', supletorio: 'b-warn', remedial: 'b-err', pendiente: 'b-muted' };
-const ESTADO_LABEL = { aprobado: 'Aprobado', supletorio: 'Supletorio', remedial: 'Remedial', pendiente: 'En curso' };
+const ESTADO_BADGE = { aprobado: 'b-ok', supletorio: 'b-warn', reprobado: 'b-err', pendiente: 'b-muted' };
+const ESTADO_LABEL = { aprobado: 'Aprobado', supletorio: 'Supletorio', reprobado: 'Reprobado', pendiente: 'En curso' };
 const OPCIONES_BOLETA = [['anual', 'Informe final anual'], ['T1', '1er Trimestre'], ['T2', '2do Trimestre'], ['T3', '3er Trimestre']];
 const fmt = n => (n === null || n === undefined ? '—' : Number(n).toFixed(2));
 
@@ -85,7 +85,7 @@ export default function MisCalificaciones() {
   if (esPadre && hijos.length === 0) return <div className="empty"><span className="ti ti-users" /><p>No hay ningún estudiante vinculado a tu cuenta todavía.</p></div>;
   if (!periodo) return <div className="empty"><span className="ti ti-report" /><p>No hay un período lectivo activo.</p></div>;
   if (!info || !info.matricula) return <div className="empty"><span className="ti ti-report" /><p>Sin matrícula activa en el período actual.</p></div>;
-  if (info.grado?.nivel !== 'BGU') {
+  if (!usaEvaluacionNumerica(info.grado)) {
     return <div className="empty"><span className="ti ti-report" /><p>Las calificaciones y boletas de tu nivel se habilitarán en una próxima etapa.</p></div>;
   }
 

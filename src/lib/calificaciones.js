@@ -4,10 +4,11 @@
 
 export const TRIMESTRES = ['T1', 'T2', 'T3'];
 export const NOTA_MINIMA_APROBAR = 7;
-export const NOTA_MINIMA_PA = 4.01;          // límite inferior de la escala PA (solo para la escala DA/AA/PA/NA)
-// Art. 212 del Reglamento LOEI: supletorio para promedio anual de 5.00 a 6.99; con menos de 5
-// (4.99 o menos) o si no aprueba el supletorio, el estudiante pasa a examen REMEDIAL.
-export const NOTA_MINIMA_SUPLETORIO = 5;
+export const NOTA_MINIMA_PA = 4.01;          // límite inferior de la escala PA (DA/AA/PA/NA)
+// Normativa vigente (reforma al Reglamento LOEI de feb-2023 e Instructivo de Evaluación): el supletorio lo rinde
+// quien tiene promedio final entre 4.01 y 6.99 en una asignatura (EGB Media, Superior y Bachillerato). Los exámenes
+// remedial y de gracia fueron ELIMINADOS desde el año lectivo 2023-2024: quien no aprueba el supletorio reprueba.
+export const NOTA_MINIMA_SUPLETORIO = 4.01;
 
 // Modo de aproximación a 2 decimales. El mockup institucional usa TRUNCAR (8.999 -> 8.99).
 // Si el reglamento pide redondear, cambiar solo esta constante.
@@ -139,10 +140,9 @@ export function escalaDAAPA(n) {
  * Promedio anual de una materia. notasTrim = [t1,t2,t3] (notas ya con mejora, null si falta);
  * supletorio = nota del examen supletorio o null.
  * Devuelve { promedio, final, estado } con estado:
- *   'pendiente' (faltan trimestres) | 'aprobado' | 'supletorio' (puede rendirlo, aún sin nota)
- *   | 'remedial' (promedio < 5, o rindió el supletorio y sacó menos de 7)
+ *   'pendiente' (faltan trimestres) | 'aprobado' | 'supletorio' (puede rendirlo, aún sin nota) | 'reprobado'
  * El supletorio solo sube la nota a 7.00 si el estudiante sacó >= 7 (el mockup lo daba por aprobado con cualquier nota).
- * El resultado del remedial / gracia aún no se modela (siguiente fase).
+ * Promedio <= 4.00 reprueba directamente (no hay supletorio, remedial ni gracia).
  */
 export function calcAnual(notasTrim, supletorio = null) {
   const vals = (notasTrim || []).filter(n => n !== null && n !== undefined);
@@ -150,9 +150,25 @@ export function calcAnual(notasTrim, supletorio = null) {
   const promedio = aDos(vals.reduce((a, b) => a + b, 0) / vals.length);
   if (vals.length < TRIMESTRES.length) return { promedio, final: promedio, estado: 'pendiente' };
   if (promedio >= NOTA_MINIMA_APROBAR) return { promedio, final: promedio, estado: 'aprobado' };
-  if (promedio < NOTA_MINIMA_SUPLETORIO) return { promedio, final: promedio, estado: 'remedial' };
+  if (promedio < NOTA_MINIMA_SUPLETORIO) return { promedio, final: promedio, estado: 'reprobado' };
   if (!esNum(supletorio)) return { promedio, final: promedio, estado: 'supletorio' };
   return Number(supletorio) >= NOTA_MINIMA_APROBAR
     ? { promedio, final: NOTA_MINIMA_APROBAR, estado: 'aprobado' }
-    : { promedio, final: promedio, estado: 'remedial' };
+    : { promedio, final: promedio, estado: 'reprobado' };
 }
+
+/**
+ * ¿Este curso usa el sistema de evaluación 70/30 con escala DA/AA/PA/NA y supletorio?
+ * Aplica a EGB Superior (8vo, 9no, 10mo) y Bachillerato (1ro–3ro BGU). `grados.nivel` es texto libre en SIGEE
+ * ('BGU', 'BACHILLERATO', 'EGB'…), así que se reconoce por el nivel Y por el nombre del curso.
+ * Devuelve 'BGU' | 'SUPERIOR' | null.
+ */
+export function claseNivelEvaluacion(grado) {
+  const sinTildes = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  const nivel = sinTildes(grado?.nivel);
+  const nombre = sinTildes(grado?.nombre);
+  if (/\bBGU\b|BACHILLERATO/.test(nivel) || /BACHILLERATO|\bBGU\b/.test(nombre)) return 'BGU';
+  if (/SUPERIOR/.test(nivel) || /(^|[^0-9A-Z])(8VO|9NO|10MO|OCTAVO|NOVENO|DECIMO)([^A-Z]|$)/.test(nombre)) return 'SUPERIOR';
+  return null;
+}
+export const usaEvaluacionNumerica = grado => claseNivelEvaluacion(grado) !== null;

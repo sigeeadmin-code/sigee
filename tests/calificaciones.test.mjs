@@ -45,17 +45,35 @@ assert.equal(C.escalaDAAPA(9).c, 'DA'); assert.equal(C.escalaDAAPA(8.99).c, 'AA'
 assert.equal(C.escalaDAAPA(7).c, 'AA'); assert.equal(C.escalaDAAPA(6.99).c, 'PA');
 assert.equal(C.escalaDAAPA(4.01).c, 'PA'); assert.equal(C.escalaDAAPA(4).c, 'NA');
 
-// Anual
+// Anual (normativa vigente: sin remedial ni gracia; supletorio de 4.01 a 6.99)
 assert.deepEqual(C.calcAnual([8, 8, 8]), { promedio: 8, final: 8, estado: 'aprobado' });
 assert.equal(C.calcAnual([8, 8]).estado, 'pendiente');
 assert.equal(C.calcAnual([6, 6, 6]).estado, 'supletorio');
-assert.equal(C.calcAnual([5, 5, 5]).estado, 'supletorio');         // 5.00 puede rendir supletorio
+assert.equal(C.calcAnual([4.01, 4.01, 4.01]).estado, 'supletorio');   // límite inferior del supletorio
+assert.equal(C.calcAnual([5, 5, 5]).estado, 'supletorio');
 assert.equal(C.calcAnual([6.99, 6.99, 6.99]).estado, 'supletorio');
-assert.equal(C.calcAnual([4.99, 4.99, 4.99]).estado, 'remedial');   // < 5 va directo a remedial
+assert.equal(C.calcAnual([4, 4, 4]).estado, 'reprobado');             // 4.00 reprueba directo
+assert.equal(C.calcAnual([3, 3, 3]).estado, 'reprobado');
 assert.deepEqual(C.calcAnual([6, 6, 6], 7), { promedio: 6, final: 7, estado: 'aprobado' });
 // BUG del mockup corregido: supletorio < 7 NO aprueba
-assert.deepEqual(C.calcAnual([6, 6, 6], 3), { promedio: 6, final: 6, estado: 'remedial' });
-assert.deepEqual(C.calcAnual([6, 6, 6], 6.99), { promedio: 6, final: 6, estado: 'remedial' });
-assert.equal(C.calcAnual([3, 3, 3]).estado, 'remedial');
+assert.deepEqual(C.calcAnual([6, 6, 6], 3), { promedio: 6, final: 6, estado: 'reprobado' });
+assert.deepEqual(C.calcAnual([6, 6, 6], 6.99), { promedio: 6, final: 6, estado: 'reprobado' });
 assert.equal(C.calcAnual([null, null, null]).estado, 'pendiente');
+
+// Clasificador de nivel: Bachillerato y EGB Superior (8vo–10mo); el resto no
+const k = (nivel, nombre) => C.claseNivelEvaluacion({ nivel, nombre });
+assert.equal(k('BGU', '1ro Bachillerato'), 'BGU');
+assert.equal(k('BACHILLERATO', '1ro de BACHILLERATO'), 'BGU');
+assert.equal(k('', '3ro Bachillerato'), 'BGU');
+assert.equal(k('EGB Superior', '8vo EGB'), 'SUPERIOR');
+assert.equal(k('', '9no EGB'), 'SUPERIOR');
+assert.equal(k('EGB', '10mo de EGB'), 'SUPERIOR');
+assert.equal(k('EGB', 'Décimo año'), 'SUPERIOR');
+assert.equal(k('', 'Octavo'), 'SUPERIOR');
+assert.equal(k('EGB', '7mo EGB'), null);
+assert.equal(k('EGB', '2do EGB'), null);
+assert.equal(k('INICIAL', 'Inicial 2'), null);
+assert.equal(k('', '18vo club'), null);
+assert.equal(k(null, null), null);
+assert.equal(C.claseNivelEvaluacion(null), null);
 console.log('OK calificaciones: todas las pruebas pasaron');

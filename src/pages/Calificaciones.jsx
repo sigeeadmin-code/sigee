@@ -6,7 +6,7 @@ import {
   fetchCedulasEstudiantes, fetchNombreDocente
 } from '../lib/data.js';
 import {
-  TRIMESTRES, configPorDefecto, validarConfig, calcTrimestre, aplicarMejora, escalaDAAPA, calcAnual, aDos
+  TRIMESTRES, configPorDefecto, validarConfig, calcTrimestre, aplicarMejora, escalaDAAPA, calcAnual, aDos, usaEvaluacionNumerica
 } from '../lib/calificaciones.js';
 import { documentoBoletas } from '../lib/boletaHTML.js';
 import MisCalificaciones from './MisCalificaciones.jsx';
@@ -15,8 +15,8 @@ import Placeholder from './Placeholder.jsx';
 const ROLES_EDITAN = ['super_admin', 'admin_plantel', 'secretario', 'docente'];
 const ROLES_CONSULTA = ['inspector_general', 'supervisor_plantel', 'supervisor_general', 'contador_general', 'contador_plantel', 'administrativo'];
 const TRIM_LABEL = { T1: 'Trimestre 1', T2: 'Trimestre 2', T3: 'Trimestre 3' };
-const ESTADO_BADGE = { aprobado: 'b-ok', supletorio: 'b-warn', remedial: 'b-err', pendiente: 'b-muted' };
-const ESTADO_LABEL = { aprobado: 'Aprobado', supletorio: 'Supletorio', remedial: 'Remedial', pendiente: 'En curso' };
+const ESTADO_BADGE = { aprobado: 'b-ok', supletorio: 'b-warn', reprobado: 'b-err', pendiente: 'b-muted' };
+const ESTADO_LABEL = { aprobado: 'Aprobado', supletorio: 'Supletorio', reprobado: 'Reprobado', pendiente: 'En curso' };
 const fmt = n => (n === null || n === undefined ? '—' : Number(n).toFixed(2));
 
 function gridVacio(cfg) {
@@ -69,13 +69,13 @@ function CuadroCalificaciones() {
 
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t); }, [toast]);
 
-  // Base: solo cursos BGU (1ro, 2do y 3ro de Bachillerato). Otros niveles llegan en fases siguientes.
+  // Base: EGB Superior (8vo, 9no, 10mo) y Bachillerato (1ro–3ro). Otros niveles llegan en fases siguientes.
   useEffect(() => {
     if (!institucionId) return;
     let activo = true;
     (async () => {
       setLoading(true);
-      const gr = (await fetchGradosConParalelos(institucionId)).filter(g => g.nivel === 'BGU');
+      const gr = (await fetchGradosConParalelos(institucionId)).filter(g => usaEvaluacionNumerica(g));
       const cs = esDocente ? await fetchCargasDocente(profile.id, institucionId) : await fetchTodasCargas(institucionId);
       if (!activo) return;
       const delPeriodo = cs.filter(c => !periodoActivo || c.periodoId === periodoActivo.id);
@@ -210,7 +210,7 @@ function CuadroCalificaciones() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
         <div>
-          <h2 style={{ margin: '0 0 4px' }}>Cuadro de calificaciones · Bachillerato</h2>
+          <h2 style={{ margin: '0 0 4px' }}>Cuadro de calificaciones · 8vo EGB a 3ro Bachillerato</h2>
           <div style={{ fontSize: 13, color: 'var(--slate)' }}>{institucion?.nombre} · {periodoActivo.nombre}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -238,7 +238,7 @@ function CuadroCalificaciones() {
               const g = gradosVisibles.find(x => x.id === e.target.value);
               setParaleloId((g?.paralelos.find(p => !esDocente || cargasTodas.some(c => c.paraleloId === p.id)))?.id || '');
             }}>
-              {gradosVisibles.length === 0 && <option value="">Sin cursos de Bachillerato</option>}
+              {gradosVisibles.length === 0 && <option value="">Sin cursos de 8vo EGB a 3ro Bachillerato</option>}
               {gradosVisibles.map(g => <option key={g.id} value={g.id}>{g.nombre}</option>)}
             </select>
           </div>
@@ -454,7 +454,7 @@ function CuadroParalelo({ paraleloId, cargas, periodoActivo, puedeEditar, instit
       const vals = porMateria.map(valor).filter(v => v !== null);
       const general = vals.length ? aDos(vals.reduce((x, y) => x + y, 0) / vals.length) : null;
       const estados = porMateria.map(m => m.anual.estado);
-      const estado = estados.includes('remedial') ? 'remedial'
+      const estado = estados.includes('reprobado') ? 'reprobado'
         : estados.includes('supletorio') ? 'supletorio'
         : estados.length && estados.every(e => e === 'aprobado') ? 'aprobado' : 'pendiente';
       return { a, porMateria, valor, general, estado };
@@ -513,7 +513,7 @@ function CuadroParalelo({ paraleloId, cargas, periodoActivo, puedeEditar, instit
           <div className="cb" style={{ borderTop: '1px solid var(--line)' }}>
             <h3 style={{ margin: '0 0 6px', fontSize: 15 }}>Examen supletorio</h3>
             <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--slate)' }}>
-              Pueden rendirlo los estudiantes con promedio anual de 5.00 a 6.99 y los 3 trimestres cerrados. Con 7 o más aprueban con 7.00; con menos pasan a remedial.
+              Pueden rendirlo los estudiantes con promedio anual de 4.01 a 6.99 y los 3 trimestres cerrados. Con 7 o más aprueban la asignatura con 7.00; con menos la reprueban (ya no existen remedial ni gracia).
             </p>
             {aviso && <div style={{ marginBottom: 10, fontSize: 13, color: aviso.ok ? 'var(--green)' : 'var(--red)' }}>{aviso.t}</div>}
             {bloques.length === 0 && <p className="muted" style={{ margin: 0 }}>Ningún estudiante de este paralelo está en supletorio por ahora.</p>}
@@ -548,7 +548,7 @@ function CuadroParalelo({ paraleloId, cargas, periodoActivo, puedeEditar, instit
         );
       })()}
       <div style={{ padding: '10px 14px', fontSize: 12, color: 'var(--slate)' }}>
-        Solo se muestran notas definitivas del trimestre. La boleta imprimible y el remedial se agregan en la siguiente fase.
+        Solo se muestran notas definitivas del trimestre. Las boletas se imprimen desde esta misma pantalla.
       </div>
     </div>
   );

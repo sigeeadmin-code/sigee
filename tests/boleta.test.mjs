@@ -52,3 +52,8 @@ assert.equal(m[0].final, 8.5); assert.equal(m[0].estado, 'aprobado');
 assert.equal(m[1].final, 7); assert.equal(m[1].estado, 'aprobado'); assert.equal(m[1].supletorio, 7.5);
 assert.equal(m[2].estado, 'pendiente'); assert.deepEqual(m[2].trims, [9, null, null]);
 console.log('OK boleta: materiasParaBoleta');
+
+// Estado reprobado (ya no existe remedial)
+const hr = boletaHTML({ ...base, tipo: 'anual', materias: [{ nombre: 'Física', trims: [3, 3, 3], promedio: 3, final: 3, estado: 'reprobado', supletorio: null }] });
+assert.ok(hr.includes('Reprobado') && hr.includes('Tiene asignaturas reprobadas.') && !hr.includes('emedial'));
+console.log('OK boleta: reprobado');
