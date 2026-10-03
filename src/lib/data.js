@@ -1591,3 +1591,16 @@ export async function cargarMateriasDelNivel({ institucionId, paraleloId, period
   }
   return { agregadas, yaExistian, creadasEnCatalogo };
 }
+
+/** Instituciones activas para los buscadores (nombre, AMIE, cantón, provincia). Pagina de 1000 en 1000 para no truncar. */
+export async function fetchInstitucionesBusqueda() {
+  const todas = [];
+  for (let desde = 0; ; desde += 1000) {
+    const { data, error } = await supabase.from('instituciones')
+      .select('id, nombre, amie, canton, provincia').eq('activo', true).order('nombre').range(desde, desde + 999);
+    if (error) throw error;
+    todas.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
+  return todas;
+}

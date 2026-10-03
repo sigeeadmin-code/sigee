@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
-import { fetchPlanteles, fetchUsuarios, crearUsuario, actualizarUsuario } from '../lib/data.js';
+import { fetchPlanteles, fetchUsuarios, crearUsuario, actualizarUsuario, fetchInstitucionesBusqueda } from '../lib/data.js';
+import BuscadorInstitucion from '../components/BuscadorInstitucion.jsx';
 
 const NIVEL_SIGEE = ['super_admin', 'supervisor_general', 'contador_general'];
 
@@ -42,6 +43,9 @@ export default function Usuarios() {
 
   const [usuarios, setUsuarios] = useState([]);
   const [planteles, setPlanteles] = useState([]);
+  const [instBusqueda, setInstBusqueda] = useState([]);
+  const [instCargando, setInstCargando] = useState(false);
+  const [instElegida, setInstElegida] = useState(null);   // para confirmar el plantel en la pantalla de credenciales
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [rolFiltro, setRolFiltro] = useState('');
@@ -65,6 +69,15 @@ export default function Usuarios() {
   }, [esSuperAdmin, profile.institucion_id]);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  // Lista de instituciones activas para el buscador (solo la necesita el Super Admin)
+  useEffect(() => {
+    if (!esSuperAdmin) return;
+    let activo = true;
+    setInstCargando(true);
+    fetchInstitucionesBusqueda().then(l => { if (activo) setInstBusqueda(l); }).catch(() => { if (activo) setInstBusqueda([]); }).finally(() => { if (activo) setInstCargando(false); });
+    return () => { activo = false; };
+  }, [esSuperAdmin]);
 
   useEffect(() => {
     if (!toast) return;
@@ -97,6 +110,7 @@ export default function Usuarios() {
       password: generarPassword()
     });
     setFormErr('');
+    setInstElegida(null);
     setCredencialesCreadas(null);
     setModalOpen(true);
   }
@@ -236,6 +250,11 @@ export default function Usuarios() {
               <p style={{ fontSize: 13, marginBottom: 12 }}>
                 Copia esta contraseña ahora y compártela por un canal seguro — no se puede volver a consultar desde aquí.
               </p>
+              {instElegida && (
+                <p style={{ fontSize: 12.5, margin: '0 0 12px', padding: '8px 10px', borderRadius: 8, background: 'var(--page, #f5f7fc)' }}>
+                  Plantel: <strong>{instElegida.nombre}</strong> · AMIE <span style={{ fontFamily: 'monospace' }}>{instElegida.amie || '—'}</span>
+                </p>
+              )}
               <div className="form-grid">
                 <div className="full">
                   <label className="fl">Correo</label>
@@ -303,10 +322,10 @@ export default function Usuarios() {
                 {!NIVEL_SIGEE.includes(form.rol) && esSuperAdmin && (
                   <div>
                     <label className="fl">Institución</label>
-                    <select className="fc" value={form.institucion_id} onChange={e => campo('institucion_id', e.target.value)}>
-                      <option value="">Selecciona…</option>
-                      {planteles.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                    </select>
+                    <BuscadorInstitucion
+                      instituciones={instBusqueda} cargando={instCargando} value={form.institucion_id}
+                      onChange={(id, inst) => { campo('institucion_id', id); setInstElegida(inst); }}
+                    />
                   </div>
                 )}
                 <div className="full">
