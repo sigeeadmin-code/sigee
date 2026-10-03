@@ -1604,3 +1604,23 @@ export async function fetchInstitucionesBusqueda() {
   }
   return todas;
 }
+
+/* ── Vincular cuentas de acceso existentes con fichas de docente (sin crear usuario ni contraseña nueva) ── */
+export async function fetchCuentasDocenteSinFicha(institucionId) {
+  const [cuentas, fichas] = await Promise.all([
+    sel('profiles', 'id, nombres, apellidos, email, cedula, activo', q => q.eq('institucion_id', institucionId).eq('rol', 'docente')),
+    sel('docentes', 'profile_id', q => q.eq('institucion_id', institucionId).not('profile_id', 'is', null))
+  ]);
+  const usadas = new Set(fichas.map(f => f.profile_id));
+  return cuentas.filter(c => !usadas.has(c.id)).map(c => ({
+    id: c.id, nombre: `${c.apellidos || ''} ${c.nombres || ''}`.trim(), email: c.email, cedula: c.cedula, activo: c.activo !== false
+  }));
+}
+export async function fetchFichasSinCuenta(institucionId) {
+  const rows = await sel('docentes', 'id, nombres, apellidos, cedula, email', q => q.eq('institucion_id', institucionId).eq('activo', true).is('profile_id', null));
+  return rows.map(d => ({ id: d.id, nombre: `${d.apellidos || ''} ${d.nombres || ''}`.trim(), cedula: d.cedula, email: d.email }));
+}
+export async function vincularCuentaDocente(docenteId, profileId) {
+  const { error } = await supabase.rpc('vincular_cuenta_docente', { p_docente_id: docenteId, p_profile_id: profileId });
+  if (error) throw error;
+}

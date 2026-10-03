@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
-import { fetchPlanteles, fetchUsuarios, crearUsuario, actualizarUsuario, fetchInstitucionesBusqueda } from '../lib/data.js';
+import { fetchPlanteles, fetchUsuarios, crearUsuario, actualizarUsuario, fetchInstitucionesBusqueda, fetchFichasSinCuenta } from '../lib/data.js';
+import { fichaUnicaQueCoincide } from '../lib/vinculos.js';
 import BuscadorInstitucion from '../components/BuscadorInstitucion.jsx';
 
 const NIVEL_SIGEE = ['super_admin', 'supervisor_general', 'contador_general'];
@@ -45,6 +46,9 @@ export default function Usuarios() {
   const [planteles, setPlanteles] = useState([]);
   const [instBusqueda, setInstBusqueda] = useState([]);
   const [instCargando, setInstCargando] = useState(false);
+  const [fichas, setFichas] = useState(null);          // docentes del plantel que aún no tienen cuenta (null = cargando / no aplica)
+  const [fichaElegida, setFichaElegida] = useState(null); // null = automático (según cédula/correo) · '' = no vincular · id = vincular
+  const [enlazadaA, setEnlazadaA] = useState(null);
   const [instElegida, setInstElegida] = useState(null);   // para confirmar el plantel en la pantalla de credenciales
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
@@ -111,10 +115,23 @@ export default function Usuarios() {
     });
     setFormErr('');
     setInstElegida(null);
+    setFichas(null); setFichaElegida(null); setEnlazadaA(null);
     setCredencialesCreadas(null);
     setModalOpen(true);
   }
   function campo(k, v) { setForm(f => ({ ...f, [k]: v })); }
+
+  // Al crear un usuario con rol Docente se ofrece enlazarlo con su ficha (así no hay que "volver a activarlo" después)
+  const instParaFichas = form.rol === 'docente' ? (esAdminPlantel ? profile.institucion_id : form.institucion_id) : '';
+  useEffect(() => {
+    setFichas(null);
+    if (!modalOpen || !instParaFichas) return;
+    let activo = true;
+    fetchFichasSinCuenta(instParaFichas).then(f => { if (activo) setFichas(f); }).catch(() => { if (activo) setFichas([]); });
+    return () => { activo = false; };
+  }, [modalOpen, instParaFichas]);
+  const fichaSugerida = useMemo(() => fichaUnicaQueCoincide({ cedula: form.cedula, email: form.email }, fichas || []), [form.cedula, form.email, fichas]);
+  const fichaFinal = form.rol !== 'docente' ? '' : (fichaElegida !== null ? fichaElegida : (fichaSugerida?.id || ''));
 
   async function toggleActivo(u) {
     try {
@@ -143,6 +160,10 @@ export default function Usuarios() {
       setFormErr('Selecciona la institución para este rol.');
       return;
     }
+    if (form.rol === 'docente' && !fichaFinal && fichas && fichas.length > 0 &&
+        !window.confirm('Este usuario Docente NO quedará enlazado a ninguna ficha de docente: no verá sus cursos ni su horario hasta que lo vincules.\n\nHay ' + fichas.length + ' docente(s) del plantel sin cuenta. ¿Crear el usuario sin enlazarlo?')) {
+      return;
+    }
     setSaving(true);
     try {
       await crearUsuario({
@@ -153,8 +174,10 @@ export default function Usuarios() {
         rol: form.rol,
         institucion_id: esRolSigee ? undefined : form.institucion_id,
         cedula: form.cedula.trim() || undefined,
-        telefono: form.telefono.trim() || undefined
+        telefono: form.telefono.trim() || undefined,
+        docente_id: fichaFinal || undefined
       });
+      setEnlazadaA(fichaFinal ? (fichas || []).find(f => f.id === fichaFinal) || null : null);
       setCredencialesCreadas({ email: form.email.trim().toLowerCase(), password: form.password });
       await cargar();
       refrescarDatos();
@@ -250,6 +273,11 @@ export default function Usuarios() {
               <p style={{ fontSize: 13, marginBottom: 12 }}>
                 Copia esta contraseña ahora y compártela por un canal seguro — no se puede volver a consultar desde aquí.
               </p>
+              {enlazadaA && (
+                <p style={{ fontSize: 12.5, margin: '0 0 12px', padding: '8px 10px', borderRadius: 8, background: 'rgba(22,163,74,.08)' }}>
+                  ✓ Enlazado a la ficha de <strong>{enlazadaA.nombre}</strong>: verá sus cursos y su horario al entrar.
+                </p>
+              )}
               {instElegida && (
                 <p style={{ fontSize: 12.5, margin: '0 0 12px', padding: '8px 10px', borderRadius: 8, background: 'var(--page, #f5f7fc)' }}>
                   Plantel: <strong>{instElegida.nombre}</strong> · AMIE <span style={{ fontFamily: 'monospace' }}>{instElegida.amie || '—'}</span>
@@ -326,6 +354,23 @@ export default function Usuarios() {
                       instituciones={instBusqueda} cargando={instCargando} value={form.institucion_id}
                       onChange={(id, inst) => { campo('institucion_id', id); setInstElegida(inst); }}
                     />
+                  </div>
+                )}
+                {form.rol === 'docente' && instParaFichas && (
+                  <div className="full">
+                    <label className="fl">Ficha de docente (para que vea sus cursos y horario)</label>
+                    {fichas === null ? <div style={{ fontSize: 12.5, color: 'var(--slate)' }}>Buscando docentes sin cuenta…</div> : (
+                      <>
+                        <select className="fc" value={fichaFinal} onChange={e => setFichaElegida(e.target.value)}>
+                          <option value="">— No vincular a ninguna ficha —</option>
+                          {fichas.map(f => <option key={f.id} value={f.id}>{f.nombre}{f.cedula ? ' · ' + f.cedula : ''}</option>)}
+                        </select>
+                        {fichaSugerida && fichaElegida === null && (
+                          <div style={{ fontSize: 11.5, color: '#166534', marginTop: 4 }}>✓ Se eligió automáticamente la ficha de {fichaSugerida.nombre} (coincide la cédula o el correo).</div>
+                        )}
+                        {fichas.length === 0 && <div style={{ fontSize: 11.5, color: 'var(--slate)', marginTop: 4 }}>Todos los docentes de este plantel ya tienen cuenta (o aún no hay fichas creadas).</div>}
+                      </>
+                    )}
                   </div>
                 )}
                 <div className="full">

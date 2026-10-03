@@ -2,9 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchDocentePerfil, crearDocente, guardarDocentePerfil, subirArchivo,
+  fetchCuentasDocenteSinFicha, vincularCuentaDocente,
   fetchCargasPorDocenteId, crearCargaDocente, eliminarCargaDocente,
   fetchMaterias, fetchGradosConParalelos, fetchPeriodos, crearUsuario
 } from '../lib/data.js';
+import { cuentasQueCoinciden } from '../lib/vinculos.js';
 import { descargarPlantillaExcel, leerExcel, normalizarFecha, validarCedulaEC } from '../lib/cargaMasiva.js';
 
 const PLANTILLA_DOCENTES_COLS = [
@@ -230,7 +232,24 @@ export default function Docentes() {
     return Array.from(bytes, b => letras[b % letras.length]).join('');
   }
   function abrirDarAcceso(d) {
-    setAcceso({ docente: d, email: d.email || '', password: generarClave(), guardando: false, error: '', creado: false });
+    setAcceso({ docente: d, email: d.email || '', password: generarClave(), guardando: false, error: '', creado: false, vinculada: null, cuentas: null, sugeridas: [], otraCuenta: '' });
+    // ¿ya existe una cuenta de este docente (creada antes desde Usuarios)? Se detecta por cédula o correo
+    fetchCuentasDocenteSinFicha(institucion.id)
+      .then(cs => setAcceso(a => (a && a.docente.id === d.id ? { ...a, cuentas: cs, sugeridas: cuentasQueCoinciden(d, cs) } : a)))
+      .catch(() => setAcceso(a => (a && a.docente.id === d.id ? { ...a, cuentas: [], sugeridas: [] } : a)));
+  }
+  async function vincularExistente(cuenta) {
+    const a = acceso;
+    if (!window.confirm(`¿Vincular la cuenta ${cuenta.email} con ${a.docente.nombre}?\n\nNo se crea ninguna contraseña nueva: el docente sigue entrando con la que ya tiene.`)) return;
+    setAcceso({ ...a, guardando: true, error: '' });
+    try {
+      await vincularCuentaDocente(a.docente.id, cuenta.id);
+      setDocentes(ds => ds.map(x => x.id === a.docente.id ? { ...x, acceso: true, email: x.email || cuenta.email } : x));
+      setAcceso(x => ({ ...x, guardando: false, vinculada: cuenta }));
+      refrescarDatos();
+    } catch (err) {
+      setAcceso(x => ({ ...x, guardando: false, error: err.message || 'No se pudo vincular la cuenta.' }));
+    }
   }
   async function crearAcceso(e) {
     e.preventDefault();
@@ -371,11 +390,51 @@ export default function Docentes() {
 
       {acceso && (
         <div className="modal-bg open" onClick={ev => { if (ev.target === ev.currentTarget && !acceso.guardando) setAcceso(null); }}>
-          {!acceso.creado ? (
+          {acceso.vinculada ? (
+            <div className="modal" style={{ maxWidth: 460 }}>
+              <div className="modal-h"><h3>Cuenta vinculada</h3></div>
+              <div className="modal-b">
+                <p style={{ fontSize: 13, marginBottom: 8 }}>
+                  <strong>{acceso.docente.nombre}</strong> ya tiene acceso con la cuenta <strong>{acceso.vinculada.email}</strong>.
+                </p>
+                <p style={{ fontSize: 13, color: 'var(--slate)', margin: 0 }}>
+                  No se generó ninguna contraseña nueva: entra con la que ya tenía. Ahora verá sus cursos, materias, horario y calificaciones.
+                </p>
+              </div>
+              <div className="modal-f"><button type="button" className="btn btn-primary" onClick={() => setAcceso(null)}>Listo</button></div>
+            </div>
+          ) : !acceso.creado ? (
             <form className="modal" onSubmit={crearAcceso} style={{ maxWidth: 480 }}>
               <div className="modal-h"><h3>Dar acceso a {acceso.docente.nombre}</h3></div>
               <div className="modal-b">
+                {acceso.cuentas === null && <p style={{ fontSize: 12.5, color: 'var(--slate)', marginBottom: 10 }}>Buscando si ya existe una cuenta para este docente…</p>}
+                {acceso.sugeridas.map(c => (
+                  <div key={c.id} style={{ marginBottom: 12, padding: '10px 12px', borderRadius: 10, background: 'rgba(22,163,74,.08)', border: '1px solid var(--green, #16a34a)' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>Ya existe una cuenta para este docente</div>
+                    <div style={{ fontSize: 12.5, marginBottom: 8 }}>
+                      {c.nombre} · <span style={{ fontFamily: 'monospace' }}>{c.email}</span> <span style={{ color: 'var(--slate)' }}>(coincide por {c.por === 'cedula' ? 'cédula' : 'correo'})</span>
+                    </div>
+                    <button type="button" className="btn btn-success btn-sm" disabled={acceso.guardando} onClick={() => vincularExistente(c)}>
+                      {acceso.guardando ? 'Vinculando…' : '🔗 Vincular esta cuenta (sin cambiar su contraseña)'}
+                    </button>
+                  </div>
+                ))}
+                {acceso.cuentas && acceso.cuentas.filter(c => !acceso.sugeridas.some(x => x.id === c.id)).length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <label className="fl">¿Ya creaste su cuenta en Usuarios con otros datos? Elígela</label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <select className="fc" value={acceso.otraCuenta} onChange={ev => setAcceso(a => ({ ...a, otraCuenta: ev.target.value }))}>
+                        <option value="">— Selecciona una cuenta existente —</option>
+                        {acceso.cuentas.filter(c => !acceso.sugeridas.some(x => x.id === c.id)).map(c => <option key={c.id} value={c.id}>{c.nombre} · {c.email}</option>)}
+                      </select>
+                      <button type="button" className="btn btn-secondary btn-sm" disabled={!acceso.otraCuenta || acceso.guardando}
+                        onClick={() => vincularExistente(acceso.cuentas.find(c => c.id === acceso.otraCuenta))}>Vincular</button>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: 'var(--slate)', marginTop: 4 }}>Comprueba que sea la misma persona: esta lista solo muestra cuentas de Docente de tu plantel que aún no están enlazadas a ninguna ficha.</div>
+                  </div>
+                )}
                 <p style={{ fontSize: 13, marginBottom: 12 }}>
+                  {acceso.sugeridas.length || (acceso.cuentas && acceso.cuentas.length) ? <strong>¿No existe su cuenta? Crea una nueva: </strong> : null}
                   Se creará un usuario con rol <strong>Docente</strong> enlazado a su ficha, para que vea sus cursos y materias.
                 </p>
                 <div className="form-grid">
