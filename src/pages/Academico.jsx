@@ -12,8 +12,10 @@ import {
   fetchEstudiantesParaleloDetalle, matricularEstudiante, actualizarAlumnoDetalle,
   darDeBajaEstudiante, trasladarEstudiante,
   fetchResumenAcademico, fetchTendenciaAsistencia, fetchPromedioPorMateria, fetchActividadReciente,
-  fetchAlumnosParaExportar, fetchTodasCargas, fetchAsistenciaInstitucion
+  fetchAlumnosParaExportar, fetchTodasCargas, fetchAsistenciaInstitucion,
+  fetchCatalogoNivel, guardarCatalogoNivel, cargarMateriasDelNivel
 } from '../lib/data.js';
+import { NIVELES, NIVEL_LABEL, ANIOS_NIVEL, nivelCanonico, clave } from '../lib/niveles.js';
 
 const JORNADAS = ['Matutina', 'Vespertina', 'Nocturna'];
 
@@ -246,12 +248,24 @@ function CoursePanel({ grados, gradoSelId, onSelect, institucionId, recargar, sh
             <div className="modal-b">
               <div className="form-grid">
                 <div className="full">
-                  <label className="fl">Nombre</label>
-                  <input className="fc" value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))} placeholder="Ej: 1ro de Bachillerato" required />
+                  <label className="fl">Nivel educativo</label>
+                  <select className="fc" value={form.nivel} required={!editId} onChange={e => setForm(f => ({ ...f, nivel: e.target.value }))}>
+                    <option value="">— Elige el nivel —</option>
+                    {form.nivel && !NIVELES.includes(form.nivel) && <option value={form.nivel}>{form.nivel} (valor anterior)</option>}
+                    {NIVELES.map(n => <option key={n} value={n}>{NIVEL_LABEL[n]}</option>)}
+                  </select>
+                  {NIVELES.includes(form.nivel) && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                      {ANIOS_NIVEL[form.nivel].map(a => (
+                        <button type="button" key={a} className={'btn btn-sm ' + (form.nombre === a ? 'btn-primary' : 'btn-secondary')}
+                          onClick={() => setForm(f => ({ ...f, nombre: a }))}>{a}</button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <label className="fl">Nivel</label>
-                  <input className="fc" value={form.nivel} onChange={e => setForm(f => ({ ...f, nivel: e.target.value }))} placeholder="EGB / Bachillerato" />
+                <div className="full">
+                  <label className="fl">Nombre del curso</label>
+                  <input className="fc" value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))} placeholder="Ej: 8vo EGB" required />
                 </div>
                 <div>
                   <label className="fl">Orden</label>
@@ -452,7 +466,7 @@ function SubjectStudentPanel({
           />
         ) : (
           <MateriasTab
-            materias={materias} paralelo={paralelo} periodoActivo={periodoActivo}
+            grado={grado} materias={materias} paralelo={paralelo} periodoActivo={periodoActivo}
             materiasCatalogo={materiasCatalogo} docentes={docentes} institucionId={institucionId}
             recargarDetalle={recargarDetalle} recargarCatalogo={recargarCatalogo} showToast={showToast}
           />
@@ -655,7 +669,7 @@ function AlumnosTab({ alumnos, q, setQ, paralelo, grado, grados, institucionId, 
 }
 
 // ── Sub-pestaña: Materias ──
-function MateriasTab({ materias, paralelo, periodoActivo, materiasCatalogo, docentes, institucionId, recargarDetalle, recargarCatalogo, showToast }) {
+function MateriasTab({ grado, materias, paralelo, periodoActivo, materiasCatalogo, docentes, institucionId, recargarDetalle, recargarCatalogo, showToast }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [form, setForm] = useState({ materiaId: '', materiaNueva: '', horasSemana: 4, docenteId: '' });
@@ -707,11 +721,38 @@ function MateriasTab({ materias, paralelo, periodoActivo, materiasCatalogo, doce
   }
 
   const totalHoras = materias.reduce((a, m) => a + (m.horasSemana || 0), 0);
+  const nivelDelCurso = nivelCanonico(grado);
+  const [cargandoNivel, setCargandoNivel] = useState(false);
+
+  async function cargarDelNivel() {
+    if (!nivelDelCurso) { showToast('err', 'Este curso no tiene un nivel reconocido. Edítalo y elige el nivel educativo.'); return; }
+    if (!periodoActivo) { showToast('err', 'No hay un período lectivo activo.'); return; }
+    setCargandoNivel(true);
+    try {
+      const cat = await fetchCatalogoNivel(institucionId);
+      const nombres = cat[nivelDelCurso].nombres;
+      const yaTiene = new Set(materias.map(m => clave(m.materiaNombre)));
+      const faltan = nombres.filter(n => !yaTiene.has(clave(n)));
+      if (!faltan.length) { showToast('ok', `Este paralelo ya tiene todas las materias de ${NIVEL_LABEL[nivelDelCurso]}.`); setCargandoNivel(false); return; }
+      if (!window.confirm(`Se agregarán ${faltan.length} materia(s) de ${NIVEL_LABEL[nivelDelCurso]} a ${paralelo.nombre} (sin docente; lo asignas después):\n\n• ${faltan.join('\n• ')}`)) { setCargandoNivel(false); return; }
+      const r = await cargarMateriasDelNivel({ institucionId, paraleloId: paralelo.id, periodoId: periodoActivo.id, nombres });
+      await recargarDetalle();
+      await recargarCatalogo();
+      showToast('ok', `Se agregaron ${r.agregadas} materia(s) al paralelo.`);
+    } catch (err) {
+      showToast('err', err.message || 'No se pudieron cargar las materias del nivel.');
+    }
+    setCargandoNivel(false);
+  }
 
   return (
     <>
-      <div style={{ padding: 12 }}>
+      <div style={{ padding: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button className="btn btn-primary btn-sm" onClick={abrirCrear}><span className="ti ti-plus" /> Agregar materia</button>
+        <button className="btn btn-secondary btn-sm" disabled={cargandoNivel} onClick={cargarDelNivel}
+          title={nivelDelCurso ? `Agrega las materias del catálogo de ${NIVEL_LABEL[nivelDelCurso]}` : 'Primero elige el nivel del curso'}>
+          {cargandoNivel ? 'Cargando…' : `📚 Cargar materias del nivel${nivelDelCurso ? ' (' + NIVEL_LABEL[nivelDelCurso] + ')' : ''}`}
+        </button>
       </div>
       {materias.length === 0 ? (
         <div className="empty"><span className="ti ti-book" /><p>Sin materias asignadas a este paralelo.</p></div>
@@ -993,7 +1034,12 @@ function ConfiguracionTab({ institucionId, showToast, recargarPeriodos }) {
         ))}
       </div>
       {subtab === 'periodo' && <Periodos institucionId={institucionId} onToast={m => { showToast(m.tipo, m.msg); recargarPeriodos(); }} />}
-      {subtab === 'materias' && <MateriasCatalogo institucionId={institucionId} onToast={m => showToast(m.tipo, m.msg)} />}
+      {subtab === 'materias' && (
+        <>
+          <CatalogoPorNivel institucionId={institucionId} onToast={m => showToast(m.tipo, m.msg)} />
+          <MateriasCatalogo institucionId={institucionId} onToast={m => showToast(m.tipo, m.msg)} />
+        </>
+      )}
     </div>
   );
 }
@@ -1084,6 +1130,90 @@ function Periodos({ institucionId, onToast }) {
           </div>
           <button className="btn btn-primary" style={{ marginTop: 14 }} disabled={saving}>{saving ? 'Guardando…' : '+ Crear período'}</button>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Catálogo de materias por nivel (plan de estudios sugerido) ────────────
+const NIVEL_COLOR = {
+  INICIAL: { bg: '#fdf2f8', tx: '#9d174d' }, PREPARATORIA: { bg: '#fffbeb', tx: '#92400e' }, ELEMENTAL: { bg: '#f5f3ff', tx: '#5b21b6' },
+  MEDIA: { bg: '#eff6ff', tx: '#1d4ed8' }, SUPERIOR: { bg: '#f0fdf4', tx: '#166534' }, BACHILLERATO: { bg: '#fefce8', tx: '#854d0e' }
+};
+function CatalogoPorNivel({ institucionId, onToast }) {
+  const [cat, setCat] = useState(null);
+  const [nuevo, setNuevo] = useState({});
+  const [guardando, setGuardando] = useState(null);
+
+  const cargar = useCallback(async () => { setCat(await fetchCatalogoNivel(institucionId)); }, [institucionId]);
+  useEffect(() => { cargar(); }, [cargar]);
+
+  async function aplicar(niv, nombres, mensaje) {
+    const antes = cat;
+    setCat(c => ({ ...c, [niv]: { nombres, personalizado: true } }));   // se ve al instante; si falla, se revierte
+    setGuardando(niv);
+    try {
+      await guardarCatalogoNivel(institucionId, niv, nombres);
+      await cargar();
+      if (mensaje) onToast({ tipo: 'ok', msg: mensaje });
+    } catch (err) {
+      setCat(antes);
+      onToast({ tipo: 'err', msg: err.message || 'No se pudo guardar el catálogo.' });
+    }
+    setGuardando(null);
+  }
+  function agregar(niv) {
+    const v = (nuevo[niv] || '').trim();
+    if (!v) return;
+    if (cat[niv].nombres.some(n => clave(n) === clave(v))) { onToast({ tipo: 'err', msg: `"${v}" ya está en ${NIVEL_LABEL[niv]}.` }); return; }
+    setNuevo(n => ({ ...n, [niv]: '' }));
+    aplicar(niv, [...cat[niv].nombres, v]);
+  }
+  function quitar(niv, i) {
+    if (cat[niv].nombres.length <= 1) { onToast({ tipo: 'err', msg: 'Deja al menos una materia en el nivel (o usa "Restablecer plan por defecto").' }); return; }
+    aplicar(niv, cat[niv].nombres.filter((_, k) => k !== i));
+  }
+  async function restablecer(niv) {
+    if (!window.confirm(`¿Volver al plan de estudios por defecto de ${NIVEL_LABEL[niv]}? Esto no cambia las materias ya cargadas a los paralelos.`)) return;
+    setGuardando(niv);
+    try { await guardarCatalogoNivel(institucionId, niv, []); await cargar(); onToast({ tipo: 'ok', msg: 'Plan por defecto restablecido.' }); }
+    catch (err) { onToast({ tipo: 'err', msg: err.message || 'No se pudo restablecer.' }); }
+    setGuardando(null);
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: 14 }}>
+      <div className="ch"><div><h3 style={{ margin: 0 }}>📖 Catálogo por nivel</h3><div style={{ fontSize: 11, color: 'var(--slate)' }}>Materias sugeridas para cada nivel. En un paralelo, el botón “Cargar materias del nivel” las agrega de una vez.</div></div></div>
+      <div className="cb">
+        {!cat ? <p className="muted">Cargando…</p> : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 12 }}>
+            {NIVELES.map(niv => (
+              <div key={niv} style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                  <span style={{ background: NIVEL_COLOR[niv].bg, color: NIVEL_COLOR[niv].tx, fontWeight: 700, fontSize: 12, padding: '3px 10px', borderRadius: 999 }}>{NIVEL_LABEL[niv]}</span>
+                  <span style={{ fontSize: 11, color: 'var(--slate)' }}>{cat[niv].nombres.length} materias</span>
+                  {cat[niv].personalizado
+                    ? <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto', fontSize: 11 }} disabled={guardando === niv} onClick={() => restablecer(niv)}>Restablecer plan por defecto</button>
+                    : <span className="badge b-muted" style={{ marginLeft: 'auto', fontSize: 10 }}>Plan por defecto</span>}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                  {cat[niv].nombres.map((n, i) => (
+                    <span key={n} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, padding: '4px 10px', border: '1px solid var(--line)', borderRadius: 999, background: '#fafbfc' }}>
+                      📘 {n}
+                      <button type="button" disabled={guardando === niv} onClick={() => quitar(niv, i)} title="Quitar del catálogo" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--slate)', padding: 0, fontSize: 13, lineHeight: 1 }}>✕</button>
+                    </span>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input className="fc" placeholder={`Nueva materia para ${NIVEL_LABEL[niv]}…`} value={nuevo[niv] || ''}
+                    onChange={e => setNuevo(n => ({ ...n, [niv]: e.target.value }))}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); agregar(niv); } }} />
+                  <button type="button" className="btn btn-secondary btn-sm" disabled={guardando === niv} onClick={() => agregar(niv)}>＋</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

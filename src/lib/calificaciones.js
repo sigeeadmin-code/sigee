@@ -1,6 +1,8 @@
-// Lógica de calificaciones de Bachillerato (BGU). Módulo PURO (sin imports): se
-// copia tal cual en server/src/lib/calificaciones.js — mismo patrón que calendario.js.
+// Lógica de calificaciones (EGB Superior y Bachillerato). Módulo PURO: solo importa ./niveles.js (también puro).
+// Se copia tal cual, junto con niveles.js, en server/src/lib/ — mismo patrón que calendario.js.
 // Si cambias una fórmula aquí, cámbiala también allá (hay un test que compara ambos).
+
+import { nivelCanonico } from './niveles.js';
 
 export const TRIMESTRES = ['T1', 'T2', 'T3'];
 export const NOTA_MINIMA_APROBAR = 7;
@@ -159,16 +161,13 @@ export function calcAnual(notasTrim, supletorio = null) {
 
 /**
  * ¿Este curso usa el sistema de evaluación 70/30 con escala DA/AA/PA/NA y supletorio?
- * Aplica a EGB Superior (8vo, 9no, 10mo) y Bachillerato (1ro–3ro BGU). `grados.nivel` es texto libre en SIGEE
- * ('BGU', 'BACHILLERATO', 'EGB'…), así que se reconoce por el nivel Y por el nombre del curso.
- * Devuelve 'BGU' | 'SUPERIOR' | null.
+ * Aplica a EGB Superior (8vo, 9no, 10mo) y Bachillerato. El nivel se deduce con la MISMA función que usa el Académico
+ * (`nivelCanonico` de niveles.js), porque `grados.nivel` es texto libre ('BGU', 'BACHILLERATO', 'Superior', 'EGB'…).
+ * Devuelve 'SUPERIOR' | 'BACHILLERATO' | null.
  */
+export const NIVELES_EVALUACION_NUMERICA = ['SUPERIOR', 'BACHILLERATO'];
 export function claseNivelEvaluacion(grado) {
-  const sinTildes = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
-  const nivel = sinTildes(grado?.nivel);
-  const nombre = sinTildes(grado?.nombre);
-  if (/\bBGU\b|BACHILLERATO/.test(nivel) || /BACHILLERATO|\bBGU\b/.test(nombre)) return 'BGU';
-  if (/SUPERIOR/.test(nivel) || /(^|[^0-9A-Z])(8VO|9NO|10MO|OCTAVO|NOVENO|DECIMO)([^A-Z]|$)/.test(nombre)) return 'SUPERIOR';
-  return null;
+  const n = nivelCanonico(grado);
+  return NIVELES_EVALUACION_NUMERICA.includes(n) ? n : null;
 }
 export const usaEvaluacionNumerica = grado => claseNivelEvaluacion(grado) !== null;

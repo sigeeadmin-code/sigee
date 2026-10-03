@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
 import {
-  fetchHijosDeRepresentante, fetchEstudianteIdPorProfile, fetchBoletaEstudiante, fetchNombreDocente
+  fetchHijosDeRepresentante, fetchEstudianteIdPorProfile, fetchBoletaEstudiante, fetchNombreDocente, fetchCatalogoNivel
 } from '../lib/data.js';
 import { escalaDAAPA, aDos, usaEvaluacionNumerica } from '../lib/calificaciones.js';
 import { documentoBoletas, materiasParaBoleta } from '../lib/boletaHTML.js';
+import { nivelCanonico, NIVEL_LABEL, ordenarPorCatalogo } from '../lib/niveles.js';
 
 const ESTADO_BADGE = { aprobado: 'b-ok', supletorio: 'b-warn', reprobado: 'b-err', pendiente: 'b-muted' };
 const ESTADO_LABEL = { aprobado: 'Aprobado', supletorio: 'Supletorio', reprobado: 'Reprobado', pendiente: 'En curso' };
@@ -22,6 +23,8 @@ export default function MisCalificaciones() {
   const [loading, setLoading] = useState(true);
   const [tipoBoleta, setTipoBoleta] = useState('anual');
   const [aviso, setAviso] = useState(null);
+  const [catalogo, setCatalogo] = useState(null);
+  useEffect(() => { let a = true; fetchCatalogoNivel(institucion?.id).then(c => { if (a) setCatalogo(c); }); return () => { a = false; }; }, [institucion?.id]);
 
   useEffect(() => {
     let activo = true;
@@ -50,10 +53,12 @@ export default function MisCalificaciones() {
     return () => { activo = false; };
   }, [estudianteId, periodo?.id]);
 
-  const materias = useMemo(
-    () => (info?.cargas ? materiasParaBoleta(info.cargas, info.notas, info.mejoras) : []),
-    [info]
-  );
+  const nivelCanon = nivelCanonico(info?.grado);
+  const materias = useMemo(() => {
+    if (!info?.cargas) return [];
+    const ordenadas = catalogo && nivelCanon ? ordenarPorCatalogo(info.cargas, catalogo[nivelCanon].nombres) : info.cargas;
+    return materiasParaBoleta(ordenadas, info.notas, info.mejoras);
+  }, [info, catalogo, nivelCanon]);
   const general = useMemo(() => {
     const vals = materias.map(m => m.final).filter(v => v !== null && v !== undefined);
     return vals.length ? aDos(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
@@ -68,8 +73,8 @@ export default function MisCalificaciones() {
       const fecha = new Date().toLocaleDateString('es-EC', { year: 'numeric', month: 'long', day: 'numeric' });
       const e = info.estudiante;
       const html = documentoBoletas([{
-        institucion, periodoNombre: periodo.nombre, cursoNombre: info.grado?.nombre || '', paraleloNombre: info.paralelo?.nombre || '',
-        tutorNombre, tipo: tipoBoleta, fechaEmision: fecha,
+        institucion, periodoNombre: periodo.nombre, cursoNombre: info.grado?.nombre || '', paraleloNombre: info.paralelo?.nombre || '', nivelNombre: nivelCanon ? NIVEL_LABEL[nivelCanon] : '',
+        tutorNombre, nivel: nivelCanon, tipo: tipoBoleta, fechaEmision: fecha,
         estudiante: { nombre: `${e.apellidos || ''} ${e.nombres || ''}`.trim(), cedula: e.cedula || '' },
         materias
       }], 'Boleta de calificaciones');

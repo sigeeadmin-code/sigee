@@ -57,3 +57,19 @@ console.log('OK boleta: materiasParaBoleta');
 const hr = boletaHTML({ ...base, tipo: 'anual', materias: [{ nombre: 'Física', trims: [3, 3, 3], promedio: 3, final: 3, estado: 'reprobado', supletorio: null }] });
 assert.ok(hr.includes('Reprobado') && hr.includes('Tiene asignaturas reprobadas.') && !hr.includes('emedial'));
 console.log('OK boleta: reprobado');
+
+// Nivel en la boleta
+const hn = boletaHTML({ ...base, tipo: 'anual', nivelNombre: 'Superior' });
+assert.ok(hn.includes('<strong>Nivel:</strong> Superior'));
+assert.ok(boletaHTML({ ...base, tipo: 'anual' }).includes('<strong>Nivel:</strong> —'));
+console.log('OK boleta: nivel');
+
+// Texto de la escala por nivel (el nombre del nivel lo pasa el llamador en nivelNombre)
+const hs = boletaHTML({ ...base, tipo: 'anual', nivel: 'SUPERIOR', nivelNombre: 'Superior', cursoNombre: '8vo EGB' });
+assert.ok(hs.includes('<strong>Nivel:</strong> Superior'));
+assert.ok(hs.includes('<strong>DA</strong> Domina los aprendizajes (9–10)') && hs.includes('rinde supletorio'));
+const hb = boletaHTML({ ...base, tipo: 'T1', nivel: 'BACHILLERATO', nivelNombre: 'Bachillerato' });
+assert.ok(hb.includes('<strong>Nivel:</strong> Bachillerato') && hb.includes('4.01–6.99, rinde supletorio'));
+assert.ok(boletaHTML({ ...base, tipo: 'T1' }).includes('4.01–6.99, rinde supletorio'), 'sin nivel: texto por defecto');
+assert.ok(boletaHTML({ ...base, tipo: 'T1' }).includes('<strong>Nivel:</strong> —'));
+console.log('OK boleta: textos por nivel');

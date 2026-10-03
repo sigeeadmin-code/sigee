@@ -5,6 +5,17 @@ import { escalaDAAPA, calcAnual, TRIMESTRES } from './calificaciones.js';
 export const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const f2 = n => (n === null || n === undefined ? '—' : Number(n).toFixed(2));
 const urlSegura = u => (typeof u === 'string' && /^https?:\/\//i.test(u.trim()) ? u.trim() : '');
+// Textos que cambian según el nivel (mismo criterio que el archivo original: la escala DA/AA/PA/NA rige en 8vo EGB a 3ro Bachillerato).
+export const TEXTOS_NIVEL = {
+  SUPERIOR: {
+    escala: '<strong>DA</strong> Domina los aprendizajes (9–10) · <strong>AA</strong> Alcanza los aprendizajes (7–8.99) · <strong>PA</strong> Próximo a alcanzar los aprendizajes (4.01–6.99, rinde supletorio) · <strong>NA</strong> No alcanza los aprendizajes (4.00 o menos)'
+  },
+  BACHILLERATO: {
+    escala: '<strong>DA</strong> Domina los aprendizajes (9–10) · <strong>AA</strong> Alcanza los aprendizajes (7–8.99) · <strong>PA</strong> Próximo a alcanzar los aprendizajes (4.01–6.99, rinde supletorio) · <strong>NA</strong> No alcanza los aprendizajes (4.00 o menos)'
+  }
+};
+const TEXTO_POR_DEFECTO = TEXTOS_NIVEL.BACHILLERATO;
+
 const NOMBRE_TRIM = { T1: '1er Trimestre', T2: '2do Trimestre', T3: '3er Trimestre' };
 const ESTADO_TXT = { aprobado: 'Aprobado', supletorio: 'Supletorio', reprobado: 'Reprobado', pendiente: 'En curso' };
 const ESTADO_COLOR = { aprobado: '#2f9e44', supletorio: '#e8590c', reprobado: '#e03131', pendiente: '#6b7490' };
@@ -34,7 +45,7 @@ export const ESTILOS_BOLETA = `
 
 /**
  * datos = {
- *   institucion: { nombre, amie, logo_url, rector }, periodoNombre, cursoNombre, paraleloNombre, tutorNombre,
+ *   institucion: { nombre, amie, logo_url, rector }, periodoNombre, cursoNombre, paraleloNombre, nivelNombre, tutorNombre,
  *   tipo: 'anual' | 'T1' | 'T2' | 'T3', fechaEmision (string),
  *   estudiante: { nombre, cedula },
  *   materias: [{ nombre, trims:[t1,t2,t3], promedio, final, estado, supletorio }]
@@ -42,6 +53,7 @@ export const ESTILOS_BOLETA = `
  */
 export function boletaHTML(d) {
   const anual = d.tipo === 'anual';
+  const txt = TEXTOS_NIVEL[d.nivel] || TEXTO_POR_DEFECTO;
   const inst = d.institucion || {};
   const logo = urlSegura(inst.logo_url);
   const titulo = anual ? 'INFORME FINAL ANUAL' : `INFORME DE PROGRESO · ${NOMBRE_TRIM[d.tipo] || ''}`.toUpperCase();
@@ -103,11 +115,11 @@ export function boletaHTML(d) {
     <div><strong>Curso:</strong> ${esc(d.cursoNombre)} · Paralelo "${esc(d.paraleloNombre)}"</div>
     <div><strong>Docente tutor:</strong> ${esc(d.tutorNombre || '—')}</div>
     <div><strong>Fecha de emisión:</strong> ${esc(d.fechaEmision)}</div>
-    <div><strong>Régimen:</strong> Trimestral</div>
+    <div><strong>Nivel:</strong> ${esc(d.nivelNombre || '—')}</div>
   </div>
   <table class="b-tbl"><thead>${cabecera}</thead><tbody>${filas || '<tr><td colspan="8" class="c">Sin asignaturas registradas</td></tr>'}${pie}</tbody></table>
   ${resumen ? `<p class="b-nota" style="font-size:12px;color:#000"><strong>Resultado:</strong> ${esc(resumen)}</p>` : ''}
-  <p class="b-nota">Escala: <strong>DA</strong> Domina los aprendizajes (9–10) · <strong>AA</strong> Alcanza (7–8.99) · <strong>PA</strong> Próximo a alcanzar (4.01–6.99) · <strong>NA</strong> No alcanza (≤ 4). NE = no evaluado. Solo constan notas definitivas.</p>
+  <p class="b-nota">Escala: ${txt.escala}. NE = no evaluado. Solo constan notas definitivas.</p>
   <div class="b-firmas">
     <div class="b-firma"><div class="linea"></div>${esc(d.tutorNombre || 'Docente tutor')}<br>Firma y sello</div>
     <div class="b-firma"><div class="linea"></div>${esc(inst.rector || 'Rector(a)')}<br>Rector(a)</div>

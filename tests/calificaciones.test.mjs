@@ -62,15 +62,18 @@ assert.equal(C.calcAnual([null, null, null]).estado, 'pendiente');
 
 // Clasificador de nivel: Bachillerato y EGB Superior (8vo–10mo); el resto no
 const k = (nivel, nombre) => C.claseNivelEvaluacion({ nivel, nombre });
-assert.equal(k('BGU', '1ro Bachillerato'), 'BGU');
-assert.equal(k('BACHILLERATO', '1ro de BACHILLERATO'), 'BGU');
-assert.equal(k('', '3ro Bachillerato'), 'BGU');
+assert.equal(k('BGU', '1ro Bachillerato'), 'BACHILLERATO');
+assert.equal(k('BACHILLERATO', '1ro de BACHILLERATO'), 'BACHILLERATO');
+assert.equal(k('', '3ro Bachillerato'), 'BACHILLERATO');
 assert.equal(k('EGB Superior', '8vo EGB'), 'SUPERIOR');
+assert.equal(k('SUPERIOR', '8vo EGB'), 'SUPERIOR');      // como lo crea el Académico
+assert.equal(k('Superior', 'cualquier nombre'), 'SUPERIOR');
 assert.equal(k('', '9no EGB'), 'SUPERIOR');
 assert.equal(k('EGB', '10mo de EGB'), 'SUPERIOR');
 assert.equal(k('EGB', 'Décimo año'), 'SUPERIOR');
 assert.equal(k('', 'Octavo'), 'SUPERIOR');
 assert.equal(k('EGB', '7mo EGB'), null);
+assert.equal(k('MEDIA', '6to Año EGB'), null);
 assert.equal(k('EGB', '2do EGB'), null);
 assert.equal(k('INICIAL', 'Inicial 2'), null);
 assert.equal(k('', '18vo club'), null);

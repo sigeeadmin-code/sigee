@@ -3,12 +3,13 @@ import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchGradosConParalelos, fetchCargasDocente, fetchTodasCargas, fetchEstudiantesParalelo,
   fetchAportesCarga, fetchConfigEvaluacion, fetchNotasParalelo, guardarNotasTrimestre, guardarSupletorios, guardarCasilleros,
-  fetchCedulasEstudiantes, fetchNombreDocente
+  fetchCedulasEstudiantes, fetchNombreDocente, fetchCatalogoNivel
 } from '../lib/data.js';
 import {
   TRIMESTRES, configPorDefecto, validarConfig, calcTrimestre, aplicarMejora, escalaDAAPA, calcAnual, aDos, usaEvaluacionNumerica
 } from '../lib/calificaciones.js';
 import { documentoBoletas } from '../lib/boletaHTML.js';
+import { nivelCanonico, NIVEL_LABEL, ordenarPorCatalogo } from '../lib/niveles.js';
 import MisCalificaciones from './MisCalificaciones.jsx';
 import Placeholder from './Placeholder.jsx';
 
@@ -56,6 +57,7 @@ function CuadroCalificaciones() {
   const [cargaId, setCargaId] = useState('');
   const [trim, setTrim] = useState('T1');
   const [cfg, setCfg] = useState(configPorDefecto());
+  const [catalogo, setCatalogo] = useState(null);   // plan de materias por nivel (Académico → Materias → Catálogo por nivel)
   const [alumnos, setAlumnos] = useState([]);
   const [grid, setGrid] = useState({});
   const [sucios, setSucios] = useState({});
@@ -67,6 +69,7 @@ function CuadroCalificaciones() {
   const [casEdit, setCasEdit] = useState(null);
   const [guardandoCas, setGuardandoCas] = useState(false);
 
+  useEffect(() => { if (institucionId) fetchCatalogoNivel(institucionId).then(setCatalogo); }, [institucionId]);
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t); }, [toast]);
 
   // Base: EGB Superior (8vo, 9no, 10mo) y Bachillerato (1ro–3ro). Otros niveles llegan en fases siguientes.
@@ -98,7 +101,12 @@ function CuadroCalificaciones() {
   );
   const gradoSel = gradosVisibles.find(g => g.id === gradoId);
   const paralelosVisibles = (gradoSel?.paralelos || []).filter(p => !esDocente || cargasTodas.some(c => c.paraleloId === p.id));
-  const cargasParalelo = useMemo(() => cargasTodas.filter(c => c.paraleloId === paraleloId), [cargasTodas, paraleloId]);
+  const nivelSel = nivelCanonico(gradoSel);
+  // Las materias se muestran (y se imprimen en la boleta) en el orden del catálogo del nivel; las que no están en él, al final.
+  const cargasParalelo = useMemo(
+    () => ordenarPorCatalogo(cargasTodas.filter(c => c.paraleloId === paraleloId), catalogo?.[nivelSel]?.nombres),
+    [cargasTodas, paraleloId, catalogo, nivelSel]
+  );
 
   useEffect(() => { setCargaId(cargasParalelo[0]?.id || ''); }, [cargasParalelo]);
   useEffect(() => { setPanelCas(false); }, [cargaId, vista]);
@@ -296,7 +304,7 @@ function CuadroCalificaciones() {
       {vista === 'registro'
         ? <RegistroNotas {...{ cfg, alumnos, grid, calculos, editable, cargandoNotas, sucios, setCelda, setMejora }} />
         : <CuadroParalelo paraleloId={paraleloId} cargas={cargasParalelo} periodoActivo={periodoActivo} puedeEditar={puedeEditar}
-            institucion={institucion} cursoNombre={gradoSel?.nombre || ''} paraleloNombre={paralelosVisibles.find(p => p.id === paraleloId)?.nombre || ''}
+            institucion={institucion} grado={gradoSel} cursoNombre={gradoSel?.nombre || ''} paraleloNombre={paralelosVisibles.find(p => p.id === paraleloId)?.nombre || ''}
             tutorId={paralelosVisibles.find(p => p.id === paraleloId)?.tutor_docente_id || null} />}
     </div>
   );
@@ -371,7 +379,7 @@ function RegistroNotas({ cfg, alumnos, grid, calculos, editable, cargandoNotas, 
   );
 }
 
-function CuadroParalelo({ paraleloId, cargas, periodoActivo, puedeEditar, institucion, cursoNombre, paraleloNombre, tutorId }) {
+function CuadroParalelo({ paraleloId, cargas: cargasProp, periodoActivo, puedeEditar, institucion, grado, cursoNombre, paraleloNombre, tutorId }) {
   const [alumnos, setAlumnos] = useState([]);
   const [datos, setDatos] = useState({ notas: [], mejoras: [] });
   const [cargando, setCargando] = useState(false);
@@ -380,7 +388,15 @@ function CuadroParalelo({ paraleloId, cargas, periodoActivo, puedeEditar, instit
   const [supEdit, setSupEdit] = useState({});   // { 'cargaId|estId': 'texto' }
   const [guardandoSup, setGuardandoSup] = useState(null);
   const [aviso, setAviso] = useState(null);
-  const idsCargas = cargas.map(c => c.id).join(',');
+  const idsCargas = cargasProp.map(c => c.id).join(',');
+  // Las materias se ordenan como en el catálogo del nivel (igual que en la boleta impresa)
+  const [catalogo, setCatalogo] = useState(null);
+  useEffect(() => { let a = true; fetchCatalogoNivel(institucion?.id).then(c => { if (a) setCatalogo(c); }); return () => { a = false; }; }, [institucion?.id]);
+  const nivelCanon = nivelCanonico(grado);
+  const cargas = useMemo(
+    () => (catalogo && nivelCanon ? ordenarPorCatalogo(cargasProp, catalogo[nivelCanon].nombres) : cargasProp),
+    [cargasProp, catalogo, nivelCanon]
+  );
 
   useEffect(() => {
     if (!paraleloId || !periodoActivo) return;
@@ -403,7 +419,7 @@ function CuadroParalelo({ paraleloId, cargas, periodoActivo, puedeEditar, instit
       const [cedulas, tutorNombre] = await Promise.all([fetchCedulasEstudiantes(lista.map(f => f.a.id)), fetchNombreDocente(tutorId)]);
       const fecha = new Date().toLocaleDateString('es-EC', { year: 'numeric', month: 'long', day: 'numeric' });
       const datos = lista.map(f => ({
-        institucion, periodoNombre: periodoActivo.nombre, cursoNombre, paraleloNombre, tutorNombre,
+        institucion, periodoNombre: periodoActivo.nombre, cursoNombre, paraleloNombre, nivel: nivelCanon, nivelNombre: nivelCanon ? NIVEL_LABEL[nivelCanon] : '', tutorNombre,
         tipo: modo, fechaEmision: fecha,
         estudiante: { nombre: f.a.nombre, cedula: cedulas[f.a.id] || '' },
         materias: f.porMateria.map(m => ({

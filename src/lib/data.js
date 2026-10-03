@@ -1,5 +1,6 @@
 import { supabase, ROLE_GROUP, ROLE_LABELS } from './supabase.js';
 import { crearClienteBackend } from './backend.js';
+import { combinarCatalogo, clave } from './niveles.js';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://sigee-backend-production.up.railway.app';
 
@@ -1555,4 +1556,38 @@ export async function fetchResumenCalificacionesDocente(cargas) {
     out[c.id] = { total, porTrim };
   });
   return out;
+}
+
+/* ── Catálogo de materias por nivel (plan de estudios sugerido, editable por plantel) ── */
+export async function fetchCatalogoNivel(institucionId) {
+  if (!institucionId) return combinarCatalogo([]);
+  try {
+    return combinarCatalogo(await sel('materias_catalogo_nivel', 'nivel, nombre, orden', q => q.eq('institucion_id', institucionId)));
+  } catch (e) { return combinarCatalogo([]); }
+}
+/** Reemplaza el catálogo de un nivel (transacción única). Una lista vacía vuelve al plan por defecto. */
+export async function guardarCatalogoNivel(institucionId, nivel, nombres) {
+  const { error } = await supabase.rpc('guardar_catalogo_nivel', { p_institucion: institucionId, p_nivel: nivel, p_nombres: nombres });
+  if (error) throw error;
+}
+/**
+ * Carga al paralelo las materias del catálogo del nivel que todavía no tiene (sin docente; se asigna después).
+ * Reutiliza las materias ya creadas en la institución (sin importar tildes ni mayúsculas) y crea las que falten.
+ */
+export async function cargarMateriasDelNivel({ institucionId, paraleloId, periodoId, nombres, horasSemana = 4 }) {
+  const [materias, cargas] = await Promise.all([
+    fetchMaterias(institucionId),
+    sel('docente_materia', 'materia_id', q => q.eq('paralelo_id', paraleloId).eq('periodo_id', periodoId))
+  ]);
+  const porClave = new Map(materias.map(m => [clave(m.nombre), m]));
+  const yaCargadas = new Set(cargas.map(c => c.materia_id));
+  let agregadas = 0, yaExistian = 0, creadasEnCatalogo = 0;
+  for (const nombre of nombres) {
+    let m = porClave.get(clave(nombre));
+    if (!m) { m = await crearMateria(institucionId, { nombre }); porClave.set(clave(nombre), m); creadasEnCatalogo++; }
+    if (yaCargadas.has(m.id)) { yaExistian++; continue; }
+    await crearMateriaParalelo({ materiaId: m.id, paraleloId, periodoId, docenteId: null, horasSemana });
+    yaCargadas.add(m.id); agregadas++;
+  }
+  return { agregadas, yaExistian, creadasEnCatalogo };
 }
