@@ -52,7 +52,8 @@ export function SessionProvider({ children }) {
     const { error: authErr } = await supabase.auth.signInWithPassword({ email, password });
     if (authErr) { setError('Correo o contraseña incorrectos.'); throw authErr; }
   }, []);
-  const logout = useCallback(async () => { await supabase.auth.signOut(); }, []);
+  // scope 'local': cerrar sesión aquí NO invalida las sesiones de la misma cuenta abiertas en otras pestañas o dispositivos
+  const logout = useCallback(async () => { await supabase.auth.signOut({ scope: 'local' }); }, []);
   // Vuelve a traer docentes/estudiantes/usuarios/etc. desde Supabase sin recargar toda la sesión.
   // Se debe llamar después de crear/editar/borrar registros, para que si el usuario navega a
   // otra pantalla y regresa, no vea una versión vieja en caché de los datos.

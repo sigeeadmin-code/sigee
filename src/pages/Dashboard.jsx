@@ -3,8 +3,11 @@ import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchMetricasGlobales, fetchEstudianteIdPorProfile, fetchHijosDeRepresentante, fetchProgramacionEstudiante,
   fetchCargasDocente, fetchHorarioDocente, fetchResumenAsistenciaDocente,
-  fetchPanelInspector, fetchResumenAcademicoEstudiante, fetchHorarioAlumno, fetchTareasAlumno
+  fetchPanelInspector, fetchResumenAcademicoEstudiante, fetchHorarioAlumno, fetchTareasAlumno,
+  fetchResumenCalificacionesDocente
 } from '../lib/data.js';
+import { usaEvaluacionNumerica } from '../lib/calificaciones.js';
+import { Link } from 'react-router-dom';
 
 const SOST_LABEL = { Fiscal: 'Fiscal', Particular: 'Particular', Fiscomisional: 'Fiscomisional', Municipal: 'Municipal' };
 
@@ -587,6 +590,7 @@ function DashboardDocente() {
   const [cargas, setCargas] = useState([]);
   const [clasesHoy, setClasesHoy] = useState([]);
   const [resumen, setResumen] = useState(null);
+  const [notasResumen, setNotasResumen] = useState({});
   const [loading, setLoading] = useState(true);
   const ahoraMin = new Date().getHours() * 60 + new Date().getMinutes();
   const hoyNombre = DIAS[new Date().getDay()];
@@ -600,9 +604,10 @@ function DashboardDocente() {
       if (!activo) return;
       setCargas(cd);
       const ids = cd.map(c => c.id);
-      const [bloques, res] = await Promise.all([
+      const [bloques, res, notas] = await Promise.all([
         fetchHorarioDocente(ids),
-        fetchResumenAsistenciaDocente(ids, haceDias(30), new Date().toISOString().slice(0, 10))
+        fetchResumenAsistenciaDocente(ids, haceDias(30), new Date().toISOString().slice(0, 10)),
+        fetchResumenCalificacionesDocente(cd.filter(c => usaEvaluacionNumerica({ nivel: c.gradoNivel, nombre: c.gradoNombre }))).catch(() => ({}))
       ]);
       if (!activo) return;
       const cargaPorId = Object.fromEntries(cd.map(c => [c.id, c]));
@@ -612,6 +617,7 @@ function DashboardDocente() {
         .sort((a, b) => a.inicioMin - b.inicioMin);
       setClasesHoy(deHoy);
       setResumen(res);
+      setNotasResumen(notas);
       setLoading(false);
     })();
     return () => { activo = false; };
@@ -671,9 +677,53 @@ function DashboardDocente() {
       </div>
 
       <div className="card">
-        <div className="ch"><h3>Calificaciones</h3></div>
-        <div className="cb">
-          <p style={{ fontSize: 13, color: 'var(--slate)' }}>El módulo de calificaciones todavía no está habilitado en el sistema — en cuanto esté listo, aquí verás un resumen de notas pendientes por registrar.</p>
+        <div className="ch" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3>Calificaciones</h3>
+          <Link to="/calificaciones" className="btn btn-primary btn-sm">Registrar notas</Link>
+        </div>
+        <div className="cb" style={{ padding: 0, overflowX: 'auto' }}>
+          {(() => {
+            const evaluables = cargas.filter(c => usaEvaluacionNumerica({ nivel: c.gradoNivel, nombre: c.gradoNombre }));
+            if (!evaluables.length) return <p style={{ fontSize: 13, color: 'var(--slate)', padding: '14px 18px', margin: 0 }}>Tus cursos todavía no usan el registro de calificaciones (disponible para 8vo EGB a 3ro de Bachillerato).</p>;
+            return (
+              <table className="data">
+                <thead><tr>
+                  <th>Materia</th><th>Curso</th><th style={{ textAlign: 'center' }}>Estudiantes</th>
+                  {['T1', 'T2', 'T3'].map(t => <th key={t} style={{ textAlign: 'center' }}>{t === 'T1' ? '1er' : t === 'T2' ? '2do' : '3er'} trimestre</th>)}
+                </tr></thead>
+                <tbody>
+                  {evaluables.map(c => {
+                    const r = notasResumen[c.id];
+                    return (
+                      <tr key={c.id}>
+                        <td style={{ fontWeight: 600 }}>{c.materiaNombre}</td>
+                        <td style={{ fontSize: 12 }}>{c.gradoNombre} "{c.paraleloNombre}"</td>
+                        <td style={{ textAlign: 'center' }}>{r ? r.total : '—'}</td>
+                        {['T1', 'T2', 'T3'].map(t => {
+                          const x = r?.porTrim?.[t];
+                          if (!r || !x) return <td key={t} style={{ textAlign: 'center' }}>—</td>;
+                          const faltan = Math.max(0, r.total - x.definitivas);
+                          const completo = r.total > 0 && faltan === 0;
+                          return (
+                            <td key={t} style={{ textAlign: 'center' }}>
+                              {x.definitivas === 0
+                                ? <span style={{ fontSize: 12, color: 'var(--slate)' }}>Sin notas · {r.total} pendientes</span>
+                                : (
+                                  <div>
+                                    <div style={{ fontWeight: 700 }}>{x.promedio.toFixed(2)} <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--slate)' }}>promedio</span></div>
+                                    <span className={'badge ' + (completo ? 'b-ok' : 'b-warn')}>{x.definitivas}/{r.total} con nota{faltan ? ` · faltan ${faltan}` : ''}</span>
+                                  </div>
+                                )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            );
+          })()}
         </div>
       </div>
     </div>

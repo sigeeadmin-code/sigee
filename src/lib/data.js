@@ -1,4 +1,5 @@
 import { supabase, ROLE_GROUP, ROLE_LABELS } from './supabase.js';
+import { crearClienteBackend } from './backend.js';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://sigee-backend-production.up.railway.app';
 
@@ -855,7 +856,7 @@ export async function fetchCargasPorDocenteId(docenteId, institucionId) {
     const gr = par ? gradoById[par.grado_id] : null;
     return {
       id: c.id, materiaId: c.materia_id, materiaNombre: matById[c.materia_id]?.nombre || '',
-      paraleloId: c.paralelo_id, paraleloNombre: par?.nombre || '', gradoNombre: gr?.nombre || '',
+      paraleloId: c.paralelo_id, paraleloNombre: par?.nombre || '', gradoNombre: gr?.nombre || '', gradoNivel: gr?.nivel || '',
       periodoId: c.periodo_id, periodoNombre: perById[c.periodo_id]?.nombre || ''
     };
   });
@@ -1401,6 +1402,12 @@ export async function copiarPermisosRol(rolOrigen, rolDestino) {
   }
 }
 
+const llamarBackend = crearClienteBackend({
+  apiUrl: API_URL,
+  getSession: () => supabase.auth.getSession(),
+  refreshSession: () => supabase.auth.refreshSession()
+});
+
 /* ── Calificaciones BGU (aportes por trimestre; la nota la recalcula el backend) ── */
 export async function fetchAportesCarga(docenteMateriaId, periodoEvaluativo) {
   const [aportes, mejoras] = await Promise.all([
@@ -1425,82 +1432,16 @@ export async function fetchNotasParalelo(cargaIds) {
   return { notas, mejoras };
 }
 export async function guardarNotasTrimestre(docenteMateriaId, periodoEvaluativo, registros) {
-  const { data: sesion } = await supabase.auth.getSession();
-  const token = sesion?.session?.access_token;
-  if (!token) throw new Error('Sesión expirada. Vuelve a iniciar sesión.');
-  const opciones = {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ docente_materia_id: docenteMateriaId, periodo_evaluativo: periodoEvaluativo, registros })
-  };
-  // El guardado es un upsert idempotente: reintentar ante 502/503/504 (backend dormido) es seguro.
-  let ultimoError = null;
-  for (const espera of [0, 2500, 5000]) {
-    if (espera) await new Promise(r => setTimeout(r, espera));
-    try {
-      const resp = await fetch(`${API_URL}/calificaciones`, opciones);
-      if ([502, 503, 504].includes(resp.status)) { ultimoError = new Error('El servidor está iniciando.'); continue; }
-      const body = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw Object.assign(new Error(body.error || `Error del servidor (${resp.status}) al guardar calificaciones.`), { definitivo: true });
-      return body;
-    } catch (err) {
-      if (err.definitivo) throw err;
-      ultimoError = err;
-    }
-  }
-  throw new Error('No se pudo conectar con el servidor. Revisa tu internet e inténtalo de nuevo.' + (ultimoError?.message ? ` (${ultimoError.message})` : ''));
+  // Upsert idempotente: reintentar ante servidor dormido o renovar la sesión es seguro.
+  return llamarBackend('POST', '/calificaciones', { docente_materia_id: docenteMateriaId, periodo_evaluativo: periodoEvaluativo, registros });
 }
 
 export async function guardarSupletorios(docenteMateriaId, registros) {
-  const { data: sesion } = await supabase.auth.getSession();
-  const token = sesion?.session?.access_token;
-  if (!token) throw new Error('Sesión expirada. Vuelve a iniciar sesión.');
-  const opciones = {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ docente_materia_id: docenteMateriaId, registros })
-  };
-  let ultimoError = null;
-  for (const espera of [0, 2500, 5000]) {
-    if (espera) await new Promise(r => setTimeout(r, espera));
-    try {
-      const resp = await fetch(`${API_URL}/calificaciones/supletorio`, opciones);
-      if ([502, 503, 504].includes(resp.status)) { ultimoError = new Error('El servidor está iniciando.'); continue; }
-      const body = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw Object.assign(new Error(body.error || `Error del servidor (${resp.status}) al guardar el supletorio.`), { definitivo: true });
-      return body;
-    } catch (err) {
-      if (err.definitivo) throw err;
-      ultimoError = err;
-    }
-  }
-  throw new Error('No se pudo conectar con el servidor. Revisa tu internet e inténtalo de nuevo.' + (ultimoError?.message ? ` (${ultimoError.message})` : ''));
+  return llamarBackend('POST', '/calificaciones/supletorio', { docente_materia_id: docenteMateriaId, registros });
 }
 
 export async function guardarCasilleros(docenteMateriaId, casilleros) {
-  const { data: sesion } = await supabase.auth.getSession();
-  const token = sesion?.session?.access_token;
-  if (!token) throw new Error('Sesión expirada. Vuelve a iniciar sesión.');
-  const opciones = {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ docente_materia_id: docenteMateriaId, casilleros })
-  };
-  let ultimoError = null;
-  for (const espera of [0, 2500, 5000]) {
-    if (espera) await new Promise(r => setTimeout(r, espera));
-    try {
-      const resp = await fetch(`${API_URL}/calificaciones/config-carga`, opciones);
-      if ([502, 503, 504].includes(resp.status)) { ultimoError = new Error('El servidor está iniciando.'); continue; }
-      const body = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw Object.assign(new Error(body.error || `Error del servidor (${resp.status}) al guardar los casilleros.`), { definitivo: true });
-      return body;
-    } catch (err) {
-      if (err.definitivo) throw err;
-      ultimoError = err;
-    }
-  }
-  throw new Error('No se pudo conectar con el servidor. Revisa tu internet e inténtalo de nuevo.' + (ultimoError?.message ? ` (${ultimoError.message})` : ''));
+  return llamarBackend('PUT', '/calificaciones/config-carga', { docente_materia_id: docenteMateriaId, casilleros });
 }
 
 /* ── Boletas: datos extra (solo lectura) ── */
@@ -1584,4 +1525,34 @@ export async function moverBloqueHorario(id, dia, franja) {
   const { data, error } = await supabase.rpc('mover_bloque_horario', { p_id: id, p_dia: dia, p_franja: franja });
   if (error) throw error;
   return data;
+}
+
+/**
+ * Resumen de notas para el panel del docente: por cada carga evaluable, cuántos estudiantes ya tienen la nota
+ * DEFINITIVA de cada trimestre, cuántos faltan y el promedio del curso en ese trimestre.
+ */
+export async function fetchResumenCalificacionesDocente(cargas) {
+  const ids = cargas.map(c => c.id);
+  if (!ids.length) return {};
+  const paraleloIds = [...new Set(cargas.map(c => c.paraleloId))];
+  const periodoIds = [...new Set(cargas.map(c => c.periodoId).filter(Boolean))];
+  const [notas, matriculas] = await Promise.all([
+    sel('calificaciones', 'estudiante_id, docente_materia_id, periodo_evaluativo, nota', q => q.in('docente_materia_id', ids)),
+    sel('matriculas', 'estudiante_id, paralelo_id, periodo_id', q => q.in('paralelo_id', paraleloIds).in('periodo_id', periodoIds).eq('estado', 'activa'))
+  ]);
+  const out = {};
+  cargas.forEach(c => {
+    const total = matriculas.filter(m => m.paralelo_id === c.paraleloId && m.periodo_id === c.periodoId).length;
+    const porTrim = {};
+    ['T1', 'T2', 'T3'].forEach(t => {
+      const delTrim = notas.filter(n => n.docente_materia_id === c.id && n.periodo_evaluativo === t);
+      const vals = delTrim.map(n => Number(n.nota));
+      porTrim[t] = {
+        definitivas: delTrim.length,
+        promedio: vals.length ? Math.trunc((vals.reduce((a, b) => a + b, 0) / vals.length) * 100 + 1e-9) / 100 : null
+      };
+    });
+    out[c.id] = { total, porTrim };
+  });
+  return out;
 }
