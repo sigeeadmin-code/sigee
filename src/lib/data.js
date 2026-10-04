@@ -64,7 +64,7 @@ export async function fetchInstitucionData(institucionId) {
       especialidad: d.especialidad || '', area: d.area || '',
       fechaIngreso: d.fecha_ingreso || null,
       titulo: d.titulo, materias: [...materiasSet], cursos: [...cursosSet], cargas,
-      activo: !!d.activo, acceso: !!d.profile_id
+      activo: !!d.activo, acceso: !!d.profile_id, profile_id: d.profile_id || null
     };
   });
 
@@ -577,7 +577,11 @@ export async function fetchProgramacionEstudiante(estudianteId) {
 
 export async function crearEstudiante(institucionId, datos) {
   const { data, error } = await supabase.from('estudiantes')
+    .insert({ institucion_id: institucionId, ...datos }).select().single();
   if (error) throw error;
+  // Protección: si por cualquier motivo no vuelve el registro creado, se avisa con un error normal
+  // (antes la pantalla intentaba leer `nuevo.id` mientras se dibujaba y quedaba en blanco).
+  if (!data?.id) throw new Error('El estudiante no se pudo crear. Inténtalo de nuevo.');
   return data;
 }
 
@@ -593,9 +597,17 @@ export async function eliminarEstudiante(id) {
   if (error) throw error;
 }
 
+/** La base de datos solo admite 'padre' | 'madre' | 'tutor' (minúscula). Cualquier otro parentesco (abuelo, tío, "Otro"…) se guarda como 'tutor'. */
+export function normalizarParentesco(v) {
+  const t = String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+  if (/^(padre|papa|father)\b/.test(t)) return 'padre';
+  if (/^(madre|mama|mother)\b/.test(t)) return 'madre';
+  return 'tutor';
+}
+
 export async function agregarRepresentante(institucionId, estudianteId, datos) {
   const { data: rep, error: e1 } = await supabase.from('representantes')
-    .insert({ institucion_id: institucionId, ...datos }).select().single();
+    .insert({ institucion_id: institucionId, ...datos, rol_representante: normalizarParentesco(datos?.rol_representante) }).select().single();
   if (e1) throw e1;
   const { error: e2 } = await supabase.from('representantes_estudiantes')
     .insert({ representante_id: rep.id, estudiante_id: estudianteId });
@@ -604,7 +616,8 @@ export async function agregarRepresentante(institucionId, estudianteId, datos) {
 }
 
 export async function actualizarRepresentante(id, cambios) {
-  const { error } = await supabase.from('representantes').update(cambios).eq('id', id);
+  const c = cambios && 'rol_representante' in cambios ? { ...cambios, rol_representante: normalizarParentesco(cambios.rol_representante) } : cambios;
+  const { error } = await supabase.from('representantes').update(c).eq('id', id);
   if (error) throw error;
 }
 
@@ -950,6 +963,20 @@ export async function actualizarUsuario(id, cambios) {
   const { error } = await supabase.from('profiles').update(cambios).eq('id', id);
   if (error) throw error;
 }
+/**
+ * Restablece la contraseña (y opcionalmente corrige el correo) de una o varias cuentas. Solo Super Admin y Administrador de Plantel.
+ * resets: [{ user_id, password, email? }] → [{ user_id, ok, error? }]
+ */
+export async function restablecerContrasenas(resets) {
+  const { data, error } = await supabase.functions.invoke('admin-reset-password', { body: { resets } });
+  if (error) {
+    let msg = error.message;
+    try { const j = await error.context?.json?.(); if (j?.error) msg = j.error; } catch (_) { /* se queda el mensaje genérico */ }
+    throw new Error(msg);
+  }
+  return data?.resultados || [];
+}
+
 export async function crearUsuario(datos) {
   const { data, error } = await supabase.functions.invoke('admin-create-user', { body: datos });
   if (error) throw error;

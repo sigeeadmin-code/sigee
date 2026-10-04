@@ -20,7 +20,8 @@ const PLANTILLA_ESTUDIANTES_EJEMPLO = [
 ];
 
 const GENEROS = ['Masculino', 'Femenino'];
-const ROLES_REP = ['Padre', 'Madre', 'Tutor', 'Otro'];
+// Valores tal como los guarda la base de datos; "Tutor" cubre a cualquier otro representante legal (abuelo, tío…)
+const ROLES_REP = [['padre', 'Padre'], ['madre', 'Madre'], ['tutor', 'Tutor / otro']];
 const ETNIAS = ['Mestizo', 'Indígena', 'Afroecuatoriano', 'Montubio', 'Blanco', 'Mulato', 'Negro', 'Otro'];
 const DISCAPACIDADES = ['Ninguna', 'Física', 'Visual', 'Auditiva', 'Intelectual', 'Psicosocial', 'Múltiple'];
 
@@ -47,7 +48,7 @@ export default function Estudiantes() {
   const [tab, setTab] = useState('alumno');
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
-  const [nuevoRep, setNuevoRep] = useState({ nombres: '', apellidos: '', cedula: '', telefono: '', email: '', rol_representante: 'Padre' });
+  const [nuevoRep, setNuevoRep] = useState({ nombres: '', apellidos: '', cedula: '', telefono: '', email: '', rol_representante: 'padre' });
   const [catalogo, setCatalogo] = useState({ grados: [], periodos: [] });
   const [nuevaMatricula, setNuevaMatricula] = useState({ periodoId: '', gradoId: '', paraleloId: '' });
   const [matriculando, setMatriculando] = useState(false);
@@ -273,7 +274,7 @@ export default function Estudiantes() {
     try {
       const rep = await agregarRepresentante(institucion.id, modal.id, nuevoRep);
       upd('representantes', [...modal.representantes, rep]);
-      setNuevoRep({ nombres: '', apellidos: '', cedula: '', telefono: '', email: '', rol_representante: 'Padre' });
+      setNuevoRep({ nombres: '', apellidos: '', cedula: '', telefono: '', email: '', rol_representante: 'padre' });
       refrescarDatos();
     } catch (e) { setError('No se pudo agregar el representante: ' + e.message); }
   }
@@ -442,7 +443,7 @@ export default function Estudiantes() {
                   {modal.representantes.map(r => (
                     <div key={r.id} className="card" style={{ marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <strong>{r.apellidos} {r.nombres}</strong> <span className="muted">— {r.rol_representante}</span><br />
+                        <strong>{r.apellidos} {r.nombres}</strong> <span className="muted">— {(ROLES_REP.find(([v]) => v === r.rol_representante) || [])[1] || r.rol_representante}</span><br />
                         <span className="muted">{r.cedula || '—'} · {r.telefono || '—'} · {r.email || '—'}</span>
                       </div>
                       <button type="button" className="btn btn-danger btn-sm" onClick={() => quitarRep(r.id)}>✕ Quitar</button>
@@ -455,7 +456,7 @@ export default function Estudiantes() {
                         <div><label className="fl">Rol</label>
                           <select className="fc" value={nuevoRep.rol_representante}
                             onChange={e => setNuevoRep(r => ({ ...r, rol_representante: e.target.value }))}>
-                            {ROLES_REP.map(r => <option key={r} value={r}>{r}</option>)}
+                            {ROLES_REP.map(([v, et]) => <option key={v} value={v}>{et}</option>)}
                           </select></div>
                         <div><label className="fl">Apellidos</label>
                           <input className="fc" value={nuevoRep.apellidos} onChange={e => setNuevoRep(r => ({ ...r, apellidos: e.target.value }))} /></div>

@@ -31,3 +31,12 @@ assert.equal(fichaUnicaQueCoincide({ cedula: '0000000000' }, fichas), null);
 assert.equal(fichaUnicaQueCoincide({ cedula: '0704674670' }, [...fichas, { id: 'f3', cedula: '0704674670' }]), null);
 assert.equal(fichaUnicaQueCoincide({}, fichas), null);
 console.log('OK vinculos: todas las pruebas pasaron');
+
+// ── generador de contraseñas temporales ──
+import { generarClave } from '../src/lib/claves.js';
+globalThis.crypto ??= (await import('node:crypto')).webcrypto;
+const claves = Array.from({ length: 300 }, () => generarClave());
+assert.ok(claves.every(c => c.length === 10 && /[A-Z]/.test(c) && /[a-z]/.test(c) && /\d/.test(c) && !/[0O1lI]/.test(c)));
+assert.equal(new Set(claves).size, 300, 'no se repiten');
+assert.equal(generarClave(14).length, 14);
+console.log('OK claves: todas las pruebas pasaron');

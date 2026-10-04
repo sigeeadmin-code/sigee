@@ -3,6 +3,7 @@ import { useSession } from '../lib/SessionContext.jsx';
 import { fetchPlanteles, fetchUsuarios, crearUsuario, actualizarUsuario, fetchInstitucionesBusqueda, fetchFichasSinCuenta } from '../lib/data.js';
 import { fichaUnicaQueCoincide } from '../lib/vinculos.js';
 import BuscadorInstitucion from '../components/BuscadorInstitucion.jsx';
+import RestablecerClaveModal from '../components/RestablecerClaveModal.jsx';
 
 const NIVEL_SIGEE = ['super_admin', 'supervisor_general', 'contador_general'];
 
@@ -44,6 +45,8 @@ export default function Usuarios() {
 
   const [usuarios, setUsuarios] = useState([]);
   const [planteles, setPlanteles] = useState([]);
+  const [restablecer, setRestablecer] = useState(null);   // cuentas a las que se les restablece la contraseña
+  const [sel, setSel] = useState(() => new Set());
   const [instBusqueda, setInstBusqueda] = useState([]);
   const [instCargando, setInstCargando] = useState(false);
   const [fichas, setFichas] = useState(null);          // docentes del plantel que aún no tienen cuenta (null = cargando / no aplica)
@@ -217,6 +220,18 @@ export default function Usuarios() {
         </select>
       </div>
 
+      {sel.size > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: '#eff6ff', border: '1px solid #bfdbfe', fontSize: 13 }}>
+          <span><strong>{sel.size}</strong> cuenta{sel.size === 1 ? '' : 's'} seleccionada{sel.size === 1 ? '' : 's'}</span>
+          <span style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-primary btn-sm" onClick={() => setRestablecer(usuarios.filter(u => sel.has(u.id)).map(u => ({ id: u.id, nombre: `${u.nombres} ${u.apellidos}`.trim(), email: u.email })))}>
+              🔑 Restablecer contraseñas ({sel.size})
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setSel(new Set())}>Quitar selección</button>
+          </span>
+        </div>
+      )}
+
       {loading ? (
         <p style={{ fontSize: 13, color: 'var(--slate)' }}>Cargando…</p>
       ) : filtrados.length === 0 ? (
@@ -227,6 +242,11 @@ export default function Usuarios() {
             <table className="data" style={{ width: '100%' }}>
               <thead>
                 <tr>
+                  <th style={{ width: 34 }}>
+                    <input type="checkbox" title="Seleccionar los de esta página"
+                      checked={visibles.length > 0 && visibles.every(u => sel.has(u.id))}
+                      onChange={e => setSel(prev => { const n = new Set(prev); visibles.forEach(u => (e.target.checked ? n.add(u.id) : n.delete(u.id))); return n; })} />
+                  </th>
                   <th>Nombre</th>
                   <th>Correo</th>
                   <th>Rol</th>
@@ -238,12 +258,15 @@ export default function Usuarios() {
               <tbody>
                 {visibles.map(u => (
                   <tr key={u.id}>
+                    <td><input type="checkbox" checked={sel.has(u.id)} onChange={e => setSel(prev => { const n = new Set(prev); if (e.target.checked) n.add(u.id); else n.delete(u.id); return n; })} /></td>
                     <td><strong>{u.nombres} {u.apellidos}</strong>{u.cedula ? <div style={{ fontSize: 11, color: 'var(--slate)' }}>{u.cedula}</div> : null}</td>
                     <td>{u.email}</td>
                     <td>{ROLE_LABEL[u.rol] || u.rol}</td>
                     {esSuperAdmin && <td>{u.instituciones?.nombre || '—'}</td>}
                     <td><span className={'badge ' + (u.activo ? 'b-ok' : 'b-muted')}>{u.activo ? 'Activo' : 'Inactivo'}</span></td>
-                    <td style={{ textAlign: 'right' }}>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <button className="btn btn-secondary btn-sm" title="Asignar una contraseña nueva a esta cuenta" style={{ marginRight: 6 }}
+                        onClick={() => setRestablecer([{ id: u.id, nombre: `${u.nombres} ${u.apellidos}`.trim(), email: u.email }])}>🔑 Restablecer</button>
                       <button className="btn btn-ghost btn-sm" onClick={() => toggleActivo(u)}>
                         {u.activo ? 'Desactivar' : 'Activar'}
                       </button>
@@ -263,6 +286,10 @@ export default function Usuarios() {
             </div>
           </div>
         </div>
+      )}
+
+      {restablecer && (
+        <RestablecerClaveModal usuarios={restablecer} onClose={() => { setRestablecer(null); setSel(new Set()); }} />
       )}
 
       {modalOpen && credencialesCreadas && (

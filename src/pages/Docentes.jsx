@@ -7,6 +7,7 @@ import {
   fetchMaterias, fetchGradosConParalelos, fetchPeriodos, crearUsuario
 } from '../lib/data.js';
 import { cuentasQueCoinciden } from '../lib/vinculos.js';
+import RestablecerClaveModal from '../components/RestablecerClaveModal.jsx';
 import { descargarPlantillaExcel, leerExcel, normalizarFecha, validarCedulaEC } from '../lib/cargaMasiva.js';
 
 const PLANTILLA_DOCENTES_COLS = [
@@ -86,6 +87,7 @@ export default function Docentes() {
   const [cargas, setCargas] = useState([]);
   const [catalogo, setCatalogo] = useState({ materias: [], grados: [], periodos: [] });
   const [nuevaCarga, setNuevaCarga] = useState({ materiaId: '', gradoId: '', paraleloId: '', periodoId: '' });
+  const [restablecer, setRestablecer] = useState(null);
   const [acceso, setAcceso] = useState(null); // { docente, email, password, guardando, error, creado }
   const [masivo, setMasivo] = useState(null); // { filas: [{payload, errores, fila}], subiendo, resultado }
 
@@ -388,6 +390,8 @@ export default function Docentes() {
         </select>
       </div>
 
+      {restablecer && <RestablecerClaveModal usuarios={restablecer} onClose={() => setRestablecer(null)} />}
+
       {acceso && (
         <div className="modal-bg open" onClick={ev => { if (ev.target === ev.currentTarget && !acceso.guardando) setAcceso(null); }}>
           {acceso.vinculada ? (
@@ -501,7 +505,15 @@ export default function Docentes() {
                 <td style={{ color: 'var(--green)', fontWeight: 700 }}>{anios(d.fechaIngreso)}</td>
                 <td>
                   {d.acceso
-                    ? <span className="badge b-ok">Activo</span>
+                    ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <span className="badge b-ok">Activo</span>
+                        {puedeActivarDesactivar && d.profile_id && (
+                          <button className="btn btn-ghost btn-sm" title="Restablecer la contraseña de este docente"
+                            onClick={() => setRestablecer([{ id: d.profile_id, nombre: d.nombre, email: d.email || '' }])}>🔑</button>
+                        )}
+                      </span>
+                    )
                     : (puedeActivarDesactivar && d.activo
                         ? <button className="btn btn-secondary btn-sm" title="Crear usuario y contraseña para este docente" onClick={() => abrirDarAcceso(d)}>🔑 Dar acceso</button>
                         : <span className="badge b-muted">Sin acceso</span>)}
