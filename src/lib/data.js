@@ -577,6 +577,7 @@ export async function fetchProgramacionEstudiante(estudianteId) {
 
 export async function crearEstudiante(institucionId, datos) {
   const { data, error } = await supabase.from('estudiantes')
+    .insert({ institucion_id: institucionId, ...datos }).select().single();
   if (error) throw error;
   return data;
 }
@@ -593,9 +594,17 @@ export async function eliminarEstudiante(id) {
   if (error) throw error;
 }
 
+/** La base de datos solo admite 'padre' | 'madre' | 'tutor' (minúscula). Cualquier otro parentesco (abuelo, tío, "Otro"…) se guarda como 'tutor'. */
+export function normalizarParentesco(v) {
+  const t = String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+  if (/^(padre|papa|father)\b/.test(t)) return 'padre';
+  if (/^(madre|mama|mother)\b/.test(t)) return 'madre';
+  return 'tutor';
+}
+
 export async function agregarRepresentante(institucionId, estudianteId, datos) {
   const { data: rep, error: e1 } = await supabase.from('representantes')
-    .insert({ institucion_id: institucionId, ...datos }).select().single();
+    .insert({ institucion_id: institucionId, ...datos, rol_representante: normalizarParentesco(datos?.rol_representante) }).select().single();
   if (e1) throw e1;
   const { error: e2 } = await supabase.from('representantes_estudiantes')
     .insert({ representante_id: rep.id, estudiante_id: estudianteId });
@@ -604,7 +613,8 @@ export async function agregarRepresentante(institucionId, estudianteId, datos) {
 }
 
 export async function actualizarRepresentante(id, cambios) {
-  const { error } = await supabase.from('representantes').update(cambios).eq('id', id);
+  const c = cambios && 'rol_representante' in cambios ? { ...cambios, rol_representante: normalizarParentesco(cambios.rol_representante) } : cambios;
+  const { error } = await supabase.from('representantes').update(c).eq('id', id);
   if (error) throw error;
 }
 
@@ -1623,4 +1633,114 @@ export async function fetchFichasSinCuenta(institucionId) {
 export async function vincularCuentaDocente(docenteId, profileId) {
   const { error } = await supabase.rpc('vincular_cuenta_docente', { p_docente_id: docenteId, p_profile_id: profileId });
   if (error) throw error;
+}
+
+/* ───────────── Carga masiva inteligente: lectura de existentes y escritura por lotes ───────────── */
+async function selTodo(table, cols, build) {
+  const todas = [];
+  for (let desde = 0; ; desde += 1000) {
+    let q = supabase.from(table).select(cols);
+    if (build) q = build(q);
+    const { data, error } = await q.range(desde, desde + 999);
+    if (error) throw error;
+    todas.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
+  return todas;
+}
+export const fetchDocentesParaCarga = institucionId => selTodo('docentes', '*', q => q.eq('institucion_id', institucionId).order('id'));
+export const fetchEstudiantesParaCarga = institucionId => selTodo('estudiantes', '*', q => q.eq('institucion_id', institucionId).order('id'));
+
+const trozos = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));
+const sinNulos = obj => Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== null && v !== undefined));
+
+/**
+ * Inserta en lotes de 50. Si un lote falla (p. ej. una cédula repetida que apareció mientras tanto) reintenta fila por fila
+ * para saber exactamente cuáles fallaron. Devuelve { creados: [{ i, row }], fallos: [{ i, motivo }] } (i = posición en `filas`).
+ */
+async function insertarPorLotes(tabla, filas, onProgreso) {
+  const creados = [], fallos = [];
+  let hecho = 0;
+  for (const [k, lote] of trozos(filas, 50).entries()) {
+    const base = k * 50;
+    const { data, error } = await supabase.from(tabla).insert(lote).select();
+    if (!error && data && data.length === lote.length) {
+      data.forEach((row, j) => creados.push({ i: base + j, row }));
+    } else {
+      for (const [j, fila] of lote.entries()) {
+        const r = await supabase.from(tabla).insert(fila).select().single();
+        if (r.error) fallos.push({ i: base + j, motivo: r.error.message });
+        else creados.push({ i: base + j, row: r.data });
+      }
+    }
+    hecho += lote.length;
+    onProgreso?.(hecho, filas.length);
+  }
+  return { creados, fallos };
+}
+
+/**
+ * nuevos: [{ fila, datos }] · completar: [{ fila, id, cambios }]
+ * Devuelve { creados: n, completados: n, fallos: [{ fila, motivo }] }
+ */
+export async function cargarDocentesLote(institucionId, nuevos, completar, onProgreso) {
+  const { creados, fallos } = await insertarPorLotes('docentes', nuevos.map(n => ({ institucion_id: institucionId, ...n.datos })), (h, t) => onProgreso?.({ fase: 'Creando docentes', hecho: h, total: t + completar.length }));
+  const out = { creados: creados.length, completados: 0, fallos: fallos.map(f => ({ fila: nuevos[f.i].fila, motivo: f.motivo })) };
+  for (const [k, c] of completar.entries()) {
+    try { await guardarDocentePerfil(c.id, c.cambios); out.completados++; }
+    catch (e) { out.fallos.push({ fila: c.fila, motivo: e.message }); }
+    onProgreso?.({ fase: 'Completando datos', hecho: nuevos.length + k + 1, total: nuevos.length + completar.length });
+  }
+  return out;
+}
+
+/**
+ * nuevos: [{ fila, datos, gradoId, paraleloId, representante }] · completar: [{ fila, id, cambios }]
+ * Crea estudiantes, sus matrículas (si el curso y el paralelo se resolvieron) y sus representantes (reutilizando los que ya existen por cédula).
+ * Un fallo en matrícula o representante NO deshace al estudiante: se informa como aviso.
+ */
+export async function cargarEstudiantesLote(institucionId, periodoId, nuevos, completar, onProgreso) {
+  const total = nuevos.length + completar.length;
+  const { creados, fallos } = await insertarPorLotes('estudiantes', nuevos.map(n => ({ institucion_id: institucionId, ...n.datos })), (h) => onProgreso?.({ fase: 'Creando estudiantes', hecho: h, total }));
+  const out = { creados: creados.length, completados: 0, matriculas: 0, representantes: 0, fallos: fallos.map(f => ({ fila: nuevos[f.i].fila, motivo: f.motivo })), avisos: [] };
+
+  // matrículas
+  const mat = creados.filter(c => nuevos[c.i].gradoId && nuevos[c.i].paraleloId && periodoId)
+    .map(c => ({ estudiante_id: c.row.id, periodo_id: periodoId, grado_id: nuevos[c.i].gradoId, paralelo_id: nuevos[c.i].paraleloId, estado: 'activa' }));
+  const idxMat = creados.filter(c => nuevos[c.i].gradoId && nuevos[c.i].paraleloId && periodoId);
+  onProgreso?.({ fase: 'Matriculando', hecho: creados.length, total });
+  for (const [k, lote] of trozos(mat, 100).entries()) {
+    const { error } = await supabase.from('matriculas').insert(lote);
+    if (error) idxMat.slice(k * 100, k * 100 + lote.length).forEach(c => out.avisos.push({ fila: nuevos[c.i].fila, motivo: 'no se pudo matricular: ' + error.message }));
+    else out.matriculas += lote.length;
+  }
+
+  // representantes: se reutilizan los que ya existen por cédula (hermanos comparten representante)
+  const conRep = creados.filter(c => nuevos[c.i].representante);
+  if (conRep.length) {
+    onProgreso?.({ fase: 'Registrando representantes', hecho: creados.length, total });
+    const cedulas = [...new Set(conRep.map(c => nuevos[c.i].representante.cedula))];
+    const existentes = {};
+    for (const lote of trozos(cedulas, 100)) {
+      const rows = await sel('representantes', 'id, cedula', q => q.eq('institucion_id', institucionId).in('cedula', lote));
+      rows.forEach(r => { existentes[r.cedula] = r.id; });
+    }
+    const porCrear = [];
+    conRep.forEach(c => { const r = nuevos[c.i].representante; if (!existentes[r.cedula] && !porCrear.some(x => x.cedula === r.cedula)) porCrear.push({ institucion_id: institucionId, ...r }); });
+    const nuevosReps = await insertarPorLotes('representantes', porCrear);
+    nuevosReps.creados.forEach(c => { existentes[c.row.cedula] = c.row.id; out.representantes++; });
+    nuevosReps.fallos.forEach(f => out.avisos.push({ fila: null, motivo: `representante ${porCrear[f.i].cedula}: ${f.motivo}` }));
+    const vinculos = conRep.filter(c => existentes[nuevos[c.i].representante.cedula]).map(c => ({ representante_id: existentes[nuevos[c.i].representante.cedula], estudiante_id: c.row.id }));
+    for (const lote of trozos(vinculos, 100)) {
+      const { error } = await supabase.from('representantes_estudiantes').insert(lote);
+      if (error) out.avisos.push({ fila: null, motivo: 'no se pudieron vincular algunos representantes: ' + error.message });
+    }
+  }
+
+  for (const [k, c] of completar.entries()) {
+    try { await guardarEstudiantePerfil(c.id, c.cambios); out.completados++; }
+    catch (e) { out.fallos.push({ fila: c.fila, motivo: e.message }); }
+    onProgreso?.({ fase: 'Completando datos', hecho: nuevos.length + k + 1, total });
+  }
+  return out;
 }

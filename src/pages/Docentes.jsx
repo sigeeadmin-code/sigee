@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchDocentePerfil, crearDocente, guardarDocentePerfil, subirArchivo,
-  fetchCuentasDocenteSinFicha, vincularCuentaDocente,
+  fetchCuentasDocenteSinFicha, vincularCuentaDocente, fetchDocentesParaCarga, cargarDocentesLote,
   fetchCargasPorDocenteId, crearCargaDocente, eliminarCargaDocente,
   fetchMaterias, fetchGradosConParalelos, fetchPeriodos, crearUsuario
 } from '../lib/data.js';
 import { cuentasQueCoinciden } from '../lib/vinculos.js';
+import ImportadorInteligente from '../components/ImportadorInteligente.jsx';
 import { descargarPlantillaExcel, leerExcel, normalizarFecha, validarCedulaEC } from '../lib/cargaMasiva.js';
 
 const PLANTILLA_DOCENTES_COLS = [
@@ -87,6 +88,7 @@ export default function Docentes() {
   const [catalogo, setCatalogo] = useState({ materias: [], grados: [], periodos: [] });
   const [nuevaCarga, setNuevaCarga] = useState({ materiaId: '', gradoId: '', paraleloId: '', periodoId: '' });
   const [acceso, setAcceso] = useState(null); // { docente, email, password, guardando, error, creado }
+  const [inteligente, setInteligente] = useState(false);
   const [masivo, setMasivo] = useState(null); // { filas: [{payload, errores, fila}], subiendo, resultado }
 
   useEffect(() => { setDocentes(data?.docentes || []); }, [data]);
@@ -362,7 +364,8 @@ export default function Docentes() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2>Docentes</h2>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-ghost" onClick={abrirCargaMasiva}>📥 Carga masiva (Excel)</button>
+          <button className="btn btn-primary" onClick={() => setInteligente(true)} title="Sube tu lista con las columnas en cualquier orden: yo las detecto y las acomodo">✨ Carga inteligente</button>
+          <button className="btn btn-ghost" onClick={abrirCargaMasiva}>📥 Carga con plantilla (Excel)</button>
           <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo docente</button>
         </div>
       </div>
@@ -387,6 +390,16 @@ export default function Docentes() {
           {especialidadesDisponibles.map(e => <option key={e} value={e}>{e}</option>)}
         </select>
       </div>
+
+      {inteligente && (
+        <ImportadorInteligente
+          tipo="docentes"
+          cargarExistentes={() => fetchDocentesParaCarga(institucion.id)}
+          guardar={({ nuevos, completar, onProgreso }) => cargarDocentesLote(institucion.id, nuevos, completar, onProgreso)}
+          onTerminar={() => refrescarDatos()}
+          onClose={() => { setInteligente(false); refrescarDatos(); }}
+        />
+      )}
 
       {acceso && (
         <div className="modal-bg open" onClick={ev => { if (ev.target === ev.currentTarget && !acceso.guardando) setAcceso(null); }}>

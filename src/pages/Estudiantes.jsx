@@ -3,9 +3,10 @@ import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchEstudiantePerfil, crearEstudiante, guardarEstudiantePerfil, subirArchivo,
   agregarRepresentante, actualizarRepresentante, quitarRepresentanteDeEstudiante,
-  crearMatricula, fetchGradosConParalelos, fetchPeriodos
+  crearMatricula, fetchGradosConParalelos, fetchPeriodos, fetchEstudiantesParaCarga, cargarEstudiantesLote
 } from '../lib/data.js';
 import { descargarPlantillaExcel, leerExcel, normalizarFecha, validarCedulaEC } from '../lib/cargaMasiva.js';
+import ImportadorInteligente from '../components/ImportadorInteligente.jsx';
 
 const PLANTILLA_ESTUDIANTES_COLS = [
   'Cédula', 'Nombres', 'Apellidos', 'Fecha Nacimiento (AAAA-MM-DD)', 'Género (Masculino/Femenino)', 'Dirección',
@@ -20,7 +21,8 @@ const PLANTILLA_ESTUDIANTES_EJEMPLO = [
 ];
 
 const GENEROS = ['Masculino', 'Femenino'];
-const ROLES_REP = ['Padre', 'Madre', 'Tutor', 'Otro'];
+// Valores tal como los guarda la base de datos; "Tutor" cubre a cualquier otro representante legal (abuelo, tío…)
+const ROLES_REP = [['padre', 'Padre'], ['madre', 'Madre'], ['tutor', 'Tutor / otro']];
 const ETNIAS = ['Mestizo', 'Indígena', 'Afroecuatoriano', 'Montubio', 'Blanco', 'Mulato', 'Negro', 'Otro'];
 const DISCAPACIDADES = ['Ninguna', 'Física', 'Visual', 'Auditiva', 'Intelectual', 'Psicosocial', 'Múltiple'];
 
@@ -47,10 +49,11 @@ export default function Estudiantes() {
   const [tab, setTab] = useState('alumno');
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
-  const [nuevoRep, setNuevoRep] = useState({ nombres: '', apellidos: '', cedula: '', telefono: '', email: '', rol_representante: 'Padre' });
+  const [nuevoRep, setNuevoRep] = useState({ nombres: '', apellidos: '', cedula: '', telefono: '', email: '', rol_representante: 'padre' });
   const [catalogo, setCatalogo] = useState({ grados: [], periodos: [] });
   const [nuevaMatricula, setNuevaMatricula] = useState({ periodoId: '', gradoId: '', paraleloId: '' });
   const [matriculando, setMatriculando] = useState(false);
+  const [inteligente, setInteligente] = useState(false);
   const [masivo, setMasivo] = useState(null);
 
   useEffect(() => { setEstudiantes(data?.estudiantes || []); }, [data]);
@@ -273,7 +276,7 @@ export default function Estudiantes() {
     try {
       const rep = await agregarRepresentante(institucion.id, modal.id, nuevoRep);
       upd('representantes', [...modal.representantes, rep]);
-      setNuevoRep({ nombres: '', apellidos: '', cedula: '', telefono: '', email: '', rol_representante: 'Padre' });
+      setNuevoRep({ nombres: '', apellidos: '', cedula: '', telefono: '', email: '', rol_representante: 'padre' });
       refrescarDatos();
     } catch (e) { setError('No se pudo agregar el representante: ' + e.message); }
   }
@@ -310,7 +313,8 @@ export default function Estudiantes() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2>Estudiantes</h2>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-ghost" onClick={abrirCargaMasiva}>📥 Carga masiva (Excel)</button>
+          <button className="btn btn-primary" onClick={() => setInteligente(true)} title="Sube tu lista con las columnas en cualquier orden: yo las detecto y las acomodo">✨ Carga inteligente</button>
+          <button className="btn btn-ghost" onClick={abrirCargaMasiva}>📥 Carga con plantilla (Excel)</button>
           <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo estudiante</button>
         </div>
       </div>
@@ -442,7 +446,7 @@ export default function Estudiantes() {
                   {modal.representantes.map(r => (
                     <div key={r.id} className="card" style={{ marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <strong>{r.apellidos} {r.nombres}</strong> <span className="muted">— {r.rol_representante}</span><br />
+                        <strong>{r.apellidos} {r.nombres}</strong> <span className="muted">— {(ROLES_REP.find(([v]) => v === r.rol_representante) || [])[1] || r.rol_representante}</span><br />
                         <span className="muted">{r.cedula || '—'} · {r.telefono || '—'} · {r.email || '—'}</span>
                       </div>
                       <button type="button" className="btn btn-danger btn-sm" onClick={() => quitarRep(r.id)}>✕ Quitar</button>
@@ -455,7 +459,7 @@ export default function Estudiantes() {
                         <div><label className="fl">Rol</label>
                           <select className="fc" value={nuevoRep.rol_representante}
                             onChange={e => setNuevoRep(r => ({ ...r, rol_representante: e.target.value }))}>
-                            {ROLES_REP.map(r => <option key={r} value={r}>{r}</option>)}
+                            {ROLES_REP.map(([v, et]) => <option key={v} value={v}>{et}</option>)}
                           </select></div>
                         <div><label className="fl">Apellidos</label>
                           <input className="fc" value={nuevoRep.apellidos} onChange={e => setNuevoRep(r => ({ ...r, apellidos: e.target.value }))} /></div>
@@ -544,6 +548,18 @@ export default function Estudiantes() {
             </div>
           </div>
         </div>
+      )}
+
+      {inteligente && (
+        <ImportadorInteligente
+          tipo="estudiantes"
+          grados={catalogo.grados}
+          periodoId={(catalogo.periodos.find(p => p.activo) || catalogo.periodos[0] || {}).id || null}
+          cargarExistentes={() => fetchEstudiantesParaCarga(institucion.id)}
+          guardar={({ nuevos, completar, onProgreso }) => cargarEstudiantesLote(institucion.id, (catalogo.periodos.find(p => p.activo) || catalogo.periodos[0] || {}).id || null, nuevos, completar, onProgreso)}
+          onTerminar={() => refrescarDatos()}
+          onClose={() => { setInteligente(false); refrescarDatos(); }}
+        />
       )}
 
       {masivo && (
