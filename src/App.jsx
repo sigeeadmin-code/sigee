@@ -2,6 +2,7 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { SessionProvider, useSession } from './lib/SessionContext.jsx';
 import { rolesConAcceso } from './lib/nav.js';
+import AvisoVersionNueva from './components/AvisoVersionNueva.jsx';
 import Login from './pages/Login.jsx';
 import Shell from './pages/Shell.jsx';
 import Dashboard from './pages/Dashboard.jsx';
@@ -99,6 +100,7 @@ function Gate() {
 export default function App() {
   return (
     <SessionProvider>
+      <AvisoVersionNueva />
       <Gate />
     </SessionProvider>
   );
