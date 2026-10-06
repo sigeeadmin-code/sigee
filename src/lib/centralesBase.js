@@ -35,7 +35,7 @@ export const CENTRALES = {
     ruta: '/base-docentes', tabla: 'base_docentes', icono: 'ti ti-database',
     titulo: 'Base de docentes', sub: 'Registro central de docentes · se asigna un plantel para incorporarlos al sistema activo',
     orden: 'nombre', plantelCol: 'institucion_id', etiquetaPlantel: 'Plantel asignado',
-    buscar: ['cedula', 'nombre'], filtroPlantel: true,
+    buscar: ['cedula', 'nombre'], filtroPlantel: true, asignable: true, filtroCanton: true,
     columnas: [
       { k: 'cedula', t: 'Cédula', mono: true }, { k: 'nombre', t: 'Apellidos y nombres' },
       { k: 'canton', t: 'Cantón' }, { k: 'categoria', t: 'Categoría' }, { k: 'especialidad', t: 'Especialidad' },

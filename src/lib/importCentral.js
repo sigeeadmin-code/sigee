@@ -1,7 +1,7 @@
 // Importar / exportar las bases centrales (docentes y estudiantes desvinculados,
 // base de docentes, base de estudiantes). Módulo PURO (sin Supabase ni navegador).
 // Lee Excel/CSV (matriz) o JSON (lista de objetos) con las columnas en cualquier orden.
-import { norm, parseFecha, normalizarGenero, separarNombreCompleto } from './importacionInteligente.js';
+import { norm, parseFecha, normalizarGenero, separarNombreCompleto, campoPorEncabezado } from './importacionInteligente.js';
 
 const MOTIVOS = {
   docentes_desvinculados: ['renuncia', 'jubilacion', 'traslado', 'destitucion', 'fallecimiento', 'otro'],
@@ -13,7 +13,7 @@ const ALIAS = {
   cedula: ['cedula', 'cedula de identidad', 'ci', 'identificacion', 'numero de cedula', 'nro cedula', 'no cedula', 'documento', 'cedula ciudadania'],
   nombreCompleto: ['nombre', 'nombres y apellidos', 'apellidos y nombres', 'apellidos nombres', 'nombre completo', 'docente', 'estudiante', 'apellidos y nombres del docente'],
   apellidos: ['apellidos', 'apellido'],
-  nombres: ['nombres', 'primer nombre'],
+  nombres: ['nombres'],
   provincia: ['provincia'],
   canton: ['canton'],
   categoria: ['categoria', 'categoria escalafon'],
@@ -38,6 +38,30 @@ const ALIAS = {
   t_anio: ['anio', 'ano', 'anio del titulo']
 };
 
+// El reconocedor de la carga inteligente (tolera faltas de ortografía y encabezados distintos)
+// usa sus propios nombres de campo; aquí se traducen a los de las bases centrales.
+const DE_INTELIGENTE = {
+  cedula: 'cedula', nombres: 'nombres', apellidos: 'apellidos', nombre_completo: 'nombreCompleto',
+  apellido1: 'apellido1', apellido2: 'apellido2', nombre1: 'nombre1', nombre2: 'nombre2',
+  genero: 'genero', fecha_nacimiento: 'fecha_nacimiento', provincia: 'provincia', canton: 'canton',
+  observaciones: 'observaciones', cargo: 'funcion', situacion: 'ultima_situacion', especialidad: 'especialidad',
+  titulo: 't_titulo', curso_paralelo: 'curso_paralelo', curso: 'curso_paralelo'
+};
+const PUNTAJE_MINIMO = 0.7;
+const CAMPOS_EXTRA_NOMBRE = ['apellido1', 'apellido2', 'nombre1', 'nombre2'];
+
+function campoDeColumna(cfg, alias, usados, encabezado) {
+  const exacto = alias.get(norm(encabezado));
+  if (exacto) return { campo: exacto, por: 'nombre' };
+  const tipo = /estudiantes/.test(cfg.tabla) ? 'estudiantes' : 'docentes';
+  const r = campoPorEncabezado(encabezado, tipo);
+  const campo = r.campo && !r.rep ? DE_INTELIGENTE[r.campo] : null;
+  if (!campo || r.puntaje < PUNTAJE_MINIMO || usados.has(campo)) return { campo: null };
+  const valido = campo === 'nombreCompleto' || CAMPOS_EXTRA_NOMBRE.includes(campo) || alias.has(norm(campo))
+    || [...alias.values()].includes(campo);
+  return valido ? { campo, por: 'parecido' } : { campo: null };
+}
+
 const CAMPOS_TITULO = ['titulo', 'institucion', 'tipo', 'reconocido_por', 'num_registro', 'fecha_registro', 'observacion', 'anio'];
 const limpiar = v => String(v ?? '').replace(/\s+/g, ' ').trim();
 
@@ -58,10 +82,15 @@ export function aliasesDe(cfg) {
 }
 
 // ¿Esta fila parece el encabezado? (al menos 2 columnas reconocidas)
-export function filaEncabezado(matriz, alias, max = 12) {
+export function filaEncabezado(matriz, alias, max = 12, tipo = 'docentes') {
   let mejor = -1, mejorN = 1;
   for (let i = 0; i < Math.min(matriz.length, max); i++) {
-    const n = (matriz[i] || []).filter(c => alias.has(norm(c))).length;
+    const n = (matriz[i] || []).filter(c => {
+      if (typeof c === 'number' || !limpiar(c) || limpiar(c).length > 60) return false;
+      if (alias.has(norm(c))) return true;
+      const r = campoPorEncabezado(c, tipo);
+      return !!r.campo && !r.rep && r.puntaje >= 0.8;
+    }).length;
     if (n > mejorN) { mejorN = n; mejor = i; }
   }
   return mejor;
@@ -100,10 +129,11 @@ function construir(cfg, items) {
     const r = {};
     // nombre
     if (cfg.campos.some(c => c.k === 'nombre')) {
-      const juntos = limpiar(`${v.apellidos ?? ''} ${v.nombres ?? ''}`);
+      const juntos = limpiar(`${v.apellidos ?? v.apellido1 ?? ''} ${v.apellido2 ?? ''} ${v.nombres ?? v.nombre1 ?? ''} ${v.nombre2 ?? ''}`);
       r.nombre = limpiar(v.nombreCompleto) || juntos || null;
     } else {
-      let ap = limpiar(v.apellidos), no = limpiar(v.nombres);
+      let ap = limpiar(v.apellidos) || limpiar(`${v.apellido1 ?? ''} ${v.apellido2 ?? ''}`);
+      let no = limpiar(v.nombres) || limpiar(`${v.nombre1 ?? ''} ${v.nombre2 ?? ''}`);
       if ((!ap || !no) && limpiar(v.nombreCompleto)) {
         const s = separarNombreCompleto(v.nombreCompleto, true);
         ap = ap || s.apellidos; no = no || s.nombres;
@@ -155,10 +185,21 @@ function construir(cfg, items) {
 /** matriz: filas × columnas (como la entrega leerArchivo). */
 export function leerMatriz(cfg, matriz) {
   const alias = aliasesDe(cfg);
-  const h = filaEncabezado(matriz, alias);
+  const h = filaEncabezado(matriz, alias, 12, /estudiantes/.test(cfg.tabla) ? 'estudiantes' : 'docentes');
   if (h < 0) return { error: 'No encontré los títulos de las columnas. Revisa que la primera fila tenga, por ejemplo, “Cédula” y “Apellidos y nombres”.' };
   const enc = matriz[h] || [];
-  const columnas = enc.map((t, i) => ({ indice: i, encabezado: limpiar(t), campo: alias.get(norm(t)) || null })).filter(c => c.encabezado);
+  const usados = new Set();
+  // primero lo que se reconoce por nombre exacto; después, por parecido, sin repetir campos
+  const previas = enc.map(t => (alias.get(norm(t)) || null));
+  previas.forEach(c => c && usados.add(c));
+  const columnas = enc.map((t, i) => {
+    const encabezado = limpiar(t);
+    if (!encabezado) return null;
+    if (previas[i]) return { indice: i, encabezado, campo: previas[i], por: 'nombre' };
+    const r = campoDeColumna(cfg, alias, usados, encabezado);
+    if (r.campo) usados.add(r.campo);
+    return { indice: i, encabezado, campo: r.campo || null, por: r.por || null };
+  }).filter(Boolean);
   const items = [];
   for (let i = h + 1; i < matriz.length; i++) {
     const fila = matriz[i] || [];

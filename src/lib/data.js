@@ -2,7 +2,8 @@ import { supabase, ROLE_GROUP, ROLE_LABELS } from './supabase.js';
 import { crearClienteBackend } from './backend.js';
 import { combinarCatalogo, clave } from './niveles.js';
 import { filtroOr } from './centralesBase.js';
-import { filaParaGuardar, agruparPorColumnas } from './importCentral.js';
+import { filaParaGuardar, agruparPorColumnas, cedulaCentral } from './importCentral.js';
+import { planAsignacion, planCruce } from './asignarDocentes.js';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://sigee-backend-production.up.railway.app';
 
@@ -1801,7 +1802,7 @@ export async function guardarContenidoFrontend(cambios, userId) {
 }
 
 // ── Bases centrales (desvinculados y bases de docentes/estudiantes) ──────────
-export async function listarCentral(cfg, { texto, pagina = 0, tam = 50, plantel = '' } = {}) {
+export async function listarCentral(cfg, { texto, pagina = 0, tam = 50, plantel = '', canton = '' } = {}) {
   let q = supabase.from(cfg.tabla)
     .select(`*, plantel:instituciones!${cfg.plantelCol}(nombre, amie)`, { count: 'exact' })
     .order(cfg.orden, { ascending: cfg.orden === 'nombre' || cfg.orden === 'apellidos' })
@@ -1810,6 +1811,7 @@ export async function listarCentral(cfg, { texto, pagina = 0, tam = 50, plantel 
   if (or) q = q.or(or);
   if (plantel === 'sin') q = q.is(cfg.plantelCol, null);
   else if (plantel === 'con') q = q.not(cfg.plantelCol, 'is', null);
+  if (canton) q = q.eq('canton', canton);
   const { data, error, count } = await q;
   if (error) throw error;
   return { filas: data || [], total: count || 0 };
@@ -1819,7 +1821,12 @@ export async function contarCentral(cfg) {
   const con = cfg.filtroPlantel
     ? await supabase.from(cfg.tabla).select('*', { count: 'exact', head: true }).not(cfg.plantelCol, 'is', null)
     : null;
-  return { total: total.count || 0, conPlantel: con ? (con.count || 0) : null };
+  let conTitulos = null;
+  if (cfg.tabla === 'base_docentes') {
+    const t = await supabase.from(cfg.tabla).select('*', { count: 'exact', head: true }).neq('titulos', '[]');
+    conTitulos = t.error ? null : (t.count || 0);
+  }
+  return { total: total.count || 0, conPlantel: con ? (con.count || 0) : null, conTitulos };
 }
 export async function crearRegistroCentral(cfg, fila) {
   const { error } = await supabase.from(cfg.tabla).insert(fila);
@@ -1889,4 +1896,89 @@ export async function todasCentral(cfg, onProgreso) {
     if (!data || data.length < 1000) break;
   }
   return todas;
+}
+
+// ── Asignar docentes de la base a un plantel ─────────────────────────────────
+async function todasLasFilas(tabla, cols, build) {
+  const out = [];
+  for (let desde = 0; ; desde += 1000) {
+    let q = supabase.from(tabla).select(cols).order('id').range(desde, desde + 999);
+    if (build) q = build(q);
+    const { data, error } = await q;
+    if (error) throw error;
+    out.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
+  return out;
+}
+
+export async function cantonesCentral(cfg) {
+  const filas = await todasLasFilas(cfg.tabla, 'id, canton');
+  return [...new Set(filas.map(f => f.canton).filter(Boolean))].sort();
+}
+
+// Todas las filas que cumplen los filtros (para "seleccionar los N resultados"), hasta `max`.
+export async function registrosParaAsignar(cfg, { texto, plantel = '', canton = '' } = {}, max = 5000) {
+  let q = supabase.from(cfg.tabla).select('id, cedula, nombre, titulos, especialidad, canton, institucion_id').order('nombre').limit(max);
+  const or = filtroOr(cfg, texto);
+  if (or) q = q.or(or);
+  if (plantel === 'sin') q = q.is(cfg.plantelCol, null);
+  else if (plantel === 'con') q = q.not(cfg.plantelCol, 'is', null);
+  if (canton) q = q.eq('canton', canton);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+}
+
+// Incorpora a los docentes elegidos al plantel (crea su ficha en `docentes`, sin duplicar) y los marca como asignados en la base.
+export async function asignarBaseDocentes(institucionId, registros, onProgreso) {
+  const cedulas = [...new Set(registros.map(r => cedulaCentral(r.cedula)).filter(Boolean))];
+  const variantes = c => (c.startsWith('0') ? [c, c.slice(1)] : [c]);
+  const enPlantel = new Set();
+  for (const lote of trozos(cedulas, 120)) {
+    const { data, error } = await supabase.from('docentes').select('cedula').eq('institucion_id', institucionId).in('cedula', lote.flatMap(variantes));
+    if (error) throw error;
+    (data || []).forEach(d => enPlantel.add(d.cedula));
+  }
+  const plan = planAsignacion(registros, enPlantel, institucionId);
+  const total = plan.aIncorporar.length + plan.yaEstaban.length;
+  const out = { incorporados: 0, yaEstaban: plan.yaEstaban.length, dudosos: plan.dudosos, sinCedula: plan.sinCedula.length, fallos: [] };
+  const marcar = [...plan.yaEstaban];
+  let hecho = 0;
+  for (const lote of trozos(plan.aIncorporar, 100)) {
+    const { error } = await supabase.from('docentes').insert(lote.map(x => x.fila));
+    if (!error) { out.incorporados += lote.length; marcar.push(...lote.map(x => x.id)); }
+    else {
+      for (const x of lote) {   // un registro con problema no debe frenar al resto
+        const r = await supabase.from('docentes').insert(x.fila);
+        if (r.error) out.fallos.push({ cedula: x.fila.cedula, motivo: r.error.message });
+        else { out.incorporados++; marcar.push(x.id); }
+      }
+    }
+    hecho += lote.length;
+    onProgreso?.({ hecho, total });
+  }
+  const ahora = new Date().toISOString();
+  for (const lote of trozos(marcar, 200)) {
+    const { error } = await supabase.from('base_docentes').update({ institucion_id: institucionId, asignado_en: ahora, updated_at: ahora }).in('id', lote);
+    if (error) out.fallos.push({ cedula: null, motivo: 'no se pudo marcar como asignados: ' + error.message });
+  }
+  return out;
+}
+
+// Los de la base que ya están activos en un plantel quedan asignados a ese plantel.
+export async function cruzarBaseConActivos(onProgreso) {
+  const base = await todasLasFilas('base_docentes', 'id, cedula', q => q.is('institucion_id', null));
+  onProgreso?.({ fase: 'Leyendo docentes activos' });
+  const activos = await todasLasFilas('docentes', 'id, cedula, institucion_id');
+  const plan = planCruce(base, activos);
+  const ahora = new Date().toISOString();
+  const fallos = [];
+  for (const [inst, ids] of plan.asignar) {
+    for (const lote of trozos(ids, 200)) {
+      const { error } = await supabase.from('base_docentes').update({ institucion_id: inst, asignado_en: ahora, updated_at: ahora }).in('id', lote);
+      if (error) fallos.push(error.message);
+    }
+  }
+  return { revisados: base.length, cruzados: plan.total, ambiguos: plan.ambiguos, sinCoincidencia: plan.sinCoincidencia, fallos };
 }

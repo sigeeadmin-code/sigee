@@ -95,3 +95,22 @@ assert.equal(ida.filas.find(f => f.cedula === '0702806712').titulos.length, 2);
 assert.equal(columnasExport(ED).includes('AMIE'), true);
 
 console.log('OK importCentral: todas las pruebas pasaron');
+
+// ── archivos con otro formato: encabezados distintos y partidos en apellido1/apellido2 ──
+const otro = leerMatriz(DD, [
+  ['REPORTE DE SALIDAS 2024'],
+  ['Nro', 'Documento de identidad', 'Apellido paterno', 'Apellido materno', 'Primer nombre', 'Segundo nombre', 'Función', 'Fecha desvinculación', 'Motivo'],
+  [1, '702806712', 'IZQUIERDO', 'GUALAN', 'LAURA', 'YOLANDA', 'DOCENTE', '15/03/2024', 'Jubilación']
+]);
+assert.equal(otro.error, undefined);
+assert.equal(otro.filas.length, 1);
+assert.equal(otro.filas[0].cedula, '0702806712');
+assert.equal(otro.filas[0].apellidos, 'IZQUIERDO GUALAN');
+assert.equal(otro.filas[0].nombres, 'LAURA YOLANDA');
+assert.equal(otro.filas[0].motivo, 'jubilacion');
+assert.equal(otro.filas[0].funcion, 'DOCENTE');
+// "Cedula de Identidad" con faltas y otro orden
+const faltas = leerMatriz(BD, [['Especialidd', 'Cedulla', 'Apellidos y Nombres', 'Canton'], ['PRIMARIA', '0913131702', 'VEGA CORDOVA CARMEN ARACELY', 'MACHALA']]);
+assert.equal(faltas.filas.length, 1, 'tolera faltas de ortografía en los encabezados');
+assert.equal(faltas.filas[0].especialidad, 'PRIMARIA');
+console.log('OK importCentral (otros formatos)');
