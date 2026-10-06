@@ -1,8 +1,8 @@
 // Configuración de las 4 bases centrales (docentes/estudiantes desvinculados y
-// bases de docentes/estudiantes). Solo Super Admin y Supervisor general.
+// bases de docentes/estudiantes). Solo el Super Admin global.
 // Archivo puro (sin Supabase) para poder probarlo en Node.
 
-export const ROLES_CENTRALES = ['super_admin', 'supervisor_general'];
+export const ROLES_CENTRALES = ['super_admin'];
 export const puedeVerCentrales = rolDb => ROLES_CENTRALES.includes(rolDb);
 
 const MOTIVOS_DOC = ['renuncia', 'jubilacion', 'traslado', 'destitucion', 'fallecimiento', 'otro'];

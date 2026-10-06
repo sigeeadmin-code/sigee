@@ -25,10 +25,9 @@ assert.equal(portadaActiva({}), true);
 assert.equal(portadaActiva(undefined), true);
 assert.equal(chipsDe({ ...base, 'login.hero.chip3': '   ' }).length, 5);
 
-// permisos de las bases centrales: solo super admin y supervisor general
+// permisos de las bases centrales: solo el Super Admin global
 assert.equal(puedeVerCentrales('super_admin'), true);
-assert.equal(puedeVerCentrales('supervisor_general'), true);
-for (const r of ['admin_plantel', 'secretario', 'contador_general', 'supervisor_plantel', 'docente', undefined]) assert.equal(puedeVerCentrales(r), false, String(r));
+for (const r of ['supervisor_general', 'admin_plantel', 'secretario', 'contador_general', 'supervisor_plantel', 'docente', undefined]) assert.equal(puedeVerCentrales(r), false, String(r));
 
 // búsqueda: no deja pasar caracteres que rompen el filtro
 assert.equal(sanitizarBusqueda('perez,(x)%'), 'perez x');

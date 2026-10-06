@@ -169,18 +169,6 @@ export const NAV_BY_ROL = {
   // propia aquí: ya heredan ese menú automáticamente vía profile.rol.
 };
 
-// El Supervisor general comparte el menú del grupo 'admin_plantel' (ver
-// ROLE_GROUP), así que sus bases centrales se agregan aparte en Shell.jsx.
-// El acceso real lo decide profile.rolDb (BasesCentrales.jsx) y la RLS.
-export const NAV_EXTRA_SUPERVISOR_GENERAL = [
-  { cat: 'Bases centrales', items: [
-    { to: '/docentes-desvinculados', label: 'Docentes desvinculados', icon: 'ti ti-user-off' },
-    { to: '/base-docentes', label: 'Base de docentes', icon: 'ti ti-database' },
-    { to: '/estudiantes-desvinculados', label: 'Estudiantes desvinculados', icon: 'ti ti-user-minus' },
-    { to: '/base-estudiantes', label: 'Base de estudiantes', icon: 'ti ti-database-import' }
-  ]}
-];
-
 /**
  * Deriva, a partir del propio menú (NAV_BY_ROL), qué roles tienen acceso a
  * una ruta dada. Es intencional que sea el MISMO origen de datos que arma el
