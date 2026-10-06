@@ -3,7 +3,7 @@ import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchEstudiantePerfil, crearEstudiante, guardarEstudiantePerfil, subirArchivo,
   agregarRepresentante, actualizarRepresentante, quitarRepresentanteDeEstudiante,
-  crearMatricula, fetchGradosConParalelos, fetchPeriodos, fetchEstudiantesParaCarga, cargarEstudiantesLote
+  crearMatricula, reactivarMatricula, fetchGradosConParalelos, fetchPeriodos, fetchEstudiantesParaCarga, cargarEstudiantesLote
 } from '../lib/data.js';
 import { descargarPlantillaExcel, leerExcel, normalizarFecha, validarCedulaEC } from '../lib/cargaMasiva.js';
 import ImportadorInteligente from '../components/ImportadorInteligente.jsx';
@@ -89,6 +89,20 @@ export default function Estudiantes() {
       setEstudiantes(es => es.map(x => x.id === e.id ? { ...x, activo: nuevoValor } : x));
     } catch (err) {
       setError('No se pudo actualizar el estado: ' + err.message);
+    }
+  }
+
+  // Quita el retiro de una matrícula: vuelve a estar activa en su mismo curso y paralelo
+  async function quitarRetiro(matriculaId, estudianteId, nombre) {
+    if (!puedeActivarDesactivar || !matriculaId) return;
+    if (!window.confirm(`¿Quitar el retiro de ${nombre}?\n\nVolverá a estar ACTIVO en su mismo curso y paralelo.`)) return;
+    try {
+      await reactivarMatricula(matriculaId, estudianteId);
+      setEstudiantes(es => es.map(x => x.id === estudianteId ? { ...x, estado: 'activa', activo: true } : x));
+      if (modal && modal.id === estudianteId) setModal(await fetchEstudiantePerfil(estudianteId));
+      refrescarDatos();
+    } catch (err) {
+      setError('No se pudo quitar el retiro: ' + err.message);
     }
   }
 
@@ -336,7 +350,19 @@ export default function Estudiantes() {
               <tr key={e.id}>
                 <td><strong style={{ cursor: 'pointer' }} onClick={() => abrirEditar(e.id)}>{e.nombre}</strong></td>
                 <td className="mono">{e.cedula || '—'}</td>
-                <td>{e.curso} {e.paralelo}</td><td>{e.estado}</td>
+                <td>{e.curso} {e.paralelo}</td>
+                <td>
+                  {e.estado === 'retirada'
+                    ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span className="badge b-err">Retirado</span>
+                        {puedeActivarDesactivar && e.matriculaId && (
+                          <button className="btn btn-secondary btn-sm" title="Quitar el retiro: vuelve a estar activo en su curso" onClick={() => quitarRetiro(e.matriculaId, e.id, e.nombre)}>↩ No está retirado</button>
+                        )}
+                      </span>
+                    )
+                    : e.estado}
+                </td>
                 <td>
                   {puedeActivarDesactivar ? (
                     <button
@@ -490,7 +516,11 @@ export default function Estudiantes() {
                         return `${grado.nombre}${paralelo ? ' ' + paralelo.nombre : ''}`;
                       })()} /></div>
                     <div><label className="fl">Estado de matrícula</label>
-                      <input className="fc" disabled value={modal.matricula?.estado || modal.estado || 'Sin matrícula'} /></div>
+                      <input className="fc" disabled value={modal.matricula?.estado || modal.estado || 'Sin matrícula'} />
+                      {modal.matricula?.estado === 'retirada' && puedeActivarDesactivar && (
+                        <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 6 }}
+                          onClick={() => quitarRetiro(modal.matricula.id, modal.id, `${modal.apellidos || ''} ${modal.nombres || ''}`.trim())}>↩ Quitar retiro (no está retirado)</button>
+                      )}</div>
                     <div className="full"><label className="fl">Plantel</label>
                       <input className="fc" disabled value={institucion?.nombre || '—'} /></div>
                   </div>

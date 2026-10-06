@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import { hayVersionNueva, consultarVersionPublicada } from '../src/lib/versionNueva.js';
+assert.equal(hayVersionNueva('100', '100'), false);
+assert.equal(hayVersionNueva('100', '101'), true);
+assert.equal(hayVersionNueva(null, '101'), false, 'sin versión propia (desarrollo) no avisa');
+assert.equal(hayVersionNueva('100', null), false, 'sin respuesta no avisa');
+assert.equal(await consultarVersionPublicada(async () => ({ ok: true, json: async () => ({ version: 123 }) })), '123');
+assert.equal(await consultarVersionPublicada(async () => ({ ok: false })), null);
+assert.equal(await consultarVersionPublicada(async () => { throw new Error('sin internet'); }), null);
+assert.equal(await consultarVersionPublicada(async () => ({ ok: true, json: async () => ({}) })), null);
+console.log('OK versionNueva: todas las pruebas pasaron');

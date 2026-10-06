@@ -64,7 +64,7 @@ export async function fetchInstitucionData(institucionId) {
       especialidad: d.especialidad || '', area: d.area || '',
       fechaIngreso: d.fecha_ingreso || null,
       titulo: d.titulo, materias: [...materiasSet], cursos: [...cursosSet], cargas,
-      activo: !!d.activo, acceso: !!d.profile_id
+      activo: !!d.activo, acceso: !!d.profile_id, profile_id: d.profile_id || null
     };
   });
 
@@ -579,6 +579,9 @@ export async function crearEstudiante(institucionId, datos) {
   const { data, error } = await supabase.from('estudiantes')
     .insert({ institucion_id: institucionId, ...datos }).select().single();
   if (error) throw error;
+  // Protección: si por cualquier motivo no vuelve el registro creado, se avisa con un error normal
+  // (antes la pantalla intentaba leer `nuevo.id` mientras se dibujaba y quedaba en blanco).
+  if (!data?.id) throw new Error('El estudiante no se pudo crear. Inténtalo de nuevo.');
   return data;
 }
 
@@ -738,16 +741,37 @@ export async function eliminarParalelo(id) {
 
 // crearMatricula: agrega parámetro opcional "observacion" (para traslados) al final
 export async function crearMatricula(estudianteId, periodoId, gradoId, paraleloId, observacion) {
-  const activas = await sel('matriculas', '*', q => q.eq('estudiante_id', estudianteId).eq('periodo_id', periodoId).eq('estado', 'activa'));
-  for (const m of activas) {
-    const { error } = await supabase.from('matriculas').update({ estado: 'retirada' }).eq('id', m.id);
+  const existentes = await sel('matriculas', '*', q => q.eq('estudiante_id', estudianteId).eq('periodo_id', periodoId));
+  const previa = existentes[0];
+  if (previa) {
+    // Ya tiene matrícula en este período (la base solo permite una): se mueve de curso/paralelo y queda ACTIVA.
+    // Si estaba retirada, esto también la reactiva. Nunca se deja al estudiante sin matrícula activa.
+    const cambios = {
+      grado_id: gradoId, paralelo_id: paraleloId, estado: 'activa',
+      fecha_salida: null, motivo_cambio: null, institucion_destino_id: null, institucion_destino_externa: null
+    };
+    if (observacion) cambios.observacion = observacion;
+    const { data, error } = await supabase.from('matriculas').update(cambios).eq('id', previa.id).select().single();
     if (error) throw error;
+    return data;
   }
   const { data, error } = await supabase.from('matriculas')
     .insert({ estudiante_id: estudianteId, periodo_id: periodoId, grado_id: gradoId, paralelo_id: paraleloId, estado: 'activa', observacion: observacion || null })
     .select().single();
   if (error) throw error;
   return data;
+}
+
+/** Quita el retiro: la matrícula vuelve a estar ACTIVA en su mismo curso y paralelo (y la ficha del estudiante, activa). */
+export async function reactivarMatricula(matriculaId, estudianteId) {
+  const { error } = await supabase.from('matriculas')
+    .update({ estado: 'activa', fecha_salida: null, motivo_cambio: null, institucion_destino_id: null, institucion_destino_externa: null })
+    .eq('id', matriculaId).eq('estado', 'retirada');
+  if (error) throw error;
+  if (estudianteId) {
+    const { error: e2 } = await supabase.from('estudiantes').update({ activo: true }).eq('id', estudianteId);
+    if (e2) throw e2;
+  }
 }
 export async function actualizarMatricula(id, cambios) {
   const { error } = await supabase.from('matriculas').update(cambios).eq('id', id);
@@ -960,6 +984,20 @@ export async function actualizarUsuario(id, cambios) {
   const { error } = await supabase.from('profiles').update(cambios).eq('id', id);
   if (error) throw error;
 }
+/**
+ * Restablece la contraseña (y opcionalmente corrige el correo) de una o varias cuentas. Solo Super Admin y Administrador de Plantel.
+ * resets: [{ user_id, password, email? }] → [{ user_id, ok, error? }]
+ */
+export async function restablecerContrasenas(resets) {
+  const { data, error } = await supabase.functions.invoke('admin-reset-password', { body: { resets } });
+  if (error) {
+    let msg = error.message;
+    try { const j = await error.context?.json?.(); if (j?.error) msg = j.error; } catch (_) { /* se queda el mensaje genérico */ }
+    throw new Error(msg);
+  }
+  return data?.resultados || [];
+}
+
 export async function crearUsuario(datos) {
   const { data, error } = await supabase.functions.invoke('admin-create-user', { body: datos });
   if (error) throw error;
