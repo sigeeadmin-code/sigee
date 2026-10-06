@@ -9,6 +9,10 @@ export const NAV_BY_ROL = {
       { to: '/docentes', label: 'Docentes', icon: 'ti ti-chalkboard' },
       { to: '/estudiantes', label: 'Estudiantes', icon: 'ti ti-users' },
       { to: '/encadenamiento', label: 'Encadenamiento', icon: 'ti ti-link' },
+      { to: '/docentes-desvinculados', label: 'Docentes desvinculados', icon: 'ti ti-user-off' },
+      { to: '/base-docentes', label: 'Base de docentes', icon: 'ti ti-database' },
+      { to: '/estudiantes-desvinculados', label: 'Estudiantes desvinculados', icon: 'ti ti-user-minus' },
+      { to: '/base-estudiantes', label: 'Base de estudiantes', icon: 'ti ti-database-import' },
       { to: '/usuarios', label: 'Usuarios', icon: 'ti ti-user-cog' }
     ]},
     { cat: 'Académico', items: [
@@ -29,6 +33,7 @@ export const NAV_BY_ROL = {
       { to: '/licencias', label: 'Licencias y activación', icon: 'ti ti-credit-card' }
     ]},
     { cat: 'Sistema', items: [
+      { to: '/contenido-sitio', label: 'Contenido del sitio', icon: 'ti ti-edit' },
       { to: '/roles-permisos', label: 'Roles y Permisos', icon: 'ti ti-shield-lock' },
       { to: '/diagnostico', label: 'Diagnóstico del sistema', icon: 'ti ti-activity-heartbeat' },
       { to: '/configuracion', label: 'Configuración', icon: 'ti ti-settings' }
@@ -163,6 +168,18 @@ export const NAV_BY_ROL = {
   // administrativo se agrupan como 'secretario'. Por eso no tienen una clave
   // propia aquí: ya heredan ese menú automáticamente vía profile.rol.
 };
+
+// El Supervisor general comparte el menú del grupo 'admin_plantel' (ver
+// ROLE_GROUP), así que sus bases centrales se agregan aparte en Shell.jsx.
+// El acceso real lo decide profile.rolDb (BasesCentrales.jsx) y la RLS.
+export const NAV_EXTRA_SUPERVISOR_GENERAL = [
+  { cat: 'Bases centrales', items: [
+    { to: '/docentes-desvinculados', label: 'Docentes desvinculados', icon: 'ti ti-user-off' },
+    { to: '/base-docentes', label: 'Base de docentes', icon: 'ti ti-database' },
+    { to: '/estudiantes-desvinculados', label: 'Estudiantes desvinculados', icon: 'ti ti-user-minus' },
+    { to: '/base-estudiantes', label: 'Base de estudiantes', icon: 'ti ti-database-import' }
+  ]}
+];
 
 /**
  * Deriva, a partir del propio menú (NAV_BY_ROL), qué roles tienen acceso a
