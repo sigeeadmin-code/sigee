@@ -5,7 +5,7 @@ import {
   agregarRepresentante, actualizarRepresentante, quitarRepresentanteDeEstudiante,
   crearMatricula, reactivarMatricula, fetchGradosConParalelos, fetchPeriodos, fetchEstudiantesParaCarga, cargarEstudiantesLote
 } from '../lib/data.js';
-import { descargarPlantillaExcel, leerExcel, normalizarFecha, validarCedulaEC } from '../lib/cargaMasiva.js';
+import { descargarPlantillaExcel, leerExcel, normalizarFecha, validarCedulaEC, exportarFilasExcel } from '../lib/cargaMasiva.js';
 import ImportadorInteligente from '../components/ImportadorInteligente.jsx';
 
 const PLANTILLA_ESTUDIANTES_COLS = [
@@ -322,11 +322,22 @@ export default function Estudiantes() {
 
   const gradoSeleccionadoMat = catalogo.grados.find(g => g.id === nuevaMatricula.gradoId);
 
+  // Exportar la lista que se ve en pantalla (con los filtros aplicados). Solo Super Admin.
+  const esSuperAdmin = profile.rolDb === 'super_admin';
+  function exportarLista() {
+    const filas = filtrados.map(e => ({
+      'Cédula': e.cedula || '', 'Apellidos y nombres': e.nombre || '', 'Curso': e.curso || '', 'Paralelo': e.paralelo || '',
+      'Estado de matrícula': e.estado || '', 'Activo': e.activo ? 'Sí' : 'No', 'Representante': e.representante || ''
+    }));
+    exportarFilasExcel(`estudiantes_${new Date().toISOString().slice(0, 10)}.xlsx`, filas);
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2>Estudiantes</h2>
         <div style={{ display: 'flex', gap: 8 }}>
+          {esSuperAdmin && <button className="btn btn-secondary" onClick={exportarLista} disabled={filtrados.length === 0} title="Descarga en Excel la lista que ves ahora (con los filtros aplicados)">⬇️ Exportar Excel</button>}
           <button className="btn btn-primary" onClick={() => setInteligente(true)} title="Sube tu lista con las columnas en cualquier orden: yo las detecto y las acomodo">✨ Carga inteligente</button>
           <button className="btn btn-ghost" onClick={abrirCargaMasiva}>📥 Carga con plantilla (Excel)</button>
           <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo estudiante</button>

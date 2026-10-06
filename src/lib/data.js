@@ -2,6 +2,7 @@ import { supabase, ROLE_GROUP, ROLE_LABELS } from './supabase.js';
 import { crearClienteBackend } from './backend.js';
 import { combinarCatalogo, clave } from './niveles.js';
 import { filtroOr } from './centralesBase.js';
+import { filaParaGuardar, agruparPorColumnas } from './importCentral.js';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://sigee-backend-production.up.railway.app';
 
@@ -1827,4 +1828,65 @@ export async function crearRegistroCentral(cfg, fila) {
 export async function eliminarRegistroCentral(cfg, id) {
   const { error } = await supabase.from(cfg.tabla).delete().eq('id', id);
   if (error) throw error;
+}
+
+// ── Importar / exportar las bases centrales (solo Super Admin; la RLS también lo exige) ──
+export async function cedulasExistentesCentral(cfg) {
+  const set = new Set();
+  for (let desde = 0; ; desde += 1000) {
+    const { data, error } = await supabase.from(cfg.tabla).select('cedula').not('cedula', 'is', null).order('cedula').range(desde, desde + 999);
+    if (error) throw error;
+    (data || []).forEach(r => set.add(r.cedula));
+    if (!data || data.length < 1000) break;
+  }
+  return set;
+}
+
+// Bases (base_*): se guarda por cédula; si ya existe, solo se completan los datos que trae el archivo
+// (una celda vacía no borra lo ya guardado y no se toca el plantel asignado).
+// Desvinculados: se agregan los que no estén ya por cédula.
+export async function importarCentral(cfg, filas, { existentes, autorId, onProgreso } = {}) {
+  const esBase = cfg.tabla.startsWith('base_');
+  const out = { nuevos: 0, actualizados: 0, omitidos: 0, fallos: [] };
+  const ya = existentes || new Set();
+  let aGuardar = filas;
+  if (!esBase) {
+    aGuardar = filas.filter(f => !(f.cedula && ya.has(f.cedula)));
+    out.omitidos = filas.length - aGuardar.length;
+  }
+  const ahora = new Date().toISOString();
+  const limpias = aGuardar.map(f => {
+    const o = filaParaGuardar(f);
+    if (esBase) o.updated_at = ahora;
+    else if (cfg.autor && autorId) o[cfg.autor] = autorId;
+    return o;
+  });
+  const lotes = agruparPorColumnas(limpias).flatMap(g => trozos(g, 500));
+  let hecho = 0;
+  for (const lote of lotes) {
+    const q = esBase
+      ? supabase.from(cfg.tabla).upsert(lote, { onConflict: 'cedula' })
+      : supabase.from(cfg.tabla).insert(lote);
+    const { error } = await q;
+    if (error) out.fallos.push({ filas: lote.length, motivo: error.message });
+    else lote.forEach(f => { if (esBase && ya.has(f.cedula)) out.actualizados++; else out.nuevos++; });
+    hecho += lote.length;
+    onProgreso?.({ hecho, total: limpias.length });
+  }
+  return out;
+}
+
+export async function todasCentral(cfg, onProgreso) {
+  const todas = [];
+  for (let desde = 0; ; desde += 1000) {
+    const { data, error, count } = await supabase.from(cfg.tabla)
+      .select(`*, plantel:instituciones!${cfg.plantelCol}(nombre, amie)`, { count: 'exact' })
+      .order(cfg.orden, { ascending: cfg.orden === 'nombre' || cfg.orden === 'apellidos' })
+      .order('id').range(desde, desde + 999);
+    if (error) throw error;
+    todas.push(...(data || []));
+    onProgreso?.({ hecho: todas.length, total: count || todas.length });
+    if (!data || data.length < 1000) break;
+  }
+  return todas;
 }

@@ -9,7 +9,7 @@ import {
 import { cuentasQueCoinciden } from '../lib/vinculos.js';
 import ImportadorInteligente from '../components/ImportadorInteligente.jsx';
 import RestablecerClaveModal from '../components/RestablecerClaveModal.jsx';
-import { descargarPlantillaExcel, leerExcel, normalizarFecha, validarCedulaEC } from '../lib/cargaMasiva.js';
+import { descargarPlantillaExcel, leerExcel, normalizarFecha, validarCedulaEC, exportarFilasExcel } from '../lib/cargaMasiva.js';
 
 const PLANTILLA_DOCENTES_COLS = [
   'Cédula', 'Nombres', 'Apellidos', 'Email', 'Teléfono', 'Título', 'Cargo',
@@ -361,11 +361,25 @@ export default function Docentes() {
 
   const gradoSeleccionado = catalogo.grados.find(g => g.id === nuevaCarga.gradoId);
 
+  // Exportar la lista que se ve en pantalla (con los filtros aplicados). Solo Super Admin.
+  const esSuperAdmin = profile.rolDb === 'super_admin';
+  function exportarLista() {
+    const filas = filtrados.map(d => ({
+      'AMIE': institucion?.amie || '', 'Plantel': institucion?.nombre || '', 'Cédula': d.cedula || '',
+      'Apellidos y nombres': d.nombre || '', 'Correo': d.email || '', 'Teléfono': d.telefono || '',
+      'Situación laboral': d.situacion || '', 'Función': d.cargo || '', 'Especialidad': d.especialidad || '',
+      'Área': d.area || '', 'Fecha de ingreso': d.fechaIngreso || '',
+      'Acceso': d.acceso ? 'Con acceso' : 'Sin acceso', 'Estado': d.activo ? 'Activo' : 'Inactivo'
+    }));
+    exportarFilasExcel(`docentes_${new Date().toISOString().slice(0, 10)}.xlsx`, filas);
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2>Docentes</h2>
         <div style={{ display: 'flex', gap: 8 }}>
+          {esSuperAdmin && <button className="btn btn-secondary" onClick={exportarLista} disabled={filtrados.length === 0} title="Descarga en Excel la lista que ves ahora (con los filtros aplicados)">⬇️ Exportar Excel</button>}
           <button className="btn btn-primary" onClick={() => setInteligente(true)} title="Sube tu lista con las columnas en cualquier orden: yo las detecto y las acomodo">✨ Carga inteligente</button>
           <button className="btn btn-ghost" onClick={abrirCargaMasiva}>📥 Carga con plantilla (Excel)</button>
           <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo docente</button>

@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
-import { listarCentral, contarCentral, crearRegistroCentral, eliminarRegistroCentral } from '../lib/data.js';
+import { listarCentral, contarCentral, crearRegistroCentral, eliminarRegistroCentral, todasCentral } from '../lib/data.js';
+import ImportadorCentral from '../components/ImportadorCentral.jsx';
+import { exportarFilasExcel } from '../lib/cargaMasiva.js';
+import { filasExport } from '../lib/importCentral.js';
 import { CENTRALES, TAM_PAGINA, puedeVerCentrales, filaDesdeForm } from '../lib/centralesBase.js';
 
 // Una sola pantalla para las 4 bases centrales; `clave` elige cuál (ver CENTRALES).
@@ -9,6 +12,10 @@ export default function BasesCentrales({ clave }) {
   const cfg = CENTRALES[clave];
   const { profile } = useSession();
   const permitido = puedeVerCentrales(profile.rolDb);
+  // importar y exportar masivamente: solo el Super Admin global
+  const esSuperAdmin = profile.rolDb === 'super_admin';
+  const [importando, setImportando] = useState(false);
+  const [exportando, setExportando] = useState(null);
 
   const [texto, setTexto] = useState('');
   const [busqueda, setBusqueda] = useState('');
@@ -69,6 +76,17 @@ export default function BasesCentrales({ clave }) {
     setGuardando(false);
   }
 
+  async function exportar() {
+    setMsg(''); setExportando({ hecho: 0, total: resumen.total });
+    try {
+      const todas = await todasCentral(cfg, setExportando);
+      const { cols, filas: filasX } = filasExport(cfg, todas);
+      exportarFilasExcel(`${cfg.tabla}_${new Date().toISOString().slice(0, 10)}.xlsx`, filasX, cols);
+      setMsg(`Exportados ${todas.length.toLocaleString('es-EC')} registros${cfg.tabla === 'base_docentes' ? ' (una fila por título)' : ''}.`);
+    } catch (e) { setMsg('No se pudo exportar: ' + (e.message || e)); }
+    setExportando(null);
+  }
+
   async function confirmarBorrar() {
     try {
       await eliminarRegistroCentral(cfg, borrar.id);
@@ -84,7 +102,15 @@ export default function BasesCentrales({ clave }) {
           <h2 style={{ margin: 0 }}><span className={cfg.icono} /> {cfg.titulo}</h2>
           <p style={{ color: 'var(--slate)', margin: '4px 0 0', fontSize: 13 }}>{cfg.sub}</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setModal({ form: {} })}><span className="ti ti-plus" /> Agregar registro</button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {esSuperAdmin && <button className="btn btn-secondary" onClick={() => setImportando(true)}>⬆️ Importar</button>}
+          {esSuperAdmin && (
+            <button className="btn btn-secondary" onClick={exportar} disabled={!!exportando || resumen.total === 0}>
+              {exportando ? `Exportando… ${exportando.hecho.toLocaleString('es-EC')}` : '⬇️ Exportar Excel'}
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={() => setModal({ form: {} })}><span className="ti ti-plus" /> Agregar registro</button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
@@ -164,6 +190,10 @@ export default function BasesCentrales({ clave }) {
           </div>
         </div>
       </div>
+
+      {importando && esSuperAdmin && (
+        <ImportadorCentral cfg={cfg} autorId={profile.id} onClose={() => setImportando(false)} onTerminar={cargar} />
+      )}
 
       {modal && (
         <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget) setModal(null); }}>
