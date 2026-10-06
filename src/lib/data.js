@@ -1,6 +1,7 @@
 import { supabase, ROLE_GROUP, ROLE_LABELS } from './supabase.js';
 import { crearClienteBackend } from './backend.js';
 import { combinarCatalogo, clave } from './niveles.js';
+import { filtroOr } from './centralesBase.js';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://sigee-backend-production.up.railway.app';
 
@@ -1781,4 +1782,49 @@ export async function cargarEstudiantesLote(institucionId, periodoId, nuevos, co
     onProgreso?.({ fase: 'Completando datos', hecho: nuevos.length + k + 1, total });
   }
   return out;
+}
+
+// ── Contenido editable del frontend (portada del login) ──────────────────────
+// La lectura es pública (la portada se ve antes de iniciar sesión); solo el
+// Super Admin puede escribir (RLS en contenido_frontend).
+export async function fetchContenidoFrontend() {
+  const { data, error } = await supabase.from('contenido_frontend').select('clave, valor');
+  if (error) { console.error('[Supabase] contenido_frontend', error.message); return []; }
+  return data || [];
+}
+export async function guardarContenidoFrontend(cambios, userId) {
+  if (!cambios.length) return;
+  const filas = cambios.map(c => ({ clave: c.clave, valor: c.valor, updated_by: userId || null, updated_at: new Date().toISOString() }));
+  const { error } = await supabase.from('contenido_frontend').upsert(filas, { onConflict: 'clave' });
+  if (error) throw error;
+}
+
+// ── Bases centrales (desvinculados y bases de docentes/estudiantes) ──────────
+export async function listarCentral(cfg, { texto, pagina = 0, tam = 50, plantel = '' } = {}) {
+  let q = supabase.from(cfg.tabla)
+    .select(`*, plantel:instituciones!${cfg.plantelCol}(nombre, amie)`, { count: 'exact' })
+    .order(cfg.orden, { ascending: cfg.orden === 'nombre' || cfg.orden === 'apellidos' })
+    .range(pagina * tam, pagina * tam + tam - 1);
+  const or = filtroOr(cfg, texto);
+  if (or) q = q.or(or);
+  if (plantel === 'sin') q = q.is(cfg.plantelCol, null);
+  else if (plantel === 'con') q = q.not(cfg.plantelCol, 'is', null);
+  const { data, error, count } = await q;
+  if (error) throw error;
+  return { filas: data || [], total: count || 0 };
+}
+export async function contarCentral(cfg) {
+  const total = await supabase.from(cfg.tabla).select('*', { count: 'exact', head: true });
+  const con = cfg.filtroPlantel
+    ? await supabase.from(cfg.tabla).select('*', { count: 'exact', head: true }).not(cfg.plantelCol, 'is', null)
+    : null;
+  return { total: total.count || 0, conPlantel: con ? (con.count || 0) : null };
+}
+export async function crearRegistroCentral(cfg, fila) {
+  const { error } = await supabase.from(cfg.tabla).insert(fila);
+  if (error) throw error;
+}
+export async function eliminarRegistroCentral(cfg, id) {
+  const { error } = await supabase.from(cfg.tabla).delete().eq('id', id);
+  if (error) throw error;
 }

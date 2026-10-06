@@ -30,6 +30,8 @@ import Inasistencias from './pages/Inasistencias.jsx';
 import PromocionMatriculas from './pages/PromocionMatriculas.jsx';
 import ReportesMatriculas from './pages/ReportesMatriculas.jsx';
 import Egresados from './pages/Egresados.jsx';
+import BasesCentrales from './pages/BasesCentrales.jsx';
+import ContenidoSitio from './pages/ContenidoSitio.jsx';
 import Placeholder from './pages/Placeholder.jsx';
 function AccesoDenegado() {
   return (
@@ -76,6 +78,11 @@ function Gate() {
         <Route path="/matriculas" element={<Protegida path="/matriculas"><PromocionMatriculas /></Protegida>} />
         <Route path="/reportes-matriculas" element={<Protegida path="/reportes-matriculas"><ReportesMatriculas /></Protegida>} />
         <Route path="/egresados" element={<Protegida path="/egresados"><Egresados /></Protegida>} />
+        <Route path="/docentes-desvinculados" element={<BasesCentrales clave="docentes-desvinculados" />} />
+        <Route path="/base-docentes" element={<BasesCentrales clave="base-docentes" />} />
+        <Route path="/estudiantes-desvinculados" element={<BasesCentrales clave="estudiantes-desvinculados" />} />
+        <Route path="/base-estudiantes" element={<BasesCentrales clave="base-estudiantes" />} />
+        <Route path="/contenido-sitio" element={<ContenidoSitio />} />
         <Route path="/usuarios" element={<Protegida path="/usuarios"><Usuarios /></Protegida>} />
         <Route path="/financiero" element={<Protegida path="/financiero"><Placeholder title="Financiero" /></Protegida>} />
         <Route path="/configuracion" element={<Configuracion />} />

@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
+import PortadaLogin from '../components/PortadaLogin.jsx';
+import { fetchContenidoFrontend } from '../lib/data.js';
+import { CONTENIDO_DEFAULTS, mezclarContenido, portadaActiva } from '../lib/contenidoBase.js';
 
 const DEMO_ROLES = [
   { key: 'super_admin', title: 'Super Admin', desc: 'Todos los planteles · Global (ingreso manual)', bg: '#f59e0b', fg: '#1e1305', email: null },
@@ -38,6 +41,14 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
   const [bloqueadoHasta, setBloqueadoHasta] = useState(() => leerEstadoIntentos().bloqueadoHasta || 0);
   const [segundosRestantes, setSegundosRestantes] = useState(0);
+  // Textos de la portada: arrancan con los originales y se reemplazan con lo que
+  // el Super Admin haya editado en "Contenido del sitio" (si falla, quedan los originales).
+  const [contenido, setContenido] = useState(CONTENIDO_DEFAULTS);
+  useEffect(() => {
+    let vivo = true;
+    fetchContenidoFrontend().then(filas => { if (vivo) setContenido(mezclarContenido(filas)); }).catch(() => {});
+    return () => { vivo = false; };
+  }, []);
 
   useEffect(() => {
     if (!bloqueadoHasta) { setSegundosRestantes(0); return; }
@@ -96,6 +107,7 @@ export default function Login() {
 
   return (
     <div id="login">
+      {portadaActiva(contenido) ? <PortadaLogin c={contenido} /> : (
       <div className="l-left">
         <div className="ll-body">
           <span className="ll-badge"><span className="ti ti-map-pin" /> Zona 7 · El Oro · Ecuador</span>
@@ -123,6 +135,7 @@ export default function Login() {
           </div>
         </div>
       </div>
+      )}
 
       <div className="l-right">
         <form onSubmit={onSubmit} className="lcard">
