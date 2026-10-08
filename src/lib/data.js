@@ -1982,3 +1982,57 @@ export async function cruzarBaseConActivos(onProgreso) {
   }
   return { revisados: base.length, cruzados: plan.total, ambiguos: plan.ambiguos, sinCoincidencia: plan.sinCoincidencia, fallos };
 }
+
+/* ── Financiero de SIGEE (cobro a los planteles por paralelo) ─────────────── */
+export async function fetchTramosTarifa() {
+  const { data, error } = await supabase.from('licencias_tarifas_tramos').select('*').order('desde');
+  if (error) throw error;
+  return data || [];
+}
+export async function fetchConfigLicencias() {
+  const { data, error } = await supabase.from('licencias_config').select('clave, valor');
+  if (error) throw error;
+  return Object.fromEntries((data || []).map(r => [r.clave, Number(r.valor)]));
+}
+export async function guardarConfigLicencias(cfg) {
+  const filas = Object.entries(cfg).map(([clave, valor]) => ({ clave, valor: Number(valor), updated_at: new Date().toISOString() }));
+  const { error } = await supabase.from('licencias_config').upsert(filas, { onConflict: 'clave' });
+  if (error) throw error;
+}
+// Guarda los tramos comparando con los que ya había: agrega, cambia y quita solo lo necesario.
+export async function guardarTramosTarifa(nuevos, previos) {
+  const quitar = previos.filter(p => !nuevos.some(n => n.id === p.id)).map(p => p.id);
+  const agregar = nuevos.filter(n => !n.id).map(n => ({ desde: Number(n.desde), hasta: n.hasta === '' || n.hasta == null ? null : Number(n.hasta), tarifa: Number(n.tarifa) }));
+  if (agregar.length) { const { error } = await supabase.from('licencias_tarifas_tramos').insert(agregar); if (error) throw error; }
+  for (const n of nuevos.filter(x => x.id)) {
+    const { error } = await supabase.from('licencias_tarifas_tramos').update({ desde: Number(n.desde), hasta: n.hasta === '' || n.hasta == null ? null : Number(n.hasta), tarifa: Number(n.tarifa) }).eq('id', n.id);
+    if (error) throw error;
+  }
+  if (quitar.length) { const { error } = await supabase.from('licencias_tarifas_tramos').delete().in('id', quitar); if (error) throw error; }
+}
+export async function fetchFinancieroDatos(anio) {
+  const [licencias, pagos, tramos, config] = await Promise.all([
+    todasLasFilas('licencias_paralelo_resumen', '*'),
+    todasLasFilas('licencias_paralelo_pagos', '*', q => q.eq('anio', anio)),
+    fetchTramosTarifa(), fetchConfigLicencias()
+  ]);
+  return { licencias, pagos, tramos, config };
+}
+export async function fetchLibroCobros(anio) {
+  return todasLasFilas('licencias_paralelo_pagos',
+    '*, licencias_paralelo!inner(institucion:instituciones(nombre, amie), grado:grados(nombre), paralelo:paralelos(nombre))',
+    q => q.eq('anio', anio));
+}
+// Cambia la tarifa mensual de los paralelos indicados (agrupa por tarifa). Lo ya pagado conserva su monto.
+export async function aplicarTarifasLicencias(plan) {
+  const cambios = plan.filter(p => Number(p.actual) !== Number(p.propuesta));
+  const porTarifa = new Map();
+  cambios.forEach(p => { if (!porTarifa.has(p.propuesta)) porTarifa.set(p.propuesta, []); porTarifa.get(p.propuesta).push(p.id); });
+  for (const [tarifa, ids] of porTarifa) {
+    for (const lote of trozos(ids, 200)) {
+      const { error } = await supabase.from('licencias_paralelo').update({ tarifa_mensual: tarifa }).in('id', lote);
+      if (error) throw error;
+    }
+  }
+  return cambios.length;
+}

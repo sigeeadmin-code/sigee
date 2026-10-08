@@ -32,6 +32,7 @@ import ReportesMatriculas from './pages/ReportesMatriculas.jsx';
 import Egresados from './pages/Egresados.jsx';
 import BasesCentrales from './pages/BasesCentrales.jsx';
 import ContenidoSitio from './pages/ContenidoSitio.jsx';
+import Financiero from './pages/Financiero.jsx';
 import Placeholder from './pages/Placeholder.jsx';
 function AccesoDenegado() {
   return (
@@ -84,7 +85,7 @@ function Gate() {
         <Route path="/base-estudiantes" element={<BasesCentrales clave="base-estudiantes" />} />
         <Route path="/contenido-sitio" element={<ContenidoSitio />} />
         <Route path="/usuarios" element={<Protegida path="/usuarios"><Usuarios /></Protegida>} />
-        <Route path="/financiero" element={<Protegida path="/financiero"><Placeholder title="Financiero" /></Protegida>} />
+        <Route path="/financiero" element={<Protegida path="/financiero"><FinancieroRuta /></Protegida>} />
         <Route path="/configuracion" element={<Configuracion />} />
         <Route path="/mi-plantel" element={<Protegida path="/mi-plantel"><MiPlantel /></Protegida>} />
         <Route path="/tareas" element={<Protegida path="/tareas"><Tareas /></Protegida>} />
@@ -111,4 +112,10 @@ export default function App() {
       <Gate />
     </SessionProvider>
   );
+}
+
+// /financiero lo comparten dos módulos: el de SIGEE (cobro a los planteles, solo Super Admin) y el de cada plantel (aún en construcción).
+function FinancieroRuta() {
+  const { profile } = useSession();
+  return profile.rolDb === 'super_admin' ? <Financiero /> : <Placeholder title="Financiero" />;
 }

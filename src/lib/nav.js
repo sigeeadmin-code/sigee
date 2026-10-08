@@ -29,7 +29,7 @@ export const NAV_BY_ROL = {
       { to: '/horario', label: 'Horario', icon: 'ti ti-clock' }
     ]},
     { cat: 'Finanzas', items: [
-      { to: '/financiero', label: 'Financiero', icon: 'ti ti-cash', wip: true },
+      { to: '/financiero', label: 'Financiero', icon: 'ti ti-cash' },
       { to: '/licencias', label: 'Licencias y activación', icon: 'ti ti-credit-card' }
     ]},
     { cat: 'Sistema', items: [
