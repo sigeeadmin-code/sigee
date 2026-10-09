@@ -1,8 +1,9 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
 import { fetchCalendario, crearEventoCalendario, eliminarEventoCalendario, evaluarDia } from '../lib/data.js';
 import { fetchGradosConParalelos } from '../lib/data.js';
 import { TIPOS_EVENTO, TIPO_LABEL, TIPO_BADGE, hoyISO } from '../lib/calendario.js';
+import { resumenAnioLectivo } from '../lib/calendarioResumen.js';
 
 export default function Calendario() {
   const { profile, institucion, data } = useSession();
@@ -63,7 +64,8 @@ export default function Calendario() {
   }
 
   async function eliminar(ev) {
-    if (!window.confirm(`¿Eliminar "${ev.descripcion || TIPO_LABEL[ev.tipo]}"?`)) return;
+    const aviso = ev.origen === 'oficial' ? '\n\nEs parte del calendario oficial del Ministerio de Educación; se quitará solo en este plantel.' : '';
+    if (!window.confirm(`¿Eliminar "${ev.descripcion || TIPO_LABEL[ev.tipo]}"?${aviso}`)) return;
     try {
       await eliminarEventoCalendario(ev.id);
       await cargar();
@@ -80,6 +82,7 @@ export default function Calendario() {
   const conteos = TIPOS_EVENTO.reduce((acc, t) => ({ ...acc, [t]: items.filter(e => e.tipo === t).length }), {});
 
   const resultadoTest = evaluarDia(testFecha, items, periodoActivo, testParalelo || null);
+  const anio = useMemo(() => resumenAnioLectivo(items, hoyISO()), [items]);
 
   if (loading) return <p style={{ fontSize: 13, color: 'var(--slate)' }}>Cargando…</p>;
 
@@ -104,6 +107,8 @@ export default function Calendario() {
           </div>
         </div>
       )}
+
+      {anio && <ResumenAnio anio={anio} />}
 
       <div className="grid-4">
         {TIPOS_EVENTO.map(t => (
@@ -145,7 +150,7 @@ export default function Calendario() {
                     <td><span className={'badge ' + (TIPO_BADGE[ev.tipo] || 'b-muted')}>{TIPO_LABEL[ev.tipo]}</span></td>
                     <td className="mono">{ev.fecha_inicio}</td>
                     <td className="mono">{ev.fecha_fin}</td>
-                    <td>{ev.descripcion || '—'}</td>
+                    <td>{ev.descripcion || '—'}{ev.origen === 'oficial' && <span className="badge b-info" style={{ marginLeft: 8 }} title="Calendario oficial del Ministerio de Educación">Oficial</span>}</td>
                     <td style={{ fontSize: 12 }}>{ev.paralelo_id ? (nombreParalelo(ev.paralelo_id) || 'Curso eliminado') : <span className="badge b-muted">Toda la institución</span>}</td>
                     <td style={{ textAlign: 'right' }}>
                       <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} onClick={() => eliminar(ev)}>Eliminar</button>
@@ -200,6 +205,42 @@ export default function Calendario() {
       )}
 
       {toast && <div className={'toast ' + (toast.tipo === 'ok' ? 'ok' : 'err')}>{toast.msg}</div>}
+    </div>
+  );
+}
+
+const fechaCorta = f => (f ? `${f.slice(8, 10)}/${f.slice(5, 7)}/${f.slice(0, 4)}` : '—');
+
+// Tarjetas con los períodos académicos del año lectivo y cuántos días lectivos van y faltan.
+function ResumenAnio({ anio }) {
+  const pct = anio.total ? Math.round((anio.transcurridos / anio.total) * 100) : 0;
+  return (
+    <div className="card" style={{ marginBottom: 14 }}>
+      <div className="ch" style={{ flexWrap: 'wrap', gap: 8 }}>
+        <h3 style={{ margin: 0 }}>Año lectivo {anio.inicio.slice(0, 4)}–{anio.fin.slice(0, 4)}</h3>
+        <span style={{ fontSize: 12.5, color: 'var(--slate)' }}>
+          {fechaCorta(anio.inicio)} al {fechaCorta(anio.fin)} · {anio.total} días lectivos · van {anio.transcurridos} ({pct}%) y faltan {anio.restantes}
+        </span>
+      </div>
+      <div className="cb">
+        <div style={{ height: 8, background: 'var(--line, #e2e8f0)', borderRadius: 6, overflow: 'hidden', marginBottom: 12 }}>
+          <div style={{ width: pct + '%', height: '100%', background: 'var(--brand, #0891b2)' }} />
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {anio.periodos.map(p => (
+            <div key={p.inicio} className="card" style={{ margin: 0, padding: '10px 14px', flex: '1 1 200px', outline: p.actual ? '2px solid var(--brand)' : 'none' }}>
+              <div style={{ fontSize: 12, fontWeight: 700 }}>{p.nombre}{p.actual ? ' · en curso' : ''}</div>
+              <div style={{ fontSize: 11.5, color: 'var(--slate)' }}>{fechaCorta(p.inicio)} al {fechaCorta(p.fin)}</div>
+              <div style={{ fontSize: 13, marginTop: 4 }}><strong>{p.total}</strong> días lectivos{p.actual ? ` · faltan ${p.restantes}` : p.restantes === 0 ? ' · terminado' : ''}</div>
+            </div>
+          ))}
+        </div>
+        {anio.proximoNoLectivo && (
+          <div style={{ fontSize: 12.5, color: 'var(--slate)', marginTop: 10 }}>
+            Próximo día no lectivo: <strong>{anio.proximoNoLectivo.descripcion}</strong> ({fechaCorta(anio.proximoNoLectivo.desde)}{anio.proximoNoLectivo.hasta !== anio.proximoNoLectivo.desde ? ` al ${fechaCorta(anio.proximoNoLectivo.hasta)}` : ''}).
+          </div>
+        )}
+      </div>
     </div>
   );
 }
