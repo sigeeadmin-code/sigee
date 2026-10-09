@@ -2036,3 +2036,43 @@ export async function aplicarTarifasLicencias(plan) {
   }
   return cambios.length;
 }
+
+// ── Análisis de asistencia (riesgo, faltas consecutivas, cobertura, oficios) ──
+async function paginarTodo(construir) {
+  const out = [];
+  for (let desde = 0; ; desde += 1000) {
+    const { data, error } = await construir().range(desde, desde + 999);
+    if (error) throw error;
+    out.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
+  return out;
+}
+
+/** Estudiantes con matrícula activa (con curso y representante), registros de asistencia del rango y eventos del calendario. */
+export async function fetchAnalisisAsistencia(institucionId, desde, hasta) {
+  const [matriculas, registros, vinculos, eventos] = await Promise.all([
+    paginarTodo(() => supabase.from('matriculas')
+      .select('id, estudiante_id, paralelo_id, grado_id, estudiantes!inner(nombres, apellidos, cedula, institucion_id), grados(nombre), paralelos(nombre)')
+      .eq('estado', 'activa').eq('estudiantes.institucion_id', institucionId).order('id')),
+    paginarTodo(() => supabase.from('asistencia')
+      .select('id, estudiante_id, fecha, estado, estudiantes!inner(institucion_id)')
+      .eq('estudiantes.institucion_id', institucionId).gte('fecha', desde).lte('fecha', hasta).order('id')),
+    paginarTodo(() => supabase.from('representantes_estudiantes')
+      .select('estudiante_id, representantes(nombres, apellidos, cedula, telefono, email), estudiantes!inner(institucion_id)')
+      .eq('estudiantes.institucion_id', institucionId).order('estudiante_id')).catch(e => { console.error('[Supabase] representantes', e.message); return []; }),
+    supabase.from('calendario_eventos').select('tipo, fecha_inicio, fecha_fin').eq('institucion_id', institucionId)
+      .lte('fecha_inicio', hasta).gte('fecha_fin', desde).then(r => r.data || [])
+  ]);
+  const repDe = {};
+  vinculos.forEach(v => { if (v.representantes && !repDe[v.estudiante_id]) repDe[v.estudiante_id] = v.representantes; });
+  const alumnos = matriculas.map(m => ({
+    id: m.estudiante_id,
+    nombre: `${m.estudiantes?.apellidos || ''} ${m.estudiantes?.nombres || ''}`.trim(),
+    cedula: m.estudiantes?.cedula || '',
+    curso: `${m.grados?.nombre || ''} ${m.paralelos?.nombre || ''}`.trim(),
+    paraleloId: m.paralelo_id, gradoId: m.grado_id,
+    representante: repDe[m.estudiante_id] || null
+  }));
+  return { alumnos, registros: registros.map(r => ({ estudiante_id: r.estudiante_id, fecha: r.fecha, estado: r.estado })), eventos };
+}

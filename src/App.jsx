@@ -33,6 +33,7 @@ import Egresados from './pages/Egresados.jsx';
 import BasesCentrales from './pages/BasesCentrales.jsx';
 import ContenidoSitio from './pages/ContenidoSitio.jsx';
 import Financiero from './pages/Financiero.jsx';
+import AnalisisAsistencia from './pages/AnalisisAsistencia.jsx';
 import Placeholder from './pages/Placeholder.jsx';
 function AccesoDenegado() {
   return (
@@ -90,6 +91,7 @@ function Gate() {
         <Route path="/mi-plantel" element={<Protegida path="/mi-plantel"><MiPlantel /></Protegida>} />
         <Route path="/tareas" element={<Protegida path="/tareas"><Tareas /></Protegida>} />
         <Route path="/asistencia" element={<Protegida path="/asistencia"><Asistencia /></Protegida>} />
+        <Route path="/analisis-asistencia" element={<Protegida path="/analisis-asistencia"><AnalisisAsistencia /></Protegida>} />
         <Route path="/reportes-asistencia" element={<Protegida path="/reportes-asistencia"><ReportesAsistencia /></Protegida>} />
         <Route path="/inasistencias" element={<Protegida path="/inasistencias"><Inasistencias /></Protegida>} />
         <Route path="/justificaciones" element={<Protegida path="/justificaciones"><Justificaciones /></Protegida>} />

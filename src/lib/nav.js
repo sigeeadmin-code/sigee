@@ -58,6 +58,7 @@ export const NAV_BY_ROL = {
       { to: '/egresados', label: 'Egresados', icon: 'ti ti-school' },
       { to: '/tareas', label: 'Tareas y avisos', icon: 'ti ti-clipboard-list' },
       { to: '/asistencia', label: 'Asistencia', icon: 'ti ti-calendar-check' },
+      { to: '/analisis-asistencia', label: 'Análisis de asistencia', icon: 'ti ti-chart-dots' },
       { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' },
       { to: '/inasistencias', label: 'Inasistencias', icon: 'ti ti-message-circle' },
       { to: '/calendario', label: 'Calendario académico', icon: 'ti ti-calendar' },
@@ -85,6 +86,7 @@ export const NAV_BY_ROL = {
       { to: '/egresados', label: 'Egresados', icon: 'ti ti-school' },
       { to: '/tareas', label: 'Tareas y avisos', icon: 'ti ti-clipboard-list' },
       { to: '/asistencia', label: 'Asistencia', icon: 'ti ti-calendar-check' },
+      { to: '/analisis-asistencia', label: 'Análisis de asistencia', icon: 'ti ti-chart-dots' },
       { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' },
       { to: '/calendario', label: 'Calendario académico', icon: 'ti ti-calendar' },
       { to: '/aulas', label: 'Aulas', icon: 'ti ti-door' },
@@ -110,6 +112,7 @@ export const NAV_BY_ROL = {
       { to: '/encadenamiento', label: 'Encadenamiento', icon: 'ti ti-link' },
       { to: '/reportes-asistencia', label: 'Reportes de asistencia', icon: 'ti ti-chart-bar' },
       { to: '/asistencia', label: 'Consultas de asistencia', icon: 'ti ti-calendar-check' },
+      { to: '/analisis-asistencia', label: 'Análisis de asistencia', icon: 'ti ti-chart-dots' },
       { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' },
       { to: '/inasistencias', label: 'Inasistencias / WhatsApp', icon: 'ti ti-message-circle' },
       { to: '/calendario', label: 'Calendario académico', icon: 'ti ti-calendar' }

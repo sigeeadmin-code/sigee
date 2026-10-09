@@ -260,3 +260,42 @@ table.data tr:last-child td{border-bottom:none}
   .print-area { position: fixed; inset: 0; width: 100%; background: #fff; }
   .print-hide { display: none !important; }
 }
+
+/* ── Oficio de inasistencias: vista previa en pantalla e impresión en hojas A4 ── */
+.oficio-overlay{position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:80;display:flex;align-items:stretch;justify-content:center;padding:2vh 2vw}
+.oficio-panel{background:var(--bg,#f8fafc);border-radius:14px;width:100%;max-width:1280px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.35)}
+.oficio-barra{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#fff;border-bottom:1px solid var(--line,#e2e8f0)}
+.oficio-cuerpo{display:flex;flex:1;min-height:0}
+.oficio-form{width:300px;flex:none;padding:14px 16px;overflow-y:auto;background:#fff;border-right:1px solid var(--line,#e2e8f0)}
+.oficio-form .fl{display:block;margin:8px 0 3px}
+.oficio-vista{flex:1;min-width:0;display:flex;flex-direction:column;padding:10px 14px}
+.oficio-nav{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-bottom:8px}
+.oficio-scroll{flex:1;overflow:auto;background:#cbd5e1;border-radius:10px;padding:16px}
+.oficio-zoom{zoom:.8;display:flex;justify-content:center}
+.oficio-hoja{background:#fff;color:#111;width:210mm;min-height:296mm;padding:14mm 20mm;box-sizing:border-box;font-family:'Times New Roman',Georgia,serif;font-size:11pt;line-height:1.4;box-shadow:0 2px 14px rgba(0,0,0,.25);text-align:justify}
+.oficio-hoja p{margin:0 0 7px}
+.of-cab{text-align:center;border-bottom:2px solid #111;padding-bottom:6px;margin-bottom:10px}
+.of-inst{font-size:14pt;font-weight:700;letter-spacing:.02em}
+.of-sub{font-size:10pt;color:#333}
+.of-titulo{font-weight:700;font-size:13pt;text-align:left;margin-bottom:2px}
+.of-fecha{text-align:left;margin-bottom:8px}
+.of-dest{text-align:left;margin-bottom:7px}
+.of-asunto{text-align:left;margin-bottom:7px}
+.of-aviso{color:#b91c1c;font-style:italic}
+.of-tabla{width:100%;border-collapse:collapse;margin:2px 0 8px;font-size:10pt}
+.of-tabla th,.of-tabla td{border:1px solid #444;padding:1px 8px;text-align:left}
+.of-tabla th{background:#e5e7eb}
+.of-firma{margin-top:26px;text-align:center;font-size:10.5pt;break-inside:avoid}
+.of-linea{border-top:1px solid #111;width:60%;margin:0 auto 4px}
+.of-acuse{margin-top:14px;border:1px dashed #555;padding:6px 12px;font-size:9.5pt;line-height:1.3;text-align:left;break-inside:avoid}
+.of-pie{margin-top:8px;font-size:8.5pt;color:#444;text-align:left}
+.oficio-print{display:none}
+@media (max-width:900px){.oficio-cuerpo{flex-direction:column;overflow-y:auto}.oficio-form{width:auto;border-right:none}.oficio-zoom{zoom:.45}}
+@media print{
+  @page{size:A4;margin:0}
+  body.imprimiendo-oficio > *:not(.oficio-print){display:none !important}
+  body.imprimiendo-oficio .oficio-print{display:block !important;position:static;visibility:visible}
+  body.imprimiendo-oficio .oficio-print *{visibility:visible}
+  body.imprimiendo-oficio .oficio-hoja{box-shadow:none;width:210mm;min-height:296mm;margin:0;page-break-after:always;break-after:page}
+  body.imprimiendo-oficio .oficio-hoja:last-child{page-break-after:auto;break-after:auto}
+}
