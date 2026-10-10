@@ -65,6 +65,7 @@ export function construirOficio({ institucion, alumno, periodo, opciones }) {
   return {
     advertencia: n === 0 ? 'Este estudiante no tiene inasistencias injustificadas en el período.' : '',
     encabezado: { institucion: mayus(inst.nombre), amie: inst.amie || '', ubicacion: [inst.canton, inst.provincia].filter(Boolean).join(' · ') },
+    numero: o.numero || '',
     titulo: `OFICIO Nro. ${o.numero || '________'}`,
     lugarFecha: lugar,
     destinatario: ['Señor(a)', rep ? mayus(rep) : 'REPRESENTANTE LEGAL', `REPRESENTANTE LEGAL DEL ESTUDIANTE ${nombre}`, 'Presente.-'],

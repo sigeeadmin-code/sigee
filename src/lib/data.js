@@ -4,6 +4,7 @@ import { combinarCatalogo, clave } from './niveles.js';
 import { filtroOr } from './centralesBase.js';
 import { filaParaGuardar, agruparPorColumnas, cedulaCentral } from './importCentral.js';
 import { planAsignacion, planCruce } from './asignarDocentes.js';
+import { palabraClave, coincideBusqueda } from './fichaAsistencia.js';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://sigee-backend-production.up.railway.app';
 
@@ -2075,4 +2076,66 @@ export async function fetchAnalisisAsistencia(institucionId, desde, hasta) {
     representante: repDe[m.estudiante_id] || null
   }));
   return { alumnos, registros: registros.map(r => ({ estudiante_id: r.estudiante_id, fecha: r.fecha, estado: r.estado })), eventos };
+}
+
+// ── Ficha de asistencia de un estudiante (búsqueda, historial, oficios y avisos) ──
+/** Busca estudiantes con matrícula activa por nombre o cédula (todas las palabras, sin importar tildes ni orden). */
+export async function buscarEstudiantesAsistencia(institucionId, consulta, { paraleloIds = null, limite = 12 } = {}) {
+  const clave = palabraClave(consulta);
+  if (clave.length < 2) return [];
+  let q = supabase.from('estudiantes')
+    .select('id, nombres, apellidos, cedula, matriculas!inner(estado, paralelo_id, grados(nombre), paralelos(nombre))')
+    .eq('institucion_id', institucionId).eq('matriculas.estado', 'activa')
+    .or(`nombres.ilike.%${clave}%,apellidos.ilike.%${clave}%,cedula.ilike.%${clave}%`)
+    .limit(80);
+  if (paraleloIds) q = q.in('matriculas.paralelo_id', paraleloIds);
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data || [])
+    .map(e => {
+      const m = e.matriculas?.[0];
+      return { id: e.id, nombre: `${e.apellidos || ''} ${e.nombres || ''}`.trim(), cedula: e.cedula || '', curso: `${m?.grados?.nombre || ''} ${m?.paralelos?.nombre || ''}`.trim(), paraleloId: m?.paralelo_id || null };
+    })
+    .filter(e => coincideBusqueda(`${e.nombre} ${e.cedula}`, consulta))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre))
+    .slice(0, limite);
+}
+
+export async function fetchFichaAsistencia(institucionId, estudianteId, desde, hasta) {
+  const [clases, justificaciones, avisos, oficios, vinculos] = await Promise.all([
+    paginarTodo(() => supabase.from('asistencia')
+      .select('id, fecha, estado, observacion, docente_materia(materias(nombre), docentes(nombres, apellidos))')
+      .eq('estudiante_id', estudianteId).gte('fecha', desde).lte('fecha', hasta).order('id')),
+    supabase.from('justificaciones').select('id, fecha, motivo, estado, created_at').eq('estudiante_id', estudianteId).order('fecha', { ascending: false }).then(r => r.data || []),
+    supabase.from('avisos_inasistencia').select('id, fecha, mensaje, canal, enviado_at').eq('estudiante_id', estudianteId).order('enviado_at', { ascending: false }).then(r => r.data || []),
+    supabase.from('oficios_inasistencia').select('*').eq('estudiante_id', estudianteId).order('created_at', { ascending: false }).then(r => r.data || []),
+    supabase.from('representantes_estudiantes').select('representantes(nombres, apellidos, cedula, telefono, email)').eq('estudiante_id', estudianteId).then(r => r.data || [])
+  ]);
+  const reps = vinculos.map(v => v.representantes).filter(Boolean);
+  const representante = reps.find(r => r.telefono) || reps[0] || null;
+  return {
+    registros: clases.map(c => ({
+      fecha: c.fecha, estado: c.estado, observacion: c.observacion || '',
+      materia: c.docente_materia?.materias?.nombre || 'Sin materia',
+      docente: c.docente_materia?.docentes ? `${c.docente_materia.docentes.nombres || ''} ${c.docente_materia.docentes.apellidos || ''}`.trim() : ''
+    })),
+    justificaciones, avisos, oficios, representante
+  };
+}
+
+/** Deja constancia en el historial del estudiante de cada oficio emitido. */
+export async function registrarOficiosEmitidos(institucionId, items, creadoPor) {
+  if (!items.length) return 0;
+  const filas = items.map(i => ({
+    institucion_id: institucionId, estudiante_id: i.estudianteId, numero: i.numero || null, fecha_emision: i.fechaEmision,
+    periodo_desde: i.periodoDesde, periodo_hasta: i.periodoHasta, dias_falta: i.diasFalta, fechas: i.fechas,
+    firmante: i.firmante || null, cargo: i.cargo || null, creado_por: creadoPor
+  }));
+  const { error } = await supabase.from('oficios_inasistencia').insert(filas);
+  if (error) throw error;
+  return filas.length;
+}
+export async function marcarOficioEntregado(id) {
+  const { error } = await supabase.from('oficios_inasistencia').update({ estado: 'entregado', entregado_at: new Date().toISOString() }).eq('id', id);
+  if (error) throw error;
 }

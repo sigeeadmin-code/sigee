@@ -47,11 +47,13 @@ export function Hoja({ of }) {
 }
 
 // Vista previa editable del oficio de inasistencias, uno por estudiante, con impresión / guardado en PDF.
-export default function OficioFaltasModal({ alumnos, institucion, periodo, onClose }) {
+export default function OficioFaltasModal({ alumnos, institucion, periodo, onClose, onRegistrar }) {
   const idInst = institucion?.id || 'x';
   const [indice, setIndice] = useState(0);
   const [imprimiendo, setImprimiendo] = useState(null);   // null | 'uno' | 'todos'
   const [correlativo, setCorrelativo] = useState(true);
+  const [registrar, setRegistrar] = useState(true);
+  const [constancia, setConstancia] = useState('');
   const [op, setOp] = useState(() => {
     let guardado = {};
     try { guardado = JSON.parse(localStorage.getItem(CLAVE + idInst) || '{}'); } catch { /* sin almacenamiento */ }
@@ -84,6 +86,21 @@ export default function OficioFaltasModal({ alumnos, institucion, periodo, onClo
     const t = setTimeout(() => window.print(), 150);
     return () => { clearTimeout(t); window.removeEventListener('afterprint', fin); document.body.classList.remove('imprimiendo-oficio'); };
   }, [imprimiendo]);
+
+  // al imprimir queda constancia en el historial de cada estudiante (como "emitido")
+  async function iniciarImpresion(modo) {
+    const lista = modo === 'todos' ? oficios.map((of, i) => [alumnos[i], of]) : [[alumnos[actual], oficios[actual]]];
+    setImprimiendo(modo);
+    if (!onRegistrar || !registrar) return;
+    try {
+      await onRegistrar(lista.map(([a, of]) => ({
+        estudianteId: a.id, numero: of.numero, fechaEmision: op.fechaEmision, periodoDesde: periodo.desde, periodoHasta: periodo.hasta,
+        diasFalta: a.faltas, fechas: (a.fechasFaltas || []).filter(f => f.tipo === 'injustificada').map(f => f.fecha),
+        firmante: op.firmanteNombre, cargo: op.firmanteCargo
+      })));
+      setConstancia(`Quedó registrado en el historial (${lista.length} ${lista.length === 1 ? 'oficio' : 'oficios'}).`);
+    } catch (e) { setConstancia('No se pudo registrar en el historial: ' + (e.message || e)); }
+  }
 
   const aImprimir = imprimiendo === 'todos' ? oficios : imprimiendo === 'uno' ? [oficios[actual]] : [];
   const nombreAlumno = alumnos[actual]?.nombre;
@@ -136,11 +153,15 @@ export default function OficioFaltasModal({ alumnos, institucion, periodo, onClo
                 </>
               ) : <span style={{ fontSize: 13 }}><strong>{nombreAlumno}</strong></span>}
               <span style={{ flex: 1 }} />
-              <button className="btn btn-secondary btn-sm" onClick={() => setImprimiendo('uno')}>🖨️ Imprimir este</button>
-              {oficios.length > 1 && <button className="btn btn-primary btn-sm" onClick={() => setImprimiendo('todos')}>🖨️ Imprimir los {oficios.length}</button>}
+              <button className="btn btn-secondary btn-sm" onClick={() => iniciarImpresion('uno')}>🖨️ Imprimir este</button>
+              {oficios.length > 1 && <button className="btn btn-primary btn-sm" onClick={() => iniciarImpresion('todos')}>🖨️ Imprimir los {oficios.length}</button>}
             </div>
             <div className="oficio-scroll"><div className="oficio-zoom">{oficios[actual] && <Hoja of={oficios[actual]} />}</div></div>
-            <div style={{ fontSize: 11.5, color: 'var(--slate)', padding: '6px 2px' }}>En el cuadro de impresión elige “Guardar como PDF” para obtener el archivo.</div>
+            <div style={{ fontSize: 11.5, color: 'var(--slate)', padding: '6px 2px' }}>
+              En el cuadro de impresión elige “Guardar como PDF” para obtener el archivo.
+              {onRegistrar && <label style={{ marginLeft: 12 }}><input type="checkbox" checked={registrar} onChange={e => setRegistrar(e.target.checked)} /> Registrar en el historial del estudiante al imprimir</label>}
+              {constancia && <strong style={{ marginLeft: 12 }}>{constancia}</strong>}
+            </div>
           </div>
         </div>
       </div>

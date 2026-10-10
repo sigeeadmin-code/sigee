@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '../lib/SessionContext.jsx';
+import BuscadorEstudianteAsistencia from '../components/BuscadorEstudianteAsistencia.jsx';
+import FichaAsistenciaModal from '../components/FichaAsistenciaModal.jsx';
 import {
   fetchGradosConParalelos, fetchMateriasParalelo, fetchEstudiantesParaleloDetalle,
   fetchAsistencia, guardarAsistencia, fetchCargasDocente, fetchAsistenciaReciente,
@@ -531,6 +533,7 @@ function ConsultasEstadisticas() {
   const [estudianteId, setEstudianteId] = useState('');
   const [historial, setHistorial] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [fichaDe, setFichaDe] = useState(null);
 
   useEffect(() => {
     let activo = true;
@@ -603,9 +606,11 @@ function ConsultasEstadisticas() {
   }), { presente: 0, atraso: 0, ausente: 0, justificado: 0 });
 
   const estudianteSel = filaEstudiantes.find(a => a.id === estudianteId);
+  const paraleloIdsBusqueda = useMemo(() => (esDocente && !vistaAmplia ? [...new Set(cargasDocente.map(c => c.paraleloId))] : null), [esDocente, vistaAmplia, cargasDocente]);
 
   return (
     <div>
+      <BuscadorEstudianteAsistencia institucionId={institucionId} paraleloIds={paraleloIdsBusqueda} onSelect={setFichaDe} />
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 14, alignItems: 'flex-end' }}>
         <div>
           <label className="fl">Curso</label>
@@ -714,6 +719,7 @@ function ConsultasEstadisticas() {
           </div>
         </div>
       )}
+      {fichaDe && <FichaAsistenciaModal estudiante={fichaDe} onClose={() => setFichaDe(null)} />}
     </div>
   );
 }
