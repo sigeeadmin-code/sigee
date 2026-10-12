@@ -3,7 +3,7 @@ import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchGradosConParalelos, fetchCargasDocente, fetchTodasCargas, fetchEstudiantesParalelo,
   fetchAportesCarga, fetchConfigEvaluacion, fetchNotasParalelo, guardarNotasTrimestre, guardarSupletorios, guardarCasilleros,
-  fetchCedulasEstudiantes, fetchNombreDocente, fetchCatalogoNivel
+  fetchCedulasEstudiantes, fetchNombreDocente, fetchCatalogoNivel, fetchDocenteIdPorProfile
 } from '../lib/data.js';
 import {
   TRIMESTRES, configPorDefecto, validarConfig, calcTrimestre, aplicarMejora, escalaDAAPA, calcAnual, aDos, usaEvaluacionNumerica
@@ -52,6 +52,7 @@ function CuadroCalificaciones() {
   const [vista, setVista] = useState('registro'); // 'registro' | 'cuadro'
   const [grados, setGrados] = useState([]);
   const [cargasTodas, setCargasTodas] = useState([]);
+  const [propiasIds, setPropiasIds] = useState(() => new Set()); // cargas del propio docente (el tutor además VE las de su paralelo)
   const [gradoId, setGradoId] = useState('');
   const [paraleloId, setParaleloId] = useState('');
   const [cargaId, setCargaId] = useState('');
@@ -79,10 +80,20 @@ function CuadroCalificaciones() {
     (async () => {
       setLoading(true);
       const gr = (await fetchGradosConParalelos(institucionId)).filter(g => usaEvaluacionNumerica(g));
-      const cs = esDocente ? await fetchCargasDocente(profile.id, institucionId) : await fetchTodasCargas(institucionId);
+      let cs = esDocente ? await fetchCargasDocente(profile.id, institucionId) : await fetchTodasCargas(institucionId);
+      const propias = new Set(cs.map(c => c.id));
+      if (esDocente) {
+        // Tutor de un paralelo: además de sus materias VE todas las del paralelo (cuadro y boletas completos); solo edita las suyas.
+        const docenteId = await fetchDocenteIdPorProfile(profile.id, institucionId);
+        const tutorDe = new Set(gr.flatMap(g => g.paralelos).filter(p => docenteId && p.tutor_docente_id === docenteId).map(p => p.id));
+        if (tutorDe.size) {
+          const todas = await fetchTodasCargas(institucionId);
+          cs = [...cs, ...todas.filter(c => tutorDe.has(c.paraleloId) && !propias.has(c.id))];
+        }
+      }
       if (!activo) return;
       const delPeriodo = cs.filter(c => !periodoActivo || c.periodoId === periodoActivo.id);
-      setGrados(gr); setCargasTodas(delPeriodo);
+      setGrados(gr); setCargasTodas(delPeriodo); setPropiasIds(propias);
       const visibles = esDocente ? gr.filter(g => g.paralelos.some(p => delPeriodo.some(c => c.paraleloId === p.id))) : gr;
       const g0 = visibles[0];
       if (g0) {
@@ -108,7 +119,9 @@ function CuadroCalificaciones() {
     [cargasTodas, paraleloId, catalogo, nivelSel]
   );
 
-  useEffect(() => { setCargaId(cargasParalelo[0]?.id || ''); }, [cargasParalelo]);
+  // En "Registro de notas" un docente solo ve las materias que dicta (el servidor rechaza escribir en las de otros).
+  const cargasRegistro = useMemo(() => (esDocente ? cargasParalelo.filter(c => propiasIds.has(c.id)) : cargasParalelo), [cargasParalelo, esDocente, propiasIds]);
+  useEffect(() => { setCargaId(cargasRegistro[0]?.id || ''); }, [cargasRegistro]);
   useEffect(() => { setPanelCas(false); }, [cargaId, vista]);
 
   // Configuración de evaluación del paralelo (o la general de la institución, o la de MAQUETA)
@@ -212,7 +225,7 @@ function CuadroCalificaciones() {
   if (loading) return <div className="card"><div className="cb"><p className="muted">Cargando…</p></div></div>;
   if (!periodoActivo) return <div className="card"><div className="cb"><p className="muted">No hay un período lectivo activo. Actívalo primero en Académico → Configuración.</p></div></div>;
 
-  const editable = puedeEditar && !!cargasParalelo.find(c => c.id === cargaId);
+  const editable = puedeEditar && !!cargasRegistro.find(c => c.id === cargaId);
 
   return (
     <div>
@@ -259,8 +272,8 @@ function CuadroCalificaciones() {
           {vista === 'registro' && <div>
             <label className="fl">Materia</label>
             <select className="fc" value={cargaId} onChange={e => { if (confirmarDescarte()) setCargaId(e.target.value); }}>
-              {cargasParalelo.length === 0 && <option value="">Sin materias asignadas aquí</option>}
-              {cargasParalelo.map(c => <option key={c.id} value={c.id}>{c.materiaNombre}{c.docenteNombre ? ' — ' + c.docenteNombre : ''}</option>)}
+              {cargasRegistro.length === 0 && <option value="">Sin materias asignadas aquí</option>}
+              {cargasRegistro.map(c => <option key={c.id} value={c.id}>{c.materiaNombre}{c.docenteNombre ? ' — ' + c.docenteNombre : ''}</option>)}
             </select>
           </div>}
           {vista === 'registro' && <div>
@@ -303,7 +316,7 @@ function CuadroCalificaciones() {
 
       {vista === 'registro'
         ? <RegistroNotas {...{ cfg, alumnos, grid, calculos, editable, cargandoNotas, sucios, setCelda, setMejora }} />
-        : <CuadroParalelo paraleloId={paraleloId} cargas={cargasParalelo} periodoActivo={periodoActivo} puedeEditar={puedeEditar}
+        : <CuadroParalelo paraleloId={paraleloId} cargas={cargasParalelo} periodoActivo={periodoActivo} puedeEditar={puedeEditar} propiasIds={esDocente ? propiasIds : null}
             institucion={institucion} grado={gradoSel} cursoNombre={gradoSel?.nombre || ''} paraleloNombre={paralelosVisibles.find(p => p.id === paraleloId)?.nombre || ''}
             tutorId={paralelosVisibles.find(p => p.id === paraleloId)?.tutor_docente_id || null} />}
     </div>
@@ -379,7 +392,7 @@ function RegistroNotas({ cfg, alumnos, grid, calculos, editable, cargandoNotas, 
   );
 }
 
-function CuadroParalelo({ paraleloId, cargas: cargasProp, periodoActivo, puedeEditar, institucion, grado, cursoNombre, paraleloNombre, tutorId }) {
+function CuadroParalelo({ paraleloId, cargas: cargasProp, periodoActivo, puedeEditar, propiasIds, institucion, grado, cursoNombre, paraleloNombre, tutorId }) {
   const [alumnos, setAlumnos] = useState([]);
   const [datos, setDatos] = useState({ notas: [], mejoras: [] });
   const [cargando, setCargando] = useState(false);
@@ -389,6 +402,8 @@ function CuadroParalelo({ paraleloId, cargas: cargasProp, periodoActivo, puedeEd
   const [guardandoSup, setGuardandoSup] = useState(null);
   const [aviso, setAviso] = useState(null);
   const idsCargas = cargasProp.map(c => c.id).join(',');
+  const puedeEditarCarga = c => puedeEditar && (!propiasIds || propiasIds.has(c.id)); // el tutor ve todas las materias, edita solo las suyas
+  const hayAjenas = !!propiasIds && cargasProp.some(c => !propiasIds.has(c.id));
   // Las materias se ordenan como en el catálogo del nivel (igual que en la boleta impresa)
   const [catalogo, setCatalogo] = useState(null);
   useEffect(() => { let a = true; fetchCatalogoNivel(institucion?.id).then(c => { if (a) setCatalogo(c); }); return () => { a = false; }; }, [institucion?.id]);
@@ -492,6 +507,7 @@ function CuadroParalelo({ paraleloId, cargas: cargasProp, periodoActivo, puedeEd
           🖨 Imprimir boletas ({modo === 'anual' ? 'informe anual' : TRIM_LABEL[modo]})
         </button>
       </div>
+      {hayAjenas && <div className="cb" style={{ paddingTop: 0, fontSize: 12, color: 'var(--slate)' }}>Eres tutor de este paralelo: ves todas las materias para el cuadro y las boletas, y solo puedes editar las tuyas.</div>}
       <div className="cb" style={{ padding: 0, overflowX: 'auto' }}>
         <table className="data">
           <thead><tr>
@@ -537,7 +553,7 @@ function CuadroParalelo({ paraleloId, cargas: cargasProp, periodoActivo, puedeEd
               <div key={carga.id} style={{ marginBottom: 14 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                   <strong style={{ fontSize: 13 }}>{carga.materiaNombre}</strong>
-                  {puedeEditar && <button className="btn btn-success btn-sm" disabled={guardandoSup === carga.id} onClick={() => guardarSup(carga)}>{guardandoSup === carga.id ? 'Guardando…' : '💾 Guardar supletorio'}</button>}
+                  {puedeEditarCarga(carga) && <button className="btn btn-success btn-sm" disabled={guardandoSup === carga.id} onClick={() => guardarSup(carga)}>{guardandoSup === carga.id ? 'Guardando…' : '💾 Guardar supletorio'}</button>}
                 </div>
                 <table className="data"><thead><tr><th>Estudiante</th><th style={{ textAlign: 'center' }}>Promedio anual</th><th style={{ textAlign: 'center' }}>Supletorio</th><th style={{ textAlign: 'center' }}>Resultado</th></tr></thead>
                   <tbody>{fs.map(({ f, m }) => {
@@ -550,7 +566,7 @@ function CuadroParalelo({ paraleloId, cargas: cargasProp, periodoActivo, puedeEd
                         <td>{f.a.nombre}</td>
                         <td style={{ textAlign: 'center' }}>{fmt(m.anual.promedio)}</td>
                         <td style={{ textAlign: 'center' }}>
-                          <input inputMode="decimal" disabled={!puedeEditar} value={valor}
+                          <input inputMode="decimal" disabled={!puedeEditarCarga(carga)} value={valor}
                             onChange={e => setSupEdit(p => ({ ...p, [llave]: e.target.value }))}
                             style={{ width: 54, textAlign: 'center', padding: '4px 2px', fontSize: 12, border: '1px solid ' + (ok ? 'var(--line)' : 'var(--red)'), borderRadius: 6 }} />
                         </td>

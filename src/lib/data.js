@@ -872,6 +872,11 @@ export async function fetchEgresados(institucionId) {
     .sort((a, b) => (b.fechaEgreso || '').localeCompare(a.fechaEgreso || ''));
 }
 
+/** Id de la ficha de docente (tabla docentes) de un usuario, para saber de qué paralelos es tutor. */
+export async function fetchDocenteIdPorProfile(profileId, institucionId) {
+  const filas = await sel('docentes', 'id', q => q.eq('profile_id', profileId).eq('institucion_id', institucionId));
+  return filas[0]?.id || null;
+}
 export async function fetchCargasDocente(profileId, institucionId) {
   const docentesRows = await sel('docentes', 'id', q => q.eq('profile_id', profileId).eq('institucion_id', institucionId));
   if (!docentesRows.length) return [];
