@@ -2076,3 +2076,34 @@ export async function fetchAnalisisAsistencia(institucionId, desde, hasta) {
   }));
   return { alumnos, registros: registros.map(r => ({ estudiante_id: r.estudiante_id, fecha: r.fecha, estado: r.estado })), eventos };
 }
+
+/* ── Estadísticas de calificaciones (rector, supervisor y Admin global) ──
+ * Las vistas v_* son security_invoker: la base ya devuelve solo lo que el rol puede ver
+ * (Admin global / supervisor general: todos los colegios; rector y supervisor del plantel: el suyo). */
+async function leerVista(vista, cols, build) {
+  const filas = await paginarTodo(() => {
+    let q = supabase.from(vista).select(cols);
+    if (build) q = build(q);
+    return q;
+  });
+  return filas;
+}
+
+/** Una fila por colegio y etapa (EGB Superior / BGU) — panel global. */
+export async function fetchEstadisticasColegios() {
+  return leerVista('v_estadisticas_colegio', '*', q => q.order('institucion_id'));
+}
+
+/** Detalle de UN colegio: por curso/paralelo/materia/docente, evolución por trimestre y alumnos en riesgo. */
+export async function fetchEstadisticasColegio(institucionId) {
+  const [detalle, evolucion, riesgo] = await Promise.all([
+    leerVista('v_estadisticas_notas', '*', q => q.eq('institucion_id', institucionId).order('grado_orden').order('paralelo_id').order('materia_id')),
+    leerVista('v_evolucion_trimestres', '*', q => q.eq('institucion_id', institucionId).order('grado_orden')),
+    leerVista('v_notas_finales',
+      'estudiante_id, apellidos, nombres, etapa, grado, grado_orden, paralelo, materia, docente, t1, t2, t3, n_periodos, promedio, supletorio, estado, escala',
+      q => q.eq('institucion_id', institucionId)
+        .or('estado.in.(supletorio,reprobado),and(estado.eq.en_curso,promedio.lt.7)')
+        .order('promedio', { ascending: true }).order('estudiante_id'))
+  ]);
+  return { detalle, evolucion, riesgo };
+}
