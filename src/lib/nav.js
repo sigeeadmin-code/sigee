@@ -2,6 +2,7 @@ export const NAV_BY_ROL = {
   super_admin: [
     { cat: 'Principal', items: [
       { to: '/', label: 'Dashboard', icon: 'ti ti-layout-dashboard' },
+      { to: '/estadisticas-amie', label: 'Estadísticas AMIE', icon: 'ti ti-chart-pie' },
       { to: '/notificaciones', label: 'Notificaciones', icon: 'ti ti-bell' }
     ]},
     { cat: 'Personas', items: [
