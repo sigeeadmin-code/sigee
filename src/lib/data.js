@@ -2076,3 +2076,8 @@ export async function fetchAnalisisAsistencia(institucionId, desde, hasta) {
   }));
   return { alumnos, registros: registros.map(r => ({ estudiante_id: r.estudiante_id, fecha: r.fecha, estado: r.estado })), eventos };
 }
+
+/** Catálogo AMIE normalizado (vista v_amie_planteles) para las estadísticas de la Zona 7. */
+export async function fetchAmiePlanteles() {
+  return paginarTodo(() => supabase.from('v_amie_planteles').select('*').order('canton').order('nombre'));
+}
