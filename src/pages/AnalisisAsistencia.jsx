@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
-import { fetchAnalisisAsistencia } from '../lib/data.js';
+import { fetchAnalisisAsistencia, registrarOficiosEmitidos } from '../lib/data.js';
+import FichaAsistenciaModal from '../components/FichaAsistenciaModal.jsx';
 import OficioFaltasModal from '../components/OficioFaltasModal.jsx';
 import { descargarLibro, descargarCsv } from '../lib/exportLibro.js';
 import {
@@ -24,7 +25,7 @@ const Tarjeta = ({ valor, etiqueta, sub, color }) => (
 const pct = v => (v === null || v === undefined ? '—' : `${String(v).replace('.', ',')}%`);
 
 export default function AnalisisAsistencia() {
-  const { institucion } = useSession();
+  const { institucion, profile } = useSession();
   const institucionId = institucion?.id;
   const [periodo, setPeriodo] = useState('mes');
   const [custom, setCustom] = useState({ desde: '', hasta: '' });
@@ -41,6 +42,7 @@ export default function AnalisisAsistencia() {
   });
   const [editU, setEditU] = useState(false);
   const [oficio, setOficio] = useState(null);
+  const [fichaDe, setFichaDe] = useState(null);
 
   const { desde, hasta } = useMemo(() => (periodo === 'custom' ? custom : rangoPeriodo(periodo)), [periodo, custom]);
   const rangoOk = !!desde && !!hasta && desde <= hasta;
@@ -188,7 +190,7 @@ export default function AnalisisAsistencia() {
                   {visibles.slice(0, 300).map((f, i) => (
                     <tr key={f.id}>
                       <td>{i + 1}</td>
-                      <td><div style={{ fontWeight: 600 }}>{f.nombre}</div><div style={{ fontSize: 11.5, color: 'var(--slate)' }}>{f.cedula}</div></td>
+                      <td><div style={{ fontWeight: 600, cursor: 'pointer', color: 'var(--brand, #0891b2)' }} onClick={() => setFichaDe({ id: f.id, nombre: f.nombre, cedula: f.cedula, curso: f.curso })} title="Ver ficha de asistencia">{f.nombre}</div><div style={{ fontSize: 11.5, color: 'var(--slate)' }}>{f.cedula}</div></td>
                       <td>{f.curso}</td><td>{f.dias}</td>
                       <td style={{ fontWeight: 700, color: f.faltas ? '#b91c1c' : undefined }}>{f.faltas}</td><td>{f.justificadas}</td>
                       <td>{pct(f.pctAsistencia)}</td>
@@ -232,7 +234,8 @@ export default function AnalisisAsistencia() {
         </>
       )}
 
-      {oficio && <OficioFaltasModal alumnos={oficio} institucion={institucion} periodo={{ desde, hasta }} onClose={() => setOficio(null)} />}
+      {oficio && <OficioFaltasModal alumnos={oficio} institucion={institucion} periodo={{ desde, hasta }} onClose={() => setOficio(null)} onRegistrar={items => registrarOficiosEmitidos(institucionId, items, profile.id)} />}
+      {fichaDe && <FichaAsistenciaModal estudiante={fichaDe} onClose={() => setFichaDe(null)} />}
     </div>
   );
 }
