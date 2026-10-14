@@ -1524,9 +1524,10 @@ export async function fetchConfigEvaluacion(institucionId, paraleloId, docenteMa
 }
 export async function fetchNotasParalelo(cargaIds) {
   if (!cargaIds.length) return { notas: [], mejoras: [] };
+  // paginarTodo: un curso de 40+ estudiantes con 10+ materias supera las 1000 filas que devuelve una sola consulta.
   const [notas, mejoras] = await Promise.all([
-    sel('calificaciones', 'estudiante_id, docente_materia_id, periodo_evaluativo, nota', q => q.in('docente_materia_id', cargaIds)),
-    sel('calificaciones_mejoras', 'estudiante_id, docente_materia_id, periodo_evaluativo, supletorio', q => q.in('docente_materia_id', cargaIds))
+    paginarTodo(() => supabase.from('calificaciones').select('estudiante_id, docente_materia_id, periodo_evaluativo, nota').in('docente_materia_id', cargaIds).order('id')),
+    paginarTodo(() => supabase.from('calificaciones_mejoras').select('estudiante_id, docente_materia_id, periodo_evaluativo, supletorio').in('docente_materia_id', cargaIds).order('id'))
   ]);
   return { notas, mejoras };
 }
@@ -1541,6 +1542,18 @@ export async function guardarSupletorios(docenteMateriaId, registros) {
 
 export async function guardarCasilleros(docenteMateriaId, casilleros) {
   return llamarBackend('PUT', '/calificaciones/config-carga', { docente_materia_id: docenteMateriaId, casilleros });
+}
+
+// ¿La materia ya tiene notas guardadas? Si las tiene, el modal bloquea agregar/quitar rubros y cambiar pesos.
+export async function fetchCargaTieneNotas(docenteMateriaId) {
+  const [a, c] = await Promise.all([
+    supabase.from('calificaciones_aportes').select('id', { count: 'exact', head: true }).eq('docente_materia_id', docenteMateriaId),
+    supabase.from('calificaciones').select('id', { count: 'exact', head: true }).eq('docente_materia_id', docenteMateriaId)
+  ]);
+  return ((a.count || 0) + (c.count || 0)) > 0;
+}
+export async function guardarConfigCarga(docenteMateriaId, config) {
+  return llamarBackend('PUT', '/calificaciones/config-carga', { docente_materia_id: docenteMateriaId, config });
 }
 
 /* ── Boletas: datos extra (solo lectura) ── */

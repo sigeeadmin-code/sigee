@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase.js';
 import {
   TRIMESTRES, configPorDefecto, validarConfig, calcTrimestre, aplicarMejora, calcAnual, claseNivelEvaluacion
 } from '../lib/calificaciones.js';
+import { sanitizarConfig } from '../lib/configEvaluacion.js';
 
 export const calificacionesRouter = Router();
 
@@ -260,8 +261,8 @@ calificacionesRouter.post('/supletorio', requireAuth, async (req, res) => {
 // configuración vigente del paralelo/institución (los pesos 70/30 los define administración).
 // Nunca se permite reducir un rubro por debajo de la última casilla que ya tiene notas.
 calificacionesRouter.put('/config-carga', requireAuth, async (req, res) => {
-  const { docente_materia_id, casilleros } = req.body || {};
-  if (!docente_materia_id || !casilleros) return res.status(400).json({ error: 'Faltan docente_materia_id o casilleros.' });
+  const { docente_materia_id, casilleros, config: configCompleta } = req.body || {};
+  if (!docente_materia_id || (!casilleros && !configCompleta)) return res.status(400).json({ error: 'Faltan docente_materia_id y casilleros o config.' });
   if (!ROLES_ESCRITURA.includes(req.profile.rol)) return res.status(403).json({ error: 'Tu rol no puede configurar casilleros.' });
   const carga = await cargarCarga(docente_materia_id);
   if (!carga) return res.status(404).json({ error: 'Carga docente no encontrada.' });
@@ -272,6 +273,9 @@ calificacionesRouter.put('/config-carga', requireAuth, async (req, res) => {
     return res.status(403).json({ error: 'Esa carga académica no te pertenece.' });
   }
   if (!carga.clase) return res.status(422).json({ error: 'Por ahora solo EGB Superior (8vo a 10mo) y Bachillerato.' });
+
+  // Configuración COMPLETA (nombres, número de actividades y pesos): modal "Configuración de Evaluación".
+  if (configCompleta) return guardarConfigCompleta(req, res, carga, docente_materia_id, configCompleta);
 
   const base = await configEfectiva(carga.institucionId, carga.paraleloId, null);
   const nueva = JSON.parse(JSON.stringify(base));
@@ -311,3 +315,51 @@ calificacionesRouter.put('/config-carga', requireAuth, async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true, config: nueva });
 });
+
+// ── Configuración completa de la evaluación de una carga (materia + paralelo) ──────────────────────────────
+async function guardarConfigCompleta(req, res, carga, docenteMateriaId, recibida) {
+  const s = sanitizarConfig(recibida);
+  if (s.error) return res.status(400).json({ error: s.error });
+  const nueva = s.config;
+  const errores = validarConfig(nueva);
+  if (errores.length) return res.status(400).json({ error: errores.join(' ') });
+
+  const actual = await configEfectiva(carga.institucionId, carga.paraleloId, docenteMateriaId);
+  // ¿Ya hay notas de esta carga? Si las hay, NO se puede cambiar la estructura (cantidad, orden ni pesos de los rubros):
+  // las notas guardadas se asocian al rubro por su posición y las notas definitivas ya se calcularon con esos pesos.
+  const [{ count: nAportes, error: e1 }, { count: nCalif, error: e2 }] = await Promise.all([
+    supabase.from('calificaciones_aportes').select('id', { count: 'exact', head: true }).eq('docente_materia_id', docenteMateriaId),
+    supabase.from('calificaciones').select('id', { count: 'exact', head: true }).eq('docente_materia_id', docenteMateriaId)
+  ]);
+  if (e1 || e2) return res.status(500).json({ error: (e1 || e2).message });
+  if ((nAportes || 0) + (nCalif || 0) > 0) {
+    const igual = TIPOS.every(tipo => nueva[tipo].length === actual[tipo].length
+      && nueva[tipo].every((g, i) => Math.abs(g.peso - Number(actual[tipo][i].peso)) < 0.005));
+    if (!igual) {
+      return res.status(422).json({ error: 'Esta materia ya tiene notas guardadas: no se pueden agregar, quitar ni cambiar el peso de los rubros. Sí puedes renombrarlos y cambiar su número de casilleros.' });
+    }
+    // Tampoco se puede dejar un rubro con menos casilleros que la última casilla que ya tiene una nota.
+    for (const tipo of TIPOS) {
+      for (let g = 0; g < nueva[tipo].length; g++) {
+        if (nueva[tipo][g].n >= 10) continue;
+        const { count, error } = await supabase.from('calificaciones_aportes')
+          .select('id', { count: 'exact', head: true })
+          .eq('docente_materia_id', docenteMateriaId).eq('tipo', tipo).eq('grupo', g).gte('actividad', nueva[tipo][g].n);
+        if (error) return res.status(500).json({ error: error.message });
+        if (count > 0) return res.status(422).json({ error: `No se puede reducir '${nueva[tipo][g].nombre}' a ${nueva[tipo][g].n} casillero(s): ya hay ${count} nota(s) guardada(s) en casilleros posteriores.` });
+      }
+    }
+  }
+
+  const { data: ya } = await supabase.from('config_evaluacion').select('id')
+    .eq('institucion_id', carga.institucionId).eq('docente_materia_id', docenteMateriaId).maybeSingle();
+  const fila = {
+    institucion_id: carga.institucionId, paralelo_id: carga.paraleloId, docente_materia_id: docenteMateriaId,
+    config: nueva, updated_by: req.profile.id, updated_at: new Date().toISOString()
+  };
+  const { error } = ya
+    ? await supabase.from('config_evaluacion').update(fila).eq('id', ya.id)
+    : await supabase.from('config_evaluacion').insert(fila);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true, config: nueva });
+}

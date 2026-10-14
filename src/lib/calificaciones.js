@@ -68,7 +68,8 @@ export function validarConfig(cfg) {
     });
   }
   const p = pesosConfig(cfg);
-  if (p.formativo !== 70 || p.sumativo !== 30) errores.push(`Pesos deben ser 70 formativo + 30 sumativo (hay ${p.formativo} + ${p.sumativo}).`);
+  // Tolerancia por decimales (ej. 2.5 + 7.5): los pesos pueden llevar hasta 2 decimales.
+  if (Math.abs(p.formativo - 70) > 0.005 || Math.abs(p.sumativo - 30) > 0.005) errores.push(`Pesos deben ser 70 formativo + 30 sumativo (hay ${Number(p.formativo.toFixed(2))} + ${Number(p.sumativo.toFixed(2))}).`);
   return errores;
 }
 

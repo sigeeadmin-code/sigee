@@ -25,6 +25,7 @@ import Configuracion from './pages/Configuracion.jsx';
 import Calendario from './pages/Calendario.jsx';
 import Justificaciones from './pages/Justificaciones.jsx';
 import MiAsistencia from './pages/MiAsistencia.jsx';
+import Boletas from './pages/Boletas.jsx';
 import ModulosPlantel from './pages/ModulosPlantel.jsx';
 import BaseDocentesPlantel from './pages/BaseDocentesPlantel.jsx';
 import MiPerfil from './pages/MiPerfil.jsx';
@@ -109,6 +110,7 @@ function Gate() {
         <Route path="/modulos-plantel" element={<Protegida path="/modulos-plantel"><ModulosPlantel /></Protegida>} />
         <Route path="/mi-perfil" element={<Protegida path="/mi-perfil"><MiPerfil /></Protegida>} />
         <Route path="/mis-estudiantes" element={<Protegida path="/mis-estudiantes"><MisEstudiantes /></Protegida>} />
+        <Route path="/boletas" element={<Protegida path="/boletas"><Boletas /></Protegida>} />
         <Route path="/mi-asistencia" element={<Protegida path="/mi-asistencia"><MiAsistencia /></Protegida>} />
         <Route path="/justificaciones" element={<Protegida path="/justificaciones"><Justificaciones /></Protegida>} />
         <Route path="/calendario" element={<Protegida path="/calendario"><Calendario /></Protegida>} />

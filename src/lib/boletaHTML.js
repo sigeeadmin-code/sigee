@@ -37,6 +37,8 @@ export const ESTILOS_BOLETA = `
   .b-tbl tr:nth-child(even) td { background: #f5f7fc; }
   .c { text-align: center; } .b { font-weight: 700; }
   .b-nota { font-size: 10px; color: #555; margin: 4px 0 0; }
+  .b-obs { margin: 12px 0 0; padding: 8px 10px; background: #f5f7fc; border-radius: 6px; font-size: 12px; }
+  .b-obs .l { border-bottom: 1px solid #9aa3b5; height: 20px; }
   .b-firmas { display: flex; justify-content: space-around; margin-top: 46px; gap: 16px; }
   .b-firma { text-align: center; flex: 1; font-size: 11px; }
   .b-firma .linea { border-top: 1.5px solid #000; margin: 0 auto 4px; width: 80%; }
@@ -120,6 +122,7 @@ export function boletaHTML(d) {
   <table class="b-tbl"><thead>${cabecera}</thead><tbody>${filas || '<tr><td colspan="8" class="c">Sin asignaturas registradas</td></tr>'}${pie}</tbody></table>
   ${resumen ? `<p class="b-nota" style="font-size:12px;color:#000"><strong>Resultado:</strong> ${esc(resumen)}</p>` : ''}
   <p class="b-nota">Escala: ${txt.escala}. NE = no evaluado. Solo constan notas definitivas.</p>
+  <div class="b-obs"><strong>Evaluación comportamental y observaciones del docente tutor:</strong><div class="l"></div><div class="l"></div></div>
   <div class="b-firmas">
     <div class="b-firma"><div class="linea"></div>${esc(d.tutorNombre || 'Docente tutor')}<br>Firma y sello</div>
     <div class="b-firma"><div class="linea"></div>${esc(inst.rector || 'Rector(a)')}<br>Rector(a)</div>
@@ -145,4 +148,13 @@ export function materiasParaBoleta(cargas, notas, mejoras) {
     const anual = calcAnual(trims, supletorio);
     return { nombre: c.materiaNombre, trims, promedio: anual.promedio, final: anual.final, estado: anual.estado, supletorio };
   });
+}
+
+// Promedio general de un estudiante para un informe ('T1' | 'T2' | 'T3' | 'anual'), con la misma regla que la boleta impresa:
+// promedio de las notas que existen (la nota final en el anual), truncado a 2 decimales. null si no hay ninguna.
+export function promedioGeneralBoleta(materias, tipo) {
+  const idx = ['T1', 'T2', 'T3'].indexOf(tipo);
+  const notas = (materias || []).map(m => (tipo === 'anual' ? m.final : (idx >= 0 ? m.trims[idx] : null))).filter(n => n !== null && n !== undefined);
+  if (!notas.length) return null;
+  return Math.trunc((notas.reduce((a, b) => a + b, 0) / notas.length) * 100 + 1e-9) / 100;
 }

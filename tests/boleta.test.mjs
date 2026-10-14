@@ -73,3 +73,12 @@ assert.ok(hb.includes('<strong>Nivel:</strong> Bachillerato') && hb.includes('4.
 assert.ok(boletaHTML({ ...base, tipo: 'T1' }).includes('4.01–6.99, rinde supletorio'), 'sin nivel: texto por defecto');
 assert.ok(boletaHTML({ ...base, tipo: 'T1' }).includes('<strong>Nivel:</strong> —'));
 console.log('OK boleta: textos por nivel');
+
+// promedio general reutilizable (misma regla que la boleta impresa)
+import { promedioGeneralBoleta } from '../src/lib/boletaHTML.js';
+assert.equal(promedioGeneralBoleta(base.materias, 'anual'), 6.00);       // (8 + 7 + 3) / 3
+assert.equal(promedioGeneralBoleta(base.materias, 'T2'), 5.66);          // (8 + 6 + 3) / 3 = 5.666… truncado
+assert.equal(promedioGeneralBoleta(base.materias, 'T3'), 7.00);          // Química sin nota: (8 + 6) / 2
+assert.equal(promedioGeneralBoleta([], 'T1'), null);
+assert.ok(boletaHTML({ ...base, tipo: 'T1' }).includes('Evaluación comportamental y observaciones'), 'la boleta trae el bloque de observaciones del modelo');
+console.log('OK boleta: promedio general y observaciones');
