@@ -1,8 +1,11 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
-import { fetchInasistencias, registrarAviso } from '../lib/data.js';
+import { fetchInasistencias, registrarAviso, fetchFichaAsistencia, registrarOficiosEmitidos, enviarOficioPorCorreo } from '../lib/data.js';
+import OficioFaltasModal from '../components/OficioFaltasModal.jsx';
+import { analizarFicha } from '../lib/fichaAsistencia.js';
 
-function haceDias(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
+const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function haceDias(n) { const d = new Date(); d.setDate(d.getDate() - n); return iso(d); }
 
 function linkWhatsapp(telefono, nombreAlumno, fecha) {
   const tel = (telefono || '').replace(/\D/g, '').replace(/^0/, '');
@@ -19,6 +22,8 @@ export default function Inasistencias() {
   const [loading, setLoading] = useState(true);
   const [enviando, setEnviando] = useState(null);
   const [toast, setToast] = useState(null);
+  const [oficio, setOficio] = useState(null);   // { alumnos, periodo } mientras el modal del oficio está abierto
+  const [armando, setArmando] = useState(null);
 
   const cargar = useCallback(async () => {
     if (!institucionId) return;
@@ -50,6 +55,26 @@ export default function Inasistencias() {
     marcarAvisado(item);
   }
 
+
+  // Oficio de un estudiante con sus faltas del rango elegido arriba; se puede imprimir o enviar por correo al representante.
+  async function abrirOficio(item) {
+    setArmando(item.estudianteId);
+    try {
+      const desde = haceDias(dias), hasta = iso(new Date());
+      const ficha = await fetchFichaAsistencia(institucionId, item.estudianteId, desde, hasta);
+      const an = analizarFicha(ficha.registros);
+      if (an.resumen.faltas === 0) { setToast({ tipo: 'err', msg: 'Este estudiante no tiene faltas injustificadas en el período (pueden estar ya justificadas).' }); setArmando(null); return; }
+      setOficio({
+        periodo: { desde, hasta },
+        alumnos: [{ id: item.estudianteId, nombre: item.nombre, cedula: item.cedula, curso: item.curso, ...an.resumen, representante: ficha.representante, correoRep: ficha.correoRep }]
+      });
+    } catch (err) {
+      setToast({ tipo: 'err', msg: err.message || 'No se pudo preparar el oficio.' });
+    }
+    setArmando(null);
+  }
+  const registrarOficio = items => registrarOficiosEmitidos(institucionId, items, profile.id);
+
   const filtrados = useMemo(() => {
     if (filtro === 'pendientes') return items.filter(i => !i.avisado);
     if (filtro === 'avisadas') return items.filter(i => i.avisado);
@@ -65,7 +90,7 @@ export default function Inasistencias() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
         <div>
           <h2 style={{ margin: '0 0 4px' }}>Inasistencias</h2>
-          <div style={{ fontSize: 13, color: 'var(--slate)' }}>{institucion?.nombre} · Avisos a representantes por WhatsApp</div>
+          <div style={{ fontSize: 13, color: 'var(--slate)' }}>{institucion?.nombre} · Avisos a representantes por WhatsApp y oficios por correo electrónico</div>
         </div>
         <select className="fc" value={dias} onChange={e => setDias(Number(e.target.value))} style={{ width: 160 }}>
           <option value={7}>Últimos 7 días</option>
@@ -101,11 +126,18 @@ export default function Inasistencias() {
                   <td style={{ fontSize: 12 }}>
                     {item.representante || <span style={{ color: 'var(--slate)' }}>Sin representante vinculado</span>}
                     {item.representante && !item.telefonoRep && <div style={{ color: 'var(--red)' }}>Sin teléfono</div>}
+                    {item.representante && !item.correoRep && <div style={{ color: 'var(--slate)' }}>Sin correo</div>}
                   </td>
                   <td>{item.avisado ? <span className="badge b-ok">Avisado</span> : <span className="badge b-warn">Pendiente</span>}</td>
                   <td style={{ textAlign: 'right' }}>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                      <button className="btn btn-secondary btn-sm" disabled={armando === item.estudianteId} onClick={() => abrirOficio(item)}
+                        title="Genera el oficio con las faltas del período; puedes imprimirlo o enviarlo por correo al representante">
+                        ✉️ Oficio
+                      </button>
+                    </div>
                     {!item.avisado && (
-                      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 6 }}>
                         <button className="btn btn-success btn-sm" disabled={!item.telefonoRep || enviando === item.asistenciaId}
                           onClick={() => abrirWhatsappYMarcar(item)}>
                           <span className="ti ti-brand-whatsapp" /> Avisar
@@ -123,6 +155,8 @@ export default function Inasistencias() {
           </table>
         </div></div>
       )}
+
+      {oficio && <OficioFaltasModal alumnos={oficio.alumnos} institucion={institucion} periodo={oficio.periodo} onClose={() => setOficio(null)} onRegistrar={registrarOficio} onEnviarCorreo={enviarOficioPorCorreo} />}
 
       {toast && <div className={'toast ' + (toast.tipo === 'ok' ? 'ok' : 'err')}>{toast.msg}</div>}
     </div>

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
-import { fetchFichaAsistencia, fetchCalendario, registrarAviso, registrarOficiosEmitidos, marcarOficioEntregado } from '../lib/data.js';
+import { fetchFichaAsistencia, fetchCalendario, registrarAviso, registrarOficiosEmitidos, marcarOficioEntregado, enviarOficioPorCorreo } from '../lib/data.js';
 import { resumenAnioLectivo, contarDiasLectivos } from '../lib/calendarioResumen.js';
 import OficioFaltasModal from './OficioFaltasModal.jsx';
 import { analizarFicha, mensajeWhatsApp, urlWhatsApp, telefonoEcuador, fechaCorta } from '../lib/fichaAsistencia.js';
@@ -112,14 +112,14 @@ export default function FichaAsistenciaModal({ estudiante, onClose }) {
     ficha.oficios.forEach(o => L.push({
       clave: 'o' + o.id, fecha: o.created_at, tipo: 'Oficio', icono: '📄', oficio: o,
       detalle: `Oficio Nro. ${o.numero || 's/n'} · ${o.dias_falta} ${o.dias_falta === 1 ? 'día' : 'días'} de falta (${fechaCorta(o.periodo_desde)} al ${fechaCorta(o.periodo_hasta)})`,
-      estado: o.estado === 'entregado' ? 'Entregado' : 'Emitido'
+      estado: (o.estado === 'entregado' ? 'Entregado' : 'Emitido') + (o.correo_enviado_at ? ` · enviado por correo a ${o.correo_destino || 'el representante'}` : '')
     }));
     ficha.avisos.forEach(a => L.push({ clave: 'a' + a.id, fecha: a.enviado_at, tipo: 'WhatsApp', icono: '💬', detalle: a.mensaje, estado: 'Registrado' }));
     ficha.justificaciones.forEach(j => L.push({ clave: 'j' + j.id, fecha: j.created_at || j.fecha, tipo: 'Justificación', icono: '📝', detalle: `${fechaCorta(j.fecha)} — ${j.motivo || 'sin motivo'}`, estado: j.estado }));
     return L.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
   }, [ficha]);
 
-  const alumnoOficio = an ? [{ ...estudiante, ...an.resumen, representante: ficha.representante }] : [];
+  const alumnoOficio = an ? [{ ...estudiante, ...an.resumen, representante: ficha.representante, correoRep: ficha.correoRep }] : [];
   const registrarOficio = items => registrarOficiosEmitidos(institucionId, items, profile.id).then(() => cargar());
   const diasMostrados = an ? (soloNovedad ? an.dias.filter(d => d.estado !== 'presente') : an.dias) : [];
 
@@ -263,7 +263,7 @@ export default function FichaAsistenciaModal({ estudiante, onClose }) {
           )}
         </div>
       </div>
-      {oficio && <OficioFaltasModal alumnos={oficio} institucion={institucion} periodo={{ desde, hasta }} onClose={() => setOficio(null)} onRegistrar={registrarOficio} />}
+      {oficio && <OficioFaltasModal alumnos={oficio} institucion={institucion} periodo={{ desde, hasta }} onClose={() => setOficio(null)} onRegistrar={registrarOficio} onEnviarCorreo={async d => { const r = await enviarOficioPorCorreo(d); await cargar(); return r; }} />}
     </div>
   );
 }

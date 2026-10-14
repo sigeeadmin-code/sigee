@@ -4,6 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { calendarioRouter } from './routes/calendario.js';
 import { asistenciaRouter } from './routes/asistencia.js';
 import { calificacionesRouter } from './routes/calificaciones.js';
+import { correosRouter } from './routes/correos.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -35,11 +36,15 @@ app.use(['/asistencia', '/calendario', '/calificaciones'], rateLimit({
   message: { error: 'Demasiadas peticiones seguidas. Espera un momento y reintenta.' }
 }));
 
+// Correos: tope aparte y más bajo (cada petición envía un correo real).
+app.use('/correos', rateLimit({ windowMs: 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false, message: { error: 'Demasiados envíos seguidos. Espera un momento.' } }));
+
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'sigee-backend', ts: new Date().toISOString() }));
 
 app.use('/calendario', calendarioRouter);
 app.use('/asistencia', asistenciaRouter);
 app.use('/calificaciones', calificacionesRouter);
+app.use('/correos', correosRouter);
 
 app.use((req, res) => res.status(404).json({ error: 'Ruta no encontrada: ' + req.method + ' ' + req.path }));
 

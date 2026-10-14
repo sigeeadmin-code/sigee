@@ -47,13 +47,14 @@ export function Hoja({ of }) {
 }
 
 // Vista previa editable del oficio de inasistencias, uno por estudiante, con impresión / guardado en PDF.
-export default function OficioFaltasModal({ alumnos, institucion, periodo, onClose, onRegistrar }) {
+export default function OficioFaltasModal({ alumnos, institucion, periodo, onClose, onRegistrar, onEnviarCorreo }) {
   const idInst = institucion?.id || 'x';
   const [indice, setIndice] = useState(0);
   const [imprimiendo, setImprimiendo] = useState(null);   // null | 'uno' | 'todos'
   const [correlativo, setCorrelativo] = useState(true);
   const [registrar, setRegistrar] = useState(true);
   const [constancia, setConstancia] = useState('');
+  const [correo, setCorreo] = useState({ enviando: false, msg: '', error: false });
   const [op, setOp] = useState(() => {
     let guardado = {};
     try { guardado = JSON.parse(localStorage.getItem(CLAVE + idInst) || '{}'); } catch { /* sin almacenamiento */ }
@@ -100,6 +101,36 @@ export default function OficioFaltasModal({ alumnos, institucion, periodo, onClo
       })));
       setConstancia(`Quedó registrado en el historial (${lista.length} ${lista.length === 1 ? 'oficio' : 'oficios'}).`);
     } catch (e) { setConstancia('No se pudo registrar en el historial: ' + (e.message || e)); }
+  }
+
+
+  // Envío por correo: el servidor toma el destinatario de los representantes del estudiante; aquí solo se pide el envío.
+  async function enviarPorCorreo(modo) {
+    const idx = modo === 'todos' ? alumnos.map((_, i) => i) : [actual];
+    const con = idx.filter(i => alumnos[i].correoRep);
+    if (!con.length) { setCorreo({ enviando: false, error: true, msg: 'El representante no tiene un correo electrónico válido registrado. Agrégalo en el módulo de Estudiantes.' }); return; }
+    setCorreo({ enviando: true, error: false, msg: `Enviando ${con.length === 1 ? 'el oficio' : `${con.length} oficios`}…` });
+    let ok = 0; const fallos = [];
+    for (const i of con) {
+      const a = alumnos[i];
+      try {
+        await onEnviarCorreo({
+          estudianteId: a.id, oficio: oficios[i],
+          registro: registrar ? {
+            numero: oficios[i].numero, fechaEmision: op.fechaEmision, periodoDesde: periodo.desde, periodoHasta: periodo.hasta,
+            diasFalta: a.faltas, fechas: (a.fechasFaltas || []).filter(f => f.tipo === 'injustificada').map(f => f.fecha),
+            firmante: op.firmanteNombre, cargo: op.firmanteCargo
+          } : null
+        });
+        ok++;
+      } catch (e) { fallos.push(`${a.nombre}: ${e.message || e}`); }
+    }
+    const sin = idx.length - con.length;
+    const partes = [];
+    if (ok) partes.push(`Enviado por correo (${ok}). ${registrar ? 'Quedó registrado en el historial.' : ''}`.trim());
+    if (sin) partes.push(`${sin} sin correo de representante.`);
+    if (fallos.length) partes.push('No se pudo enviar: ' + fallos.join(' | '));
+    setCorreo({ enviando: false, error: fallos.length > 0 && !ok, msg: partes.join(' ') });
   }
 
   const aImprimir = imprimiendo === 'todos' ? oficios : imprimiendo === 'uno' ? [oficios[actual]] : [];
@@ -153,6 +184,8 @@ export default function OficioFaltasModal({ alumnos, institucion, periodo, onClo
                 </>
               ) : <span style={{ fontSize: 13 }}><strong>{nombreAlumno}</strong></span>}
               <span style={{ flex: 1 }} />
+              {onEnviarCorreo && <button className="btn btn-success btn-sm" disabled={correo.enviando} onClick={() => enviarPorCorreo('uno')} title={alumnos[actual]?.correoRep ? `Se envía a ${alumnos[actual].correoRep}` : 'El representante no tiene correo registrado'}>✉️ Enviar por correo</button>}
+              {onEnviarCorreo && oficios.length > 1 && <button className="btn btn-success btn-sm" disabled={correo.enviando} onClick={() => enviarPorCorreo('todos')}>✉️ Enviar los {oficios.length}</button>}
               <button className="btn btn-secondary btn-sm" onClick={() => iniciarImpresion('uno')}>🖨️ Imprimir este</button>
               {oficios.length > 1 && <button className="btn btn-primary btn-sm" onClick={() => iniciarImpresion('todos')}>🖨️ Imprimir los {oficios.length}</button>}
             </div>
@@ -162,6 +195,12 @@ export default function OficioFaltasModal({ alumnos, institucion, periodo, onClo
               {onRegistrar && <label style={{ marginLeft: 12 }}><input type="checkbox" checked={registrar} onChange={e => setRegistrar(e.target.checked)} /> Registrar en el historial del estudiante al imprimir</label>}
               {constancia && <strong style={{ marginLeft: 12 }}>{constancia}</strong>}
             </div>
+            {onEnviarCorreo && (
+              <div style={{ fontSize: 12, padding: '2px 2px 6px', color: correo.error ? '#b91c1c' : 'var(--slate)' }}>
+                {alumnos[actual]?.correoRep ? <>Correo del representante: <strong>{alumnos[actual].correoRep}</strong>. El oficio llega con tu correo como “Responder a” y con el acuse de recibo en el cuerpo del mensaje.</> : <span style={{ color: '#b45309' }}>Este estudiante no tiene correo de representante registrado.</span>}
+                {correo.msg && <div style={{ marginTop: 3, fontWeight: 700 }}>{correo.msg}</div>}
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -216,7 +216,7 @@ export async function fetchInasistencias(institucionId, desde) {
 
   const vinculos = await sel('representantes_estudiantes', 'estudiante_id, representante_id', q => q.in('estudiante_id', estudianteIds));
   const repIds = [...new Set(vinculos.map(v => v.representante_id))];
-  const reps = repIds.length ? await sel('representantes', 'id, nombres, apellidos, telefono', q => q.in('id', repIds)) : [];
+  const reps = repIds.length ? await sel('representantes', 'id, nombres, apellidos, telefono, email', q => q.in('id', repIds)) : [];
   const repPorId = Object.fromEntries(reps.map(r => [r.id, r]));
   const repPorEstudiante = {};
   vinculos.forEach(v => { repPorEstudiante[v.estudiante_id] = repPorId[v.representante_id]; });
@@ -232,6 +232,8 @@ export async function fetchInasistencias(institucionId, desde) {
       curso: cursoPorEstudiante[a.estudiante_id] || '—',
       representante: rep ? `${rep.nombres} ${rep.apellidos}`.trim() : null,
       telefonoRep: rep?.telefono || null,
+      correoRep: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(rep?.email || '').trim()) ? String(rep.email).trim() : null,
+      cedula: a.estudiantes?.cedula || '',
       avisado: avisadosSet.has(avisadoKey(a.estudiante_id, a.fecha))
     };
   });
@@ -2119,13 +2121,14 @@ export async function fetchFichaAsistencia(institucionId, estudianteId, desde, h
   ]);
   const reps = vinculos.map(v => v.representantes).filter(Boolean);
   const representante = reps.find(r => r.telefono) || reps[0] || null;
+  const correoRep = reps.map(r => String(r.email || '').trim()).find(e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) || null;
   return {
     registros: clases.map(c => ({
       fecha: c.fecha, estado: c.estado, observacion: c.observacion || '',
       materia: c.docente_materia?.materias?.nombre || 'Sin materia',
       docente: c.docente_materia?.docentes ? `${c.docente_materia.docentes.nombres || ''} ${c.docente_materia.docentes.apellidos || ''}`.trim() : ''
     })),
-    justificaciones, avisos, oficios, representante
+    justificaciones, avisos, oficios, representante, correoRep
   };
 }
 
@@ -2163,4 +2166,9 @@ export async function fetchHistorialAsistenciaEstudiante(institucionId, estudian
     })),
     justificaciones, eventos
   };
+}
+
+/** Envía por correo el oficio al representante (el servidor toma el destinatario de la base) y, si se pide, deja constancia. */
+export async function enviarOficioPorCorreo({ estudianteId, oficio, registro }) {
+  return llamarBackend('POST', '/correos/oficio', { estudiante_id: estudianteId, oficio, ...(registro ? { registro } : {}) });
 }
