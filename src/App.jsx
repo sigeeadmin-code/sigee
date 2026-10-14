@@ -24,6 +24,7 @@ import MiPlantel from './pages/MiPlantel.jsx';
 import Configuracion from './pages/Configuracion.jsx';
 import Calendario from './pages/Calendario.jsx';
 import Justificaciones from './pages/Justificaciones.jsx';
+import MiAsistencia from './pages/MiAsistencia.jsx';
 import Encadenamiento from './pages/Encadenamiento.jsx';
 import Licencias from './pages/Licencias.jsx';
 import Inasistencias from './pages/Inasistencias.jsx';
@@ -95,6 +96,7 @@ function Gate() {
         <Route path="/analisis-asistencia" element={<Protegida path="/analisis-asistencia"><AnalisisAsistencia /></Protegida>} />
         <Route path="/reportes-asistencia" element={<Protegida path="/reportes-asistencia"><ReportesAsistencia /></Protegida>} />
         <Route path="/inasistencias" element={<Protegida path="/inasistencias"><Inasistencias /></Protegida>} />
+        <Route path="/mi-asistencia" element={<Protegida path="/mi-asistencia"><MiAsistencia /></Protegida>} />
         <Route path="/justificaciones" element={<Protegida path="/justificaciones"><Justificaciones /></Protegida>} />
         <Route path="/calendario" element={<Protegida path="/calendario"><Calendario /></Protegida>} />
         <Route path="/aulas" element={<Protegida path="/aulas"><Aulas /></Protegida>} />

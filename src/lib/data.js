@@ -132,6 +132,49 @@ export async function fetchInstitucionData(institucionId) {
   return { docentes, estudiantes, usuarios, administrativos, tareas, horario: horarioRows, periodoActivo, grados, paralelos, materias };
 }
 
+/**
+ * Vista global del Super Admin (sin plantel seleccionado): TODOS los docentes y estudiantes de todos los planteles,
+ * con el plantel y el AMIE de cada uno. Mismas formas que fetchInstitucionData, para que las pantallas sirvan igual.
+ * Solo lectura: las cargas horarias y el resto se ven dentro de cada plantel.
+ */
+export async function fetchDatosGlobales(instituciones = []) {
+  const instById = Object.fromEntries(instituciones.map(i => [i.id, i]));
+  const todo = (tabla, cols = '*') => paginarTodo(() => supabase.from(tabla).select(cols).order('id'));
+  const [docentesRows, estudiantesRows, periodos, grados, paralelos, matriculas, representantes, repEst] = await Promise.all([
+    todo('docentes'), todo('estudiantes'), todo('periodos_lectivos', 'id, institucion_id, activo'), todo('grados', 'id, nombre'),
+    todo('paralelos', 'id, nombre'), todo('matriculas'), todo('representantes', 'id, nombres, apellidos, telefono'), todo('representantes_estudiantes')
+  ]);
+  const plantel = id => ({ institucionId: id, plantel: instById[id]?.nombre || '', amie: instById[id]?.amie || '' });
+  const docentes = docentesRows.map(d => ({
+    id: d.id, profileId: d.profile_id, nombre: `${d.apellidos || ''} ${d.nombres || ''}`.trim(),
+    cedula: d.cedula, email: d.email, telefono: d.telefono,
+    situacion: d.situacion || (d.incorporado ? 'NOMBRAMIENTO' : 'CONTRATO'), cargo: d.cargo || 'DOCENTE',
+    especialidad: d.especialidad || '', area: d.area || '', fechaIngreso: d.fecha_ingreso || null, titulo: d.titulo,
+    materias: [], cursos: [], cargas: [], activo: !!d.activo, acceso: !!d.profile_id, profile_id: d.profile_id || null, ...plantel(d.institucion_id)
+  }));
+  const activos = new Set(periodos.filter(p => p.activo).map(p => p.id));
+  const gradosById = Object.fromEntries(grados.map(g => [g.id, g]));
+  const paralelosById = Object.fromEntries(paralelos.map(p => [p.id, p]));
+  const matByEst = {};
+  matriculas.filter(m => !activos.size || activos.has(m.periodo_id)).forEach(m => { matByEst[m.estudiante_id] = m; });
+  const repById = Object.fromEntries(representantes.map(r => [r.id, r]));
+  const repByEst = {};
+  repEst.forEach(re => { (repByEst[re.estudiante_id] ||= []).push(re.representante_id); });
+  const estudiantes = estudiantesRows.map(e => {
+    const mat = matByEst[e.id];
+    const rep = repById[(repByEst[e.id] || [])[0]];
+    return {
+      id: e.id, nombre: `${e.apellidos || ''} ${e.nombres || ''}`.trim(), cedula: e.cedula,
+      curso: mat ? (gradosById[mat.grado_id]?.nombre || '—') : '—', paralelo: mat ? (paralelosById[mat.paralelo_id]?.nombre || '') : '',
+      gradoId: mat ? mat.grado_id : null, paraleloId: mat ? mat.paralelo_id : null, matriculaId: mat ? mat.id : null,
+      genero: e.genero || '', estado: mat ? mat.estado : 'Sin matrícula',
+      representante: rep ? `${rep.apellidos || ''} ${rep.nombres || ''}`.trim() : '', rep_tel: rep ? rep.telefono : '',
+      activo: !!e.activo, acceso: !!e.profile_id, ...plantel(e.institucion_id)
+    };
+  });
+  return { docentes, estudiantes, usuarios: [], administrativos: [], tareas: [], horario: [], periodoActivo: null, grados: [], paralelos: [], materias: [] };
+}
+
 export async function fetchAsistencia(docenteMateriaId, fecha) {
   return sel('asistencia', '*', q => q.eq('docente_materia_id', docenteMateriaId).eq('fecha', fecha));
 }

@@ -43,6 +43,8 @@ export default function Estudiantes() {
   const [estudiantes, setEstudiantes] = useState(data?.estudiantes || []);
   const [busqueda, setBusqueda] = useState('');
   const [fCurso, setFCurso] = useState('');
+  const [fPlantel, setFPlantel] = useState('');
+  const global = !institucion?.id;   // Super Admin sin plantel: ve los estudiantes de TODOS los planteles (solo lectura)
   const [pagina, setPagina] = useState(1);
   const porPagina = 25;
   const [modal, setModal] = useState(null);
@@ -69,13 +71,15 @@ export default function Estudiantes() {
   }, [institucion?.id]);
 
   const filtrados = estudiantes.filter(e => {
-    if (busqueda && !e.nombre.toLowerCase().includes(busqueda.toLowerCase()) && !(e.cedula || '').includes(busqueda)) return false;
+    if (busqueda && !e.nombre.toLowerCase().includes(busqueda.toLowerCase()) && !(e.cedula || '').includes(busqueda) && !(e.amie || '').toLowerCase().includes(busqueda.toLowerCase())) return false;
+    if (fPlantel && e.institucionId !== fPlantel) return false;
     if (fCurso && `${e.curso} ${e.paralelo}`.trim() !== fCurso) return false;
     return true;
   });
+  const plantelesDisponibles = [...new Map(estudiantes.filter(e => e.institucionId).map(e => [e.institucionId, e.plantel || e.amie])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
   const cursosDisponibles = [...new Set(estudiantes.map(e => `${e.curso} ${e.paralelo}`.trim()).filter(c => c && c !== '—'))].sort();
 
-  useEffect(() => { setPagina(1); }, [busqueda, fCurso]);
+  useEffect(() => { setPagina(1); }, [busqueda, fCurso, fPlantel]);
 
   async function toggleActivo(e) {
     if (!puedeActivarDesactivar) return;
@@ -338,15 +342,22 @@ export default function Estudiantes() {
         <h2>Estudiantes</h2>
         <div style={{ display: 'flex', gap: 8 }}>
           {esSuperAdmin && <button className="btn btn-secondary" onClick={exportarLista} disabled={filtrados.length === 0} title="Descarga en Excel la lista que ves ahora (con los filtros aplicados)">⬇️ Exportar Excel</button>}
-          <button className="btn btn-primary" onClick={() => setInteligente(true)} title="Sube tu lista con las columnas en cualquier orden: yo las detecto y las acomodo">✨ Carga inteligente</button>
-          <button className="btn btn-ghost" onClick={abrirCargaMasiva}>📥 Carga con plantilla (Excel)</button>
-          <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo estudiante</button>
+          {!global && <button className="btn btn-primary" onClick={() => setInteligente(true)} title="Sube tu lista con las columnas en cualquier orden: yo las detecto y las acomodo">✨ Carga inteligente</button>}
+          {!global && <button className="btn btn-ghost" onClick={abrirCargaMasiva}>📥 Carga con plantilla (Excel)</button>}
+          {!global && <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo estudiante</button>}
         </div>
       </div>
 
+      {global && <p className="muted" style={{ margin: '0 0 8px' }}>Vista global: aquí aparecen los estudiantes de todos los planteles, con su plantel y AMIE. Para crear o editar, entra al plantel correspondiente.</p>}
       <div className="search-bar">
-        <input className="search" style={{ flex: 1 }} placeholder="Buscar por nombre o cédula…"
+        <input className="search" style={{ flex: 1 }} placeholder="Buscar por nombre, cédula o AMIE…"
           value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+        {global && (
+          <select className="fc" value={fPlantel} onChange={e => setFPlantel(e.target.value)}>
+            <option value="">Todos los planteles ({plantelesDisponibles.length})</option>
+            {plantelesDisponibles.map(([id, nombre]) => <option key={id} value={id}>{nombre}</option>)}
+          </select>
+        )}
         <select className="fc" value={fCurso} onChange={e => setFCurso(e.target.value)}>
           <option value="">Todos los Cursos</option>
           {cursosDisponibles.map(c => <option key={c} value={c}>{c}</option>)}
@@ -355,11 +366,12 @@ export default function Estudiantes() {
 
       <div className="card">
         <table className="data" style={{ width: '100%' }}>
-          <thead><tr><th>Nombre</th><th>Cédula</th><th>Curso</th><th>Estado matrícula</th><th>Activo</th><th>Representante</th><th>Acciones</th></tr></thead>
+          <thead><tr>{global && <><th>AMIE</th><th>Plantel</th></>}<th>Nombre</th><th>Cédula</th><th>Curso</th><th>Estado matrícula</th><th>Activo</th><th>Representante</th><th>Acciones</th></tr></thead>
           <tbody>
             {visibles.map(e => (
               <tr key={e.id}>
-                <td><strong style={{ cursor: 'pointer' }} onClick={() => abrirEditar(e.id)}>{e.nombre}</strong></td>
+                {global && <><td className="mono" style={{ fontSize: 11 }}>{e.amie || '—'}</td><td>{e.plantel || '—'}</td></>}
+                <td><strong style={global ? undefined : { cursor: 'pointer' }} onClick={global ? undefined : () => abrirEditar(e.id)}>{e.nombre}</strong></td>
                 <td className="mono">{e.cedula || '—'}</td>
                 <td>{e.curso} {e.paralelo}</td>
                 <td>
@@ -388,7 +400,7 @@ export default function Estudiantes() {
                   )}
                 </td>
                 <td>{e.representante || '—'}</td>
-                <td><button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(e.id)}>✏️ Editar</button></td>
+                <td>{global ? <span className="muted" style={{ fontSize: 11 }}>—</span> : <button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(e.id)}>✏️ Editar</button>}</td>
               </tr>
             ))}
           </tbody>

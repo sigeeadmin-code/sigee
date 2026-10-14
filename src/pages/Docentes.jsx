@@ -75,6 +75,8 @@ export default function Docentes() {
   const puedeActivarDesactivar = ['super_admin', 'admin_plantel'].includes(profile.rolDb);
   const [docentes, setDocentes] = useState(data?.docentes || []);
   const [busqueda, setBusqueda] = useState('');
+  const [fPlantel, setFPlantel] = useState('');
+  const global = !institucion?.id;   // Super Admin sin plantel: ve los docentes de TODOS los planteles (solo lectura)
   const [fSituacion, setFSituacion] = useState('');
   const [fFuncion, setFFuncion] = useState('');
   const [fArea, setFArea] = useState('');
@@ -111,19 +113,21 @@ export default function Docentes() {
   }
 
   const filtrados = docentes.filter(d => {
-    if (busqueda && !d.nombre.toLowerCase().includes(busqueda.toLowerCase()) && !(d.cedula || '').includes(busqueda)) return false;
+    if (busqueda && !d.nombre.toLowerCase().includes(busqueda.toLowerCase()) && !(d.cedula || '').includes(busqueda) && !(d.amie || '').toLowerCase().includes(busqueda.toLowerCase())) return false;
+    if (fPlantel && d.institucionId !== fPlantel) return false;
     if (fSituacion && d.situacion !== fSituacion) return false;
     if (fFuncion && d.cargo !== fFuncion) return false;
     if (fArea && d.area !== fArea) return false;
     if (fEspecialidad && d.especialidad !== fEspecialidad) return false;
     return true;
   });
+  const plantelesDisponibles = [...new Map(docentes.filter(d => d.institucionId).map(d => [d.institucionId, d.plantel || d.amie])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
   const situacionesDisponibles = [...new Set(docentes.map(d => d.situacion).filter(Boolean))];
   const funcionesDisponibles = [...new Set(docentes.map(d => d.cargo).filter(Boolean))];
   const areasDisponibles = [...new Set(docentes.map(d => d.area).filter(Boolean))].sort();
   const especialidadesDisponibles = [...new Set(docentes.map(d => d.especialidad).filter(Boolean))].sort();
 
-  useEffect(() => { setPagina(1); }, [busqueda, fSituacion, fFuncion, fArea, fEspecialidad]);
+  useEffect(() => { setPagina(1); }, [fPlantel, busqueda, fSituacion, fFuncion, fArea, fEspecialidad]);
   const totalPaginas = Math.max(1, Math.ceil(filtrados.length / porPagina));
   const paginaActual = Math.min(pagina, totalPaginas);
   const visibles = filtrados.slice((paginaActual - 1) * porPagina, paginaActual * porPagina);
@@ -380,15 +384,22 @@ export default function Docentes() {
         <h2>Docentes</h2>
         <div style={{ display: 'flex', gap: 8 }}>
           {esSuperAdmin && <button className="btn btn-secondary" onClick={exportarLista} disabled={filtrados.length === 0} title="Descarga en Excel la lista que ves ahora (con los filtros aplicados)">⬇️ Exportar Excel</button>}
-          <button className="btn btn-primary" onClick={() => setInteligente(true)} title="Sube tu lista con las columnas en cualquier orden: yo las detecto y las acomodo">✨ Carga inteligente</button>
-          <button className="btn btn-ghost" onClick={abrirCargaMasiva}>📥 Carga con plantilla (Excel)</button>
-          <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo docente</button>
+          {!global && <button className="btn btn-primary" onClick={() => setInteligente(true)} title="Sube tu lista con las columnas en cualquier orden: yo las detecto y las acomodo">✨ Carga inteligente</button>}
+          {!global && <button className="btn btn-ghost" onClick={abrirCargaMasiva}>📥 Carga con plantilla (Excel)</button>}
+          {!global && <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo docente</button>}
         </div>
       </div>
 
+      {global && <p className="muted" style={{ margin: '0 0 8px' }}>Vista global: aquí aparecen los docentes de todos los planteles, con su plantel y AMIE. Para crear o editar, entra al plantel correspondiente.</p>}
       <div className="search-bar">
         <input className="fc" style={{ flex: 1, minWidth: 200 }} placeholder="Buscar por nombre, cédula o AMIE…"
           value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+        {global && (
+          <select className="fc" value={fPlantel} onChange={e => setFPlantel(e.target.value)}>
+            <option value="">Todos los planteles ({plantelesDisponibles.length})</option>
+            {plantelesDisponibles.map(([id, nombre]) => <option key={id} value={id}>{nombre}</option>)}
+          </select>
+        )}
         <select className="fc" value={fSituacion} onChange={e => setFSituacion(e.target.value)}>
           <option value="">Todas las Situaciones</option>
           {situacionesDisponibles.map(s => <option key={s} value={s}>{s}</option>)}
@@ -520,10 +531,10 @@ export default function Docentes() {
             {visibles.map((d, i) => (
               <tr key={d.id}>
                 <td>{(paginaActual - 1) * porPagina + i + 1}</td>
-                <td className="mono" style={{ fontSize: 11 }}>{institucion?.amie || '—'}</td>
-                <td>{institucion?.nombre || '—'}</td>
+                <td className="mono" style={{ fontSize: 11 }}>{d.amie || institucion?.amie || '—'}</td>
+                <td>{d.plantel || institucion?.nombre || '—'}</td>
                 <td className="mono">{d.cedula || '—'}</td>
-                <td><strong style={{ cursor: 'pointer' }} onClick={() => abrirEditar(d.id)}>{d.nombre}</strong></td>
+                <td><strong style={global ? undefined : { cursor: 'pointer' }} onClick={global ? undefined : () => abrirEditar(d.id)}>{d.nombre}</strong></td>
                 <td>{d.situacion || '—'}</td>
                 <td style={{ fontSize: 11 }}>{d.cargo}</td>
                 <td style={{ fontSize: 11 }}>{d.especialidad || (d.materias || [])[0] || '—'}</td>
@@ -534,13 +545,13 @@ export default function Docentes() {
                     ? (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                         <span className="badge b-ok">Activo</span>
-                        {puedeActivarDesactivar && d.profile_id && (
+                        {!global && puedeActivarDesactivar && d.profile_id && (
                           <button className="btn btn-ghost btn-sm" title="Restablecer la contraseña de este docente"
                             onClick={() => setRestablecer([{ id: d.profile_id, nombre: d.nombre, email: d.email || '' }])}>🔑</button>
                         )}
                       </span>
                     )
-                    : (puedeActivarDesactivar && d.activo
+                    : (!global && puedeActivarDesactivar && d.activo
                         ? <button className="btn btn-secondary btn-sm" title="Crear usuario y contraseña para este docente" onClick={() => abrirDarAcceso(d)}>🔑 Dar acceso</button>
                         : <span className="badge b-muted">Sin acceso</span>)}
                 </td>
@@ -557,7 +568,7 @@ export default function Docentes() {
                     <span className={'badge ' + (d.activo ? 'b-ok' : 'b-muted')}>{d.activo ? 'Activo' : 'Inactivo'}</span>
                   )}
                 </td>
-                <td><button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(d.id)}>✏️ Editar</button></td>
+                <td>{global ? <span className="muted" style={{ fontSize: 11 }}>—</span> : <button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(d.id)}>✏️ Editar</button>}</td>
               </tr>
             ))}
           </tbody>
@@ -574,7 +585,7 @@ export default function Docentes() {
           </div>
         </div>
       )}
-      {filtrados.length === 0 && <p className="muted">No hay docentes registrados en esta institución.</p>}
+      {filtrados.length === 0 && <p className="muted">{global ? 'No hay docentes registrados en ningún plantel todavía.' : 'No hay docentes registrados en esta institución.'}</p>}
 
       {modal && (
         <div className="modal-bg" onClick={cerrar}>

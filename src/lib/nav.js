@@ -146,6 +146,7 @@ export const NAV_BY_ROL = {
     { cat: 'Académico', items: [
       { to: '/horario', label: 'Horario', icon: 'ti ti-clock' },
       { to: '/calificaciones', label: 'Calificaciones', icon: 'ti ti-report' },
+      { to: '/mi-asistencia', label: 'Asistencia y faltas', icon: 'ti ti-calendar-check' },
       { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' },
       { to: '/tareas', label: 'Tareas', icon: 'ti ti-clipboard-list' }
     ]},
@@ -161,6 +162,7 @@ export const NAV_BY_ROL = {
     { cat: 'Académico', items: [
       { to: '/horario', label: 'Horario', icon: 'ti ti-clock' },
       { to: '/calificaciones', label: 'Calificaciones', icon: 'ti ti-report' },
+      { to: '/mi-asistencia', label: 'Asistencia y faltas', icon: 'ti ti-calendar-check' },
       { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' }
     ]},
     { cat: 'Sistema', items: [

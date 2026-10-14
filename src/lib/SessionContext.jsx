@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase, ROLE_GROUP } from './supabase.js';
-import { fetchInstituciones, fetchInstitucionData } from './data.js';
+import { fetchInstituciones, fetchInstitucionData, fetchDatosGlobales } from './data.js';
 const SessionCtx = createContext(null);
 export const useSession = () => useContext(SessionCtx);
 export function SessionProvider({ children }) {
@@ -29,6 +29,9 @@ export function SessionProvider({ children }) {
     if (prof.institucion_id) {
       const d = await fetchInstitucionData(prof.institucion_id);
       setData(d);
+    } else if (isSuperAdmin) {
+      // Alcance global: todos los docentes y estudiantes de todos los planteles, con su plantel y AMIE.
+      setData(await fetchDatosGlobales(insts).catch(() => ({ docentes: [], estudiantes: [], usuarios: [], administrativos: [], tareas: [] })));
     } else {
       setData({ docentes: [], estudiantes: [], usuarios: [], administrativos: [], tareas: [] });
     }
@@ -58,10 +61,9 @@ export function SessionProvider({ children }) {
   // Se debe llamar después de crear/editar/borrar registros, para que si el usuario navega a
   // otra pantalla y regresa, no vea una versión vieja en caché de los datos.
   const refrescarDatos = useCallback(async () => {
-    if (!profile?.institucion_id) return;
-    const d = await fetchInstitucionData(profile.institucion_id);
-    setData(d);
-  }, [profile]);
+    if (profile?.institucion_id) { setData(await fetchInstitucionData(profile.institucion_id)); return; }
+    if (profile?.rolDb === 'super_admin') setData(await fetchDatosGlobales(instituciones));
+  }, [profile, instituciones]);
   return (
     <SessionCtx.Provider value={{ loading, profile, instituciones, institucion, data, error, login, logout, refrescarDatos }}>
       {children}
