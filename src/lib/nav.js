@@ -36,6 +36,7 @@ export const NAV_BY_ROL = {
     { cat: 'Sistema', items: [
       { to: '/contenido-sitio', label: 'Contenido del sitio', icon: 'ti ti-edit' },
       { to: '/roles-permisos', label: 'Roles y Permisos', icon: 'ti ti-shield-lock' },
+      { to: '/modulos-plantel', label: 'Módulos por plantel', icon: 'ti ti-toggle-right' },
       { to: '/diagnostico', label: 'Diagnóstico del sistema', icon: 'ti ti-activity-heartbeat' },
       { to: '/configuracion', label: 'Configuración', icon: 'ti ti-settings' }
     ]}
@@ -49,6 +50,7 @@ export const NAV_BY_ROL = {
     { cat: 'Personas', items: [
       { to: '/docentes', label: 'Docentes', icon: 'ti ti-chalkboard' },
       { to: '/estudiantes', label: 'Estudiantes', icon: 'ti ti-users' },
+      { to: '/base-docentes', label: 'Base de docentes', icon: 'ti ti-database', modulo: 'base_docentes' },
       { to: '/encadenamiento', label: 'Encadenamiento', icon: 'ti ti-link' },
       { to: '/usuarios', label: 'Usuarios', icon: 'ti ti-user-cog' }
     ]},
@@ -125,12 +127,14 @@ export const NAV_BY_ROL = {
   docente: [
     { cat: 'Principal', items: [
       { to: '/', label: 'Dashboard', icon: 'ti ti-layout-dashboard' },
-      { to: '/anuncios', label: 'Anuncios', icon: 'ti ti-bell' }
+      { to: '/anuncios', label: 'Anuncios', icon: 'ti ti-bell' },
+      { to: '/mi-perfil', label: 'Mi perfil', icon: 'ti ti-user-circle' }
     ]},
     { cat: 'Académico', items: [
       { to: '/horario', label: 'Mi horario', icon: 'ti ti-clock' },
       { to: '/calificaciones', label: 'Calificaciones', icon: 'ti ti-report' },
       { to: '/asistencia', label: 'Asistencia', icon: 'ti ti-calendar-check' },
+      { to: '/mis-estudiantes', label: 'Mis estudiantes', icon: 'ti ti-users', requiere: 'tutor' },
       { to: '/tareas', label: 'Tareas y avisos', icon: 'ti ti-clipboard-list' }
     ]},
     { cat: 'Sistema', items: [

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase, ROLE_GROUP } from './supabase.js';
-import { fetchInstituciones, fetchInstitucionData, fetchDatosGlobales } from './data.js';
+import { fetchInstituciones, fetchInstitucionData, fetchDatosGlobales, fetchPermisosPlantel, fetchCursosComoTutor } from './data.js';
 const SessionCtx = createContext(null);
 export const useSession = () => useContext(SessionCtx);
 export function SessionProvider({ children }) {
@@ -10,6 +10,19 @@ export function SessionProvider({ children }) {
   const [institucion, setInstitucion] = useState(null);
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  // Permisos y módulos del plantel (los fija el Admin global / el admin del plantel). Todo desactivado por defecto.
+  const [permisos, setPermisos] = useState({ baseDocentes: false, docentesEditanPerfil: false, tutoresEditanEstudiantes: false });
+  const [esTutor, setEsTutor] = useState(false);
+  const cargarPermisos = useCallback(async (prof, institucionId) => {
+    if (!institucionId) { setPermisos({ baseDocentes: false, docentesEditanPerfil: false, tutoresEditanEstudiantes: false }); setEsTutor(false); return; }
+    try { setPermisos(await fetchPermisosPlantel(institucionId)); } catch { /* sin permisos: todo desactivado */ }
+    if (prof?.rol === 'docente') {
+      try {
+        const { data: doc } = await supabase.from('docentes').select('id').eq('profile_id', prof.id).maybeSingle();
+        setEsTutor(doc ? (await fetchCursosComoTutor(doc.id)).length > 0 : false);
+      } catch { setEsTutor(false); }
+    } else setEsTutor(false);
+  }, []);
   const loadForUser = useCallback(async (authUser) => {
     const { data: prof, error: profErr } = await supabase
       .from('profiles').select('*').eq('id', authUser.id).single();
@@ -35,8 +48,9 @@ export function SessionProvider({ children }) {
     } else {
       setData({ docentes: [], estudiantes: [], usuarios: [], administrativos: [], tareas: [] });
     }
+    await cargarPermisos({ ...prof, rol }, prof.institucion_id);
     setLoading(false);
-  }, []);
+  }, [cargarPermisos]);
   useEffect(() => {
     let mounted = true;
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -65,7 +79,7 @@ export function SessionProvider({ children }) {
     if (profile?.rolDb === 'super_admin') setData(await fetchDatosGlobales(instituciones));
   }, [profile, instituciones]);
   return (
-    <SessionCtx.Provider value={{ loading, profile, instituciones, institucion, data, error, login, logout, refrescarDatos }}>
+    <SessionCtx.Provider value={{ loading, profile, instituciones, institucion, data, error, login, logout, refrescarDatos, permisos, esTutor, recargarPermisos: () => cargarPermisos(profile, profile?.institucion_id) }}>
       {children}
     </SessionCtx.Provider>
   );

@@ -2215,3 +2215,75 @@ export async function fetchHistorialAsistenciaEstudiante(institucionId, estudian
 export async function enviarOficioPorCorreo({ estudianteId, oficio, registro }) {
   return llamarBackend('POST', '/correos/oficio', { estudiante_id: estudianteId, oficio, ...(registro ? { registro } : {}) });
 }
+
+/* ── Módulos por plantel y permisos de edición ────────────────────────────── */
+// Módulos que el Admin global activa por plantel (por defecto todos desactivados: sin fila = desactivado).
+export async function fetchModulosPlantel(modulo = 'base_docentes') {
+  const { data, error } = await supabase.from('modulos_plantel').select('institucion_id, activo, updated_at').eq('modulo', modulo);
+  if (error) throw error;
+  return data || [];
+}
+export async function setModuloPlantel(institucionId, modulo, activo, porProfileId) {
+  const { error } = await supabase.from('modulos_plantel').upsert(
+    { institucion_id: institucionId, modulo, activo: !!activo, activado_por: porProfileId || null, updated_at: new Date().toISOString() },
+    { onConflict: 'institucion_id,modulo' });
+  if (error) throw error;
+}
+export async function fetchPermisosPlantel(institucionId) {
+  const [{ data: perm }, { data: mod }] = await Promise.all([
+    supabase.from('permisos_plantel').select('docentes_editan_perfil, tutores_editan_estudiantes').eq('institucion_id', institucionId).maybeSingle(),
+    supabase.from('modulos_plantel').select('activo').eq('institucion_id', institucionId).eq('modulo', 'base_docentes').maybeSingle()
+  ]);
+  return {
+    baseDocentes: !!mod?.activo,
+    docentesEditanPerfil: !!perm?.docentes_editan_perfil,
+    tutoresEditanEstudiantes: !!perm?.tutores_editan_estudiantes
+  };
+}
+export async function guardarPermisoPlantel(institucionId, campo, valor, porProfileId) {
+  if (!['docentes_editan_perfil', 'tutores_editan_estudiantes'].includes(campo)) throw new Error('Permiso desconocido.');
+  const { error } = await supabase.from('permisos_plantel').upsert(
+    { institucion_id: institucionId, [campo]: !!valor, updated_by: porProfileId || null, updated_at: new Date().toISOString() },
+    { onConflict: 'institucion_id' });
+  if (error) throw error;
+}
+// Lo de la base central de docentes que el Admin global asignó a ESTE plantel (la RLS exige además que el módulo esté activo).
+export async function fetchBaseDocentesPlantel(institucionId) {
+  return paginarTodo(() => supabase.from('base_docentes').select('id, cedula, nombre, canton, categoria, especialidad, titulos').eq('institucion_id', institucionId).order('nombre').order('id'));
+}
+
+/* ── Perfil del docente y edición de estudiantes por el docente tutor ─────── */
+export async function fetchMiFichaDocente(profileId) {
+  const { data, error } = await supabase.from('docentes').select('*').eq('profile_id', profileId).limit(1).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+export async function actualizarMiPerfilDocente(campos) {
+  const { error } = await supabase.rpc('actualizar_mi_perfil_docente', { p: campos });
+  if (error) throw new Error(error.message);
+}
+// Cursos (paralelos) de los que el docente es tutor y sus estudiantes del período activo.
+export async function fetchCursosComoTutor(docenteId) {
+  const { data: paralelos, error } = await supabase.from('paralelos').select('id, nombre, grado_id, grados(nombre)').eq('tutor_docente_id', docenteId);
+  if (error) throw error;
+  return paralelos || [];
+}
+export async function fetchEstudiantesDeTutor(docenteId) {
+  const paralelos = await fetchCursosComoTutor(docenteId);
+  if (!paralelos.length) return { paralelos: [], estudiantes: [] };
+  const ids = paralelos.map(p => p.id);
+  const { data: mats, error } = await supabase.from('matriculas')
+    .select('id, estado, paralelo_id, periodo_id, periodos_lectivos(activo), estudiantes(id, cedula, nombres, apellidos, telefono, email, direccion, fecha_nacimiento, genero, etnia, discapacidad, provincia, canton, observaciones, activo)')
+    .in('paralelo_id', ids);
+  if (error) throw error;
+  const porId = Object.fromEntries(paralelos.map(p => [p.id, p]));
+  const estudiantes = (mats || [])
+    .filter(m => m.periodos_lectivos?.activo && m.estado !== 'retirada' && m.estudiantes)
+    .map(m => ({ ...m.estudiantes, curso: `${porId[m.paralelo_id]?.grados?.nombre || ''} ${porId[m.paralelo_id]?.nombre || ''}`.trim() }))
+    .sort((a, b) => `${a.apellidos} ${a.nombres}`.localeCompare(`${b.apellidos} ${b.nombres}`));
+  return { paralelos, estudiantes };
+}
+export async function actualizarEstudianteComoTutor(estudianteId, campos) {
+  const { error } = await supabase.rpc('actualizar_estudiante_como_tutor', { p_estudiante: estudianteId, p: campos });
+  if (error) throw new Error(error.message);
+}

@@ -25,6 +25,10 @@ import Configuracion from './pages/Configuracion.jsx';
 import Calendario from './pages/Calendario.jsx';
 import Justificaciones from './pages/Justificaciones.jsx';
 import MiAsistencia from './pages/MiAsistencia.jsx';
+import ModulosPlantel from './pages/ModulosPlantel.jsx';
+import BaseDocentesPlantel from './pages/BaseDocentesPlantel.jsx';
+import MiPerfil from './pages/MiPerfil.jsx';
+import MisEstudiantes from './pages/MisEstudiantes.jsx';
 import Encadenamiento from './pages/Encadenamiento.jsx';
 import Licencias from './pages/Licencias.jsx';
 import Inasistencias from './pages/Inasistencias.jsx';
@@ -63,6 +67,12 @@ function Protegida({ path, children }) {
   return permitido ? children : <AccesoDenegado />;
 }
 
+// /base-docentes: el Super Admin ve la base central completa; el admin de un plantel ve (si se la activaron) lo asignado a su plantel.
+function BaseDocentesRuta() {
+  const { profile } = useSession();
+  return profile.rolDb === 'super_admin' ? <BasesCentrales clave="base-docentes" /> : <BaseDocentesPlantel />;
+}
+
 function Gate() {
   const { loading, profile } = useSession();
   if (loading) return <div className="splash">Cargando SIGEE…</div>;
@@ -83,7 +93,7 @@ function Gate() {
         <Route path="/reportes-matriculas" element={<Protegida path="/reportes-matriculas"><ReportesMatriculas /></Protegida>} />
         <Route path="/egresados" element={<Protegida path="/egresados"><Egresados /></Protegida>} />
         <Route path="/docentes-desvinculados" element={<BasesCentrales clave="docentes-desvinculados" />} />
-        <Route path="/base-docentes" element={<BasesCentrales clave="base-docentes" />} />
+        <Route path="/base-docentes" element={<BaseDocentesRuta />} />
         <Route path="/estudiantes-desvinculados" element={<BasesCentrales clave="estudiantes-desvinculados" />} />
         <Route path="/base-estudiantes" element={<BasesCentrales clave="base-estudiantes" />} />
         <Route path="/contenido-sitio" element={<ContenidoSitio />} />
@@ -96,6 +106,9 @@ function Gate() {
         <Route path="/analisis-asistencia" element={<Protegida path="/analisis-asistencia"><AnalisisAsistencia /></Protegida>} />
         <Route path="/reportes-asistencia" element={<Protegida path="/reportes-asistencia"><ReportesAsistencia /></Protegida>} />
         <Route path="/inasistencias" element={<Protegida path="/inasistencias"><Inasistencias /></Protegida>} />
+        <Route path="/modulos-plantel" element={<Protegida path="/modulos-plantel"><ModulosPlantel /></Protegida>} />
+        <Route path="/mi-perfil" element={<Protegida path="/mi-perfil"><MiPerfil /></Protegida>} />
+        <Route path="/mis-estudiantes" element={<Protegida path="/mis-estudiantes"><MisEstudiantes /></Protegida>} />
         <Route path="/mi-asistencia" element={<Protegida path="/mi-asistencia"><MiAsistencia /></Protegida>} />
         <Route path="/justificaciones" element={<Protegida path="/justificaciones"><Justificaciones /></Protegida>} />
         <Route path="/calendario" element={<Protegida path="/calendario"><Calendario /></Protegida>} />

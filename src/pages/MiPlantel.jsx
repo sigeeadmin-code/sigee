@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
 import { supabase } from '../lib/supabase.js';
 import { fetchPlanteles, actualizarPlantel } from '../lib/data.js';
+import PermisosPlantel from '../components/PermisosPlantel.jsx';
 
 const SOST_LABEL = { Fiscal: 'Fiscal', Particular: 'Particular', Fiscomisional: 'Fiscomisional', Municipal: 'Municipal' };
 const JORNADAS_OPTS = ['Matutina', 'Vespertina', 'Nocturna'];
@@ -294,6 +295,8 @@ export default function MiPlantel() {
       )}
 
       {toast && <div className={'toast ' + (toast.tipo === 'ok' ? 'ok' : 'err')}>{toast.msg}</div>}
+
+      <PermisosPlantel />
     </div>
   );
 }

@@ -4,12 +4,15 @@ import { useSession } from '../lib/SessionContext.jsx';
 import { NAV_BY_ROL } from '../lib/nav.js';
 import { ROLE_LABELS } from '../lib/supabase.js';
 export default function Shell() {
-  const { profile, institucion, logout } = useSession();
+  const { profile, institucion, logout, permisos, esTutor } = useSession();
   const MENU_MINIMO = [
     { cat: 'Principal', items: [{ to: '/', label: 'Dashboard', icon: 'ti ti-layout-dashboard' }] },
     { cat: 'Sistema', items: [{ to: '/configuracion', label: 'Configuración', icon: 'ti ti-settings' }] }
   ];
-  const categorias = NAV_BY_ROL[profile.rol] || MENU_MINIMO;
+  // Ítems condicionales: 'Mis estudiantes' solo aparece al docente que es tutor de algún curso.
+  const categorias = (NAV_BY_ROL[profile.rol] || MENU_MINIMO)
+    .map(g => ({ ...g, items: g.items.filter(it => it.requiere !== 'tutor' || esTutor) }))
+    .filter(g => g.items.length);
   const initials = ((profile.nombres?.[0] || '') + (profile.apellidos?.[0] || '')).toUpperCase() || 'U';
   const isGlobal = profile.rol === 'super_admin';
   const [navOpen, setNavOpen] = React.useState(false);
@@ -58,6 +61,7 @@ export default function Shell() {
                   <span className={'ico ' + item.icon} />
                   {item.label}
                   {item.wip && <span className="nbadge">pronto</span>}
+                  {item.modulo === 'base_docentes' && !permisos?.baseDocentes && <span className="nbadge" title="Lo activa el administrador global de SIGEE">desactivado</span>}
                 </NavLink>
               ))}
             </React.Fragment>
