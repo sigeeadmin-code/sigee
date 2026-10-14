@@ -5,6 +5,7 @@ import { filtroOr } from './centralesBase.js';
 import { filaParaGuardar, agruparPorColumnas, cedulaCentral } from './importCentral.js';
 import { planAsignacion, planCruce } from './asignarDocentes.js';
 import { palabraClave, coincideBusqueda } from './fichaAsistencia.js';
+import { fetchCalendario } from './calendario.js';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://sigee-backend-production.up.railway.app';
 
@@ -2143,4 +2144,23 @@ export async function registrarOficiosEmitidos(institucionId, items, creadoPor) 
 export async function marcarOficioEntregado(id) {
   const { error } = await supabase.from('oficios_inasistencia').update({ estado: 'entregado', entregado_at: new Date().toISOString() }).eq('id', id);
   if (error) throw error;
+}
+
+/** Historial de asistencia de un estudiante (solo lectura) para su propia cuenta o la de su representante:
+ *  una fila por clase desde el inicio, sus justificaciones y el calendario del plantel (para los días lectivos). */
+export async function fetchHistorialAsistenciaEstudiante(institucionId, estudianteId) {
+  const [clases, justificaciones, eventos] = await Promise.all([
+    paginarTodo(() => supabase.from('asistencia')
+      .select('id, fecha, estado, observacion, docente_materia(materias(nombre))')
+      .eq('estudiante_id', estudianteId).order('id')),
+    supabase.from('justificaciones').select('id, fecha, motivo, estado').eq('estudiante_id', estudianteId).order('fecha', { ascending: false }).then(r => r.data || []),
+    institucionId ? fetchCalendario(institucionId) : Promise.resolve([])
+  ]);
+  return {
+    registros: clases.map(c => ({
+      fecha: c.fecha, estado: c.estado, observacion: c.observacion || '',
+      materia: c.docente_materia?.materias?.nombre || 'Sin materia'
+    })),
+    justificaciones, eventos
+  };
 }

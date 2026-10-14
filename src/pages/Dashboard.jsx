@@ -8,6 +8,7 @@ import {
 } from '../lib/data.js';
 import { usaEvaluacionNumerica } from '../lib/calificaciones.js';
 import { Link } from 'react-router-dom';
+import HistorialAsistencia from '../components/HistorialAsistencia.jsx';
 
 const SOST_LABEL = { Fiscal: 'Fiscal', Particular: 'Particular', Fiscomisional: 'Fiscomisional', Municipal: 'Municipal' };
 
@@ -470,6 +471,7 @@ function DashboardEstudiante() {
           <div style={{ fontSize: 26, fontWeight: 800, margin: '6px 0', color: '#16a34a' }}>
             {(() => { const r = prog.resumenAsistencia, tot = r.presente + r.atraso + r.ausente + r.justificado; return tot ? Math.round(100 * (r.presente + r.atraso) / tot) + '%' : '—'; })()}
           </div>
+          <div style={{ fontSize: 11, color: 'var(--slate)' }}>Últimos registros</div>
         </div>
         <div className="card" style={{ padding: 16 }}>
           <div style={{ fontSize: 12, color: 'var(--slate)' }}>Tareas pendientes</div>
@@ -540,18 +542,7 @@ function DashboardEstudiante() {
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: 14 }}>
-        <div className="ch"><h3>Detalle de asistencia</h3></div>
-        <div className="cb">
-          <div className="grid-4">
-            <div className="metric m-green"><div className="m-lbl">Presente</div><div className="m-val">{prog.resumenAsistencia.presente}</div></div>
-            <div className="metric m-amber"><div className="m-lbl">Atrasos</div><div className="m-val">{prog.resumenAsistencia.atraso}</div></div>
-            <div className="metric m-red"><div className="m-lbl">Ausencias</div><div className="m-val">{prog.resumenAsistencia.ausente}</div></div>
-            <div className="metric m-blue"><div className="m-lbl">Justificadas</div><div className="m-val">{prog.resumenAsistencia.justificado}</div></div>
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--slate)', marginTop: 8 }}>Basado en los últimos {prog.asistenciaReciente.length} registros de asistencia.</div>
-        </div>
-      </div>
+      <HistorialAsistencia key={estudianteId} estudianteId={estudianteId} institucionId={institucion?.id} titulo="Asistencia y faltas desde el inicio de clases" />
 
       <div className="card">
         <div className="ch"><h3>Asistencia reciente</h3></div>

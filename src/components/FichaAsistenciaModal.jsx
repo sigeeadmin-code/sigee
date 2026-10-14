@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
-import { fetchFichaAsistencia, registrarAviso, registrarOficiosEmitidos, marcarOficioEntregado } from '../lib/data.js';
+import { fetchFichaAsistencia, fetchCalendario, registrarAviso, registrarOficiosEmitidos, marcarOficioEntregado } from '../lib/data.js';
+import { resumenAnioLectivo, contarDiasLectivos } from '../lib/calendarioResumen.js';
 import OficioFaltasModal from './OficioFaltasModal.jsx';
 import { analizarFicha, mensajeWhatsApp, urlWhatsApp, telefonoEcuador, fechaCorta } from '../lib/fichaAsistencia.js';
 import { rangoPeriodo, ETIQUETA_CLASE, UMBRALES_DEFECTO, umbralesValidos } from '../lib/asistenciaAnalisis.js';
@@ -53,6 +54,7 @@ export default function FichaAsistenciaModal({ estudiante, onClose }) {
   const [wa, setWa] = useState(null);                 // { texto, abierto }
   const [aviso, setAviso] = useState('');
   const [trabajando, setTrabajando] = useState(false);
+  const [eventos, setEventos] = useState([]);
 
   const { desde, hasta } = useMemo(() => (periodo === 'custom' ? custom : rangoPeriodo(periodo)), [periodo, custom]);
   const umbrales = useMemo(() => {
@@ -68,9 +70,19 @@ export default function FichaAsistenciaModal({ estudiante, onClose }) {
     setCargando(false);
   }, [institucionId, estudiante.id, desde, hasta]);
   useEffect(() => { cargar(); }, [cargar]);
+  useEffect(() => { if (institucionId) fetchCalendario(institucionId).then(setEventos).catch(() => setEventos([])); }, [institucionId]);
 
   const an = useMemo(() => (ficha ? analizarFicha(ficha.registros, umbrales) : null), [ficha, umbrales]);
   const faltasInj = an ? an.resumen.fechasFaltas.filter(f => f.tipo === 'injustificada').map(f => f.fecha) : [];
+  // Referencia: días lectivos del período mirado (en 'Todo', desde el inicio de clases) frente a las faltas del estudiante
+  const lectivos = useMemo(() => {
+    if (!an) return null;
+    const h = hoy();
+    const primero = ficha?.registros?.length ? ficha.registros.map(r => r.fecha).sort()[0] : null;
+    const ini = periodo === 'todo' ? (resumenAnioLectivo(eventos, h)?.inicio || primero) : desde;
+    const fin = hasta > h ? h : hasta;
+    return ini && ini <= fin ? { dias: contarDiasLectivos(ini, fin, eventos), inicio: ini } : null;
+  }, [an, ficha, eventos, periodo, desde, hasta]);
   const telOk = telefonoEcuador(ficha?.representante?.telefono);
 
   function abrirWhatsApp() {
@@ -162,6 +174,7 @@ export default function FichaAsistenciaModal({ estudiante, onClose }) {
 
           {an && !cargando && (
             <>
+              {lectivos && <div style={{ fontSize: 13, color: 'var(--slate)', marginBottom: 8 }}>Desde el {fechaCorta(lectivos.inicio)}: <strong>{lectivos.dias} {lectivos.dias === 1 ? 'día lectivo' : 'días lectivos'} · {an.resumen.faltas} {an.resumen.faltas === 1 ? 'falta' : 'faltas'}</strong> (referencia; las faltas se rigen por el reglamento del Ministerio de Educación)</div>}
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
                 <Tarjeta valor={pct(an.resumen.pctAsistencia)} etiqueta="Asistencia" sub={`${an.resumen.dias} días con registro`} color="#2563eb" />
                 <Tarjeta valor={an.resumen.faltas} etiqueta="Días de falta" sub="injustificadas" color="#dc2626" />
