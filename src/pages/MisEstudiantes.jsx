@@ -1,24 +1,22 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
 import { supabase } from '../lib/supabase.js';
-import { fetchEstudiantesDeTutor, actualizarEstudianteComoTutor } from '../lib/data.js';
+import { fetchEstudiantesDeTutor, actualizarEstudianteComoTutor, subirArchivo } from '../lib/data.js';
+import { FormAlumno } from '../components/FormulariosPersona.jsx';
 
-const CAMPOS = [
-  ['telefono', 'Teléfono'], ['email', 'Correo'], ['direccion', 'Dirección'], ['fecha_nacimiento', 'Fecha de nacimiento', 'date'],
-  ['genero', 'Género'], ['etnia', 'Etnia'], ['discapacidad', 'Discapacidad'], ['provincia', 'Provincia'], ['canton', 'Cantón']
-];
+const CAMPOS_EDITABLES = ['telefono', 'email', 'direccion', 'fecha_nacimiento', 'genero', 'etnia', 'discapacidad', 'provincia', 'canton', 'observaciones', 'foto_url'];
 
-// Estudiantes del/los curso(s) de los que el docente es TUTOR. Solo puede editarlos si el administrador del plantel lo habilitó.
+// Estudiantes del/los curso(s) de los que el docente es TUTOR. Se editan con el MISMO editor de estudiantes del plantel
+// (pestaña Alumno), solo si el administrador del plantel lo habilitó. Nombres, apellidos y cédula quedan en solo lectura.
 export default function MisEstudiantes() {
   const { profile, permisos, recargarPermisos } = useSession();
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
   const [lista, setLista] = useState([]);
   const [q, setQ] = useState('');
-  const [sel, setSel] = useState(null);
-  const [form, setForm] = useState({});
+  const [modal, setModal] = useState(null);
   const [guardando, setGuardando] = useState(false);
-  const [msg, setMsg] = useState('');
+  const [errorModal, setErrorModal] = useState('');
   const puedeEditar = !!permisos?.tutoresEditanEstudiantes;
 
   useEffect(() => { recargarPermisos?.(); }, []); // eslint-disable-line
@@ -38,14 +36,25 @@ export default function MisEstudiantes() {
 
   const visibles = useMemo(() => lista.filter(e => !q || `${e.apellidos} ${e.nombres} ${e.cedula || ''}`.toLowerCase().includes(q.toLowerCase())), [lista, q]);
 
-  function abrir(e) { setSel(e); setMsg(''); setForm(Object.fromEntries([...CAMPOS.map(([k]) => [k, e[k] ?? '']), ['observaciones', e.observaciones ?? '']])); }
-  async function guardar(ev) {
-    ev.preventDefault(); setGuardando(true); setMsg('');
+  const abrir = e => { setErrorModal(''); setModal({ ...e }); };
+  const cerrar = () => { if (!guardando) { setModal(null); setErrorModal(''); } };
+  const upd = (campo, valor) => setModal(m => ({ ...m, [campo]: valor }));
+
+  async function subirFoto(file) {
     try {
-      await actualizarEstudianteComoTutor(sel.id, form);
-      setLista(l => l.map(x => (x.id === sel.id ? { ...x, ...form } : x)));
-      setSel(null);
-    } catch (err) { setMsg(err.message || 'No se pudo guardar.'); }
+      const ext = file.name.split('.').pop();
+      upd('foto_url', await subirArchivo('estudiantes-fotos', `${modal.id}/foto.${ext}`, file));
+    } catch (e) { setErrorModal('No se pudo subir la foto: ' + e.message); }
+  }
+
+  async function guardar() {
+    setGuardando(true); setErrorModal('');
+    try {
+      const campos = Object.fromEntries(CAMPOS_EDITABLES.map(k => [k, modal[k] || '']));
+      await actualizarEstudianteComoTutor(modal.id, campos);
+      setLista(l => l.map(x => (x.id === modal.id ? { ...x, ...campos } : x)));
+      setModal(null);
+    } catch (err) { setErrorModal('No se pudo guardar: ' + (err.message || err)); }
     setGuardando(false);
   }
 
@@ -65,32 +74,32 @@ export default function MisEstudiantes() {
             {visibles.map(e => (
               <tr key={e.id}>
                 <td className="mono">{e.cedula || '—'}</td><td><strong>{e.apellidos} {e.nombres}</strong></td><td>{e.curso}</td><td>{e.telefono || '—'}</td>
-                <td><button className="btn btn-ghost btn-sm" onClick={() => abrir(e)}>{puedeEditar ? '✏️ Editar ficha' : '👁️ Ver ficha'}</button></td>
+                <td><button className="btn btn-ghost btn-sm" onClick={() => abrir(e)}>{puedeEditar ? '✏️ Editar' : '👁️ Ver'}</button></td>
               </tr>))}
           </tbody>
         </table>
       </div>
 
-      {sel && (
-        <div className="modal-bg open" onClick={ev => { if (ev.target === ev.currentTarget && !guardando) setSel(null); }}>
-          <form className="modal" onSubmit={guardar} style={{ maxWidth: 560 }}>
-            <div className="modal-h"><h3>{sel.apellidos} {sel.nombres}</h3></div>
+      {modal && (
+        <div className="modal-bg" onClick={cerrar}>
+          <div className="modal wide" onClick={e => e.stopPropagation()}>
+            <div className="modal-h">
+              <h3>{puedeEditar ? '✏️ Editar estudiante' : '👁️ Estudiante'} — {modal.nombres} {modal.apellidos}</h3>
+              <button className="btn btn-ghost btn-sm" onClick={cerrar}><span className="ti ti-x" /></button>
+            </div>
+            {errorModal && <div className="lerr">{errorModal}</div>}
+            <div className="tabs"><button className="tab on">Alumno</button></div>
             <div className="modal-b">
-              <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>{sel.curso} · Cédula {sel.cedula || '—'}. Nombres, cédula y matrícula los administra el plantel.</p>
-              <div className="form-grid">
-                {CAMPOS.map(([k, t, tipo]) => (
-                  <div key={k}><label className="fl">{t}</label>
-                    <input className="fc" type={tipo || 'text'} disabled={!puedeEditar || guardando} value={form[k] ?? ''} onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))} /></div>))}
-                <div className="full"><label className="fl">Observaciones</label>
-                  <textarea className="fc" rows={3} disabled={!puedeEditar || guardando} value={form.observaciones ?? ''} onChange={e => setForm(f => ({ ...f, observaciones: e.target.value }))} /></div>
-              </div>
-              {msg && <p style={{ color: 'var(--red)', fontSize: 13, marginTop: 10 }}>{msg}</p>}
+              <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>{modal.curso}. Apellidos, nombres y cédula los administra el plantel.</p>
+              <fieldset disabled={!puedeEditar || guardando} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+                <FormAlumno modal={modal} upd={upd} subirFoto={subirFoto} bloqueados />
+              </fieldset>
             </div>
             <div className="modal-f">
-              <button type="button" className="btn btn-secondary" disabled={guardando} onClick={() => setSel(null)}>{puedeEditar ? 'Cancelar' : 'Cerrar'}</button>
-              {puedeEditar && <button type="submit" className="btn btn-primary" disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar'}</button>}
+              <button className="btn btn-secondary" onClick={cerrar} disabled={guardando}>{puedeEditar ? 'Cancelar' : 'Cerrar'}</button>
+              {puedeEditar && <button className="btn btn-primary" disabled={guardando} onClick={guardar}>{guardando ? 'Guardando…' : '💾 Guardar'}</button>}
             </div>
-          </form>
+          </div>
         </div>
       )}
     </div>

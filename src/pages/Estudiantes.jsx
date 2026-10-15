@@ -7,6 +7,7 @@ import {
 } from '../lib/data.js';
 import { descargarPlantillaExcel, leerExcel, normalizarFecha, validarCedulaEC, exportarFilasExcel } from '../lib/cargaMasiva.js';
 import ImportadorInteligente from '../components/ImportadorInteligente.jsx';
+import { FormAlumno } from '../components/FormulariosPersona.jsx';
 
 const PLANTILLA_ESTUDIANTES_COLS = [
   'Cédula', 'Nombres', 'Apellidos', 'Fecha Nacimiento (AAAA-MM-DD)', 'Género (Masculino/Femenino)', 'Dirección',
@@ -439,54 +440,7 @@ export default function Estudiantes() {
 
             <div className="modal-b">
               {tab === 'alumno' && (
-                <div className="form-grid">
-                  <div className="full" style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-                    <div className="avatar-lg">{modal.foto_url ? <img src={modal.foto_url} alt="" /> : '👤'}</div>
-                    <label className="btn btn-ghost btn-sm">
-                      📷 Subir foto
-                      <input type="file" accept="image/*" style={{ display: 'none' }}
-                        onChange={e => e.target.files[0] && subirFoto(e.target.files[0])} />
-                    </label>
-                  </div>
-                  <div className="full"><label className="fl">Apellidos *</label>
-                    <input className="fc" value={modal.apellidos} onChange={e => upd('apellidos', e.target.value)} /></div>
-                  <div className="full"><label className="fl">Nombres *</label>
-                    <input className="fc" value={modal.nombres} onChange={e => upd('nombres', e.target.value)} /></div>
-                  <div><label className="fl">Cédula de identidad</label>
-                    <input className="fc mono" value={modal.cedula || ''} onChange={e => upd('cedula', e.target.value)} /></div>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                    <div style={{ flex: 1 }}><label className="fl">Fecha de nacimiento</label>
-                      <input className="fc" type="date" value={modal.fecha_nacimiento || ''} onChange={e => upd('fecha_nacimiento', e.target.value)} /></div>
-                    <div style={{ width: 90 }}><label className="fl">Edad</label>
-                      <input className="fc" value={calcularEdad(modal.fecha_nacimiento) ?? '—'} disabled /></div>
-                  </div>
-                  <div><label className="fl">Género</label>
-                    <select className="fc" value={modal.genero || ''} onChange={e => upd('genero', e.target.value)}>
-                      <option value="">Seleccione…</option>
-                      {GENEROS.map(g => <option key={g} value={g}>{g}</option>)}
-                    </select></div>
-                  <div><label className="fl">Etnia / Nacionalidad</label>
-                    <select className="fc" value={modal.etnia || ''} onChange={e => upd('etnia', e.target.value)}>
-                      <option value="">—</option>
-                      {ETNIAS.map(x => <option key={x} value={x}>{x}</option>)}
-                    </select></div>
-                  <div><label className="fl">Discapacidad</label>
-                    <select className="fc" value={modal.discapacidad || ''} onChange={e => upd('discapacidad', e.target.value)}>
-                      {DISCAPACIDADES.map(x => <option key={x} value={x}>{x}</option>)}
-                    </select></div>
-                  <div><label className="fl">Teléfono / Celular</label>
-                    <input className="fc" value={modal.telefono || ''} onChange={e => upd('telefono', e.target.value)} /></div>
-                  <div className="full"><label className="fl">Correo electrónico</label>
-                    <input className="fc" type="email" value={modal.email || ''} onChange={e => upd('email', e.target.value)} /></div>
-                  <div className="full"><label className="fl">Dirección de domicilio</label>
-                    <input className="fc" placeholder="Calle, número, sector, cantón" value={modal.direccion || ''} onChange={e => upd('direccion', e.target.value)} /></div>
-                  <div><label className="fl">Provincia</label>
-                    <input className="fc" value={modal.provincia || ''} onChange={e => upd('provincia', e.target.value)} /></div>
-                  <div><label className="fl">Cantón</label>
-                    <input className="fc" value={modal.canton || ''} onChange={e => upd('canton', e.target.value)} /></div>
-                  <div className="full"><label className="fl">Observaciones</label>
-                    <textarea className="fc" rows={3} value={modal.observaciones || ''} onChange={e => upd('observaciones', e.target.value)} /></div>
-                </div>
+                <FormAlumno modal={modal} upd={upd} subirFoto={subirFoto} />
               )}
 
               {tab === 'representantes' && (

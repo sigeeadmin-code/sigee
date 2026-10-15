@@ -2285,7 +2285,7 @@ export async function fetchEstudiantesDeTutor(docenteId) {
   if (!paralelos.length) return { paralelos: [], estudiantes: [] };
   const ids = paralelos.map(p => p.id);
   const { data: mats, error } = await supabase.from('matriculas')
-    .select('id, estado, paralelo_id, periodo_id, periodos_lectivos(activo), estudiantes(id, cedula, nombres, apellidos, telefono, email, direccion, fecha_nacimiento, genero, etnia, discapacidad, provincia, canton, observaciones, activo)')
+    .select('id, estado, paralelo_id, periodo_id, periodos_lectivos(activo), estudiantes(id, cedula, nombres, apellidos, telefono, email, direccion, fecha_nacimiento, genero, etnia, discapacidad, provincia, canton, observaciones, foto_url, activo)')
     .in('paralelo_id', ids);
   if (error) throw error;
   const porId = Object.fromEntries(paralelos.map(p => [p.id, p]));
