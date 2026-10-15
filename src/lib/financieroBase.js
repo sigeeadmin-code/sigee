@@ -44,8 +44,9 @@ export function totalPlano(tramos, n) {
   return n > 0 ? redondear(n * tarifaPorPosicion(tramos, n)) : 0;
 }
 
-/** Para cada licencia, la tarifa que le toca según su posición dentro de su plantel (por antigüedad). */
-export function planTarifas(licencias, tramos) {
+/** Para cada licencia, la tarifa que le toca: el valor propio de su colegio si lo tiene; si no, la de su posición por tramos.
+ *  `tarifasPlantel`: { [institucion_id]: tarifa por paralelo } (el valor propio vale solo para ese colegio). */
+export function planTarifas(licencias, tramos, tarifasPlantel = {}) {
   const porPlantel = new Map();
   for (const l of licencias) {
     if (!porPlantel.has(l.institucion_id)) porPlantel.set(l.institucion_id, []);
@@ -53,13 +54,33 @@ export function planTarifas(licencias, tramos) {
   }
   const out = [];
   for (const [inst, lista] of porPlantel) {
+    const propio = tarifasPlantel && tarifasPlantel[inst] !== undefined && tarifasPlantel[inst] !== null ? num(tarifasPlantel[inst]) : null;
     lista.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)) || String(a.id).localeCompare(String(b.id)));
     lista.forEach((l, i) => out.push({
       id: l.id, institucion_id: inst, institucion_nombre: l.institucion_nombre, posicion: i + 1,
-      actual: num(l.tarifa_mensual), propuesta: tarifaPorPosicion(tramos, i + 1)
+      actual: num(l.tarifa_mensual), propuesta: propio !== null ? propio : tarifaPorPosicion(tramos, i + 1), propia: propio !== null
     }));
   }
   return out;
+}
+
+/** Total mensual de un plantel con `n` paralelos: valor propio × n si lo tiene; si no, tarifa marginal por tramos. */
+export function totalPlantel(tramos, n, tarifaPropia = null) {
+  return tarifaPropia !== null && tarifaPropia !== undefined ? redondear(n * num(tarifaPropia)) : totalMarginal(tramos, n);
+}
+
+/** Comprobantes que aparecen en más de un plantel (señal de posible reuso o error de captura). Devuelve un Set de comprobantes normalizados. */
+export const normalizarComprobante = c => String(c || '').trim().toLowerCase().replace(/\s+/g, '');
+export function comprobantesCompartidos(pagos) {
+  const porComp = new Map();
+  for (const p of pagos || []) {
+    const c = normalizarComprobante(p.comprobante_num);
+    const inst = p.licencias_paralelo?.institucion_id ?? p.licencias_paralelo?.institucion?.nombre ?? p.institucion_id;
+    if (!c || inst === undefined) continue;
+    if (!porComp.has(c)) porComp.set(c, new Set());
+    porComp.get(c).add(inst);
+  }
+  return new Set([...porComp].filter(([, insts]) => insts.size > 1).map(([c]) => c));
 }
 
 // ───────────── estado de cada mes ─────────────

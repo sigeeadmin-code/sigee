@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { useSession } from '../lib/SessionContext.jsx';
-import { fetchFinancieroDatos, fetchLibroCobros, guardarTramosTarifa, guardarConfigLicencias, aplicarTarifasLicencias, revisarPagoLicencia } from '../lib/data.js';
+import { fetchFinancieroDatos, fetchLibroCobros, guardarTramosTarifa, guardarConfigLicencias, aplicarTarifasLicencias, revisarPagoLicencia, fetchColegiosParaTarifa, fijarTarifaPlantel, quitarTarifaPlantel } from '../lib/data.js';
 import { exportarFilasExcel } from '../lib/cargaMasiva.js';
-import { MESES, validarTramos, totalMarginal, totalPlano, planTarifas, construirEstadoCuenta, indicadoresMes, filasEstadoCuenta, filasLibro } from '../lib/financieroBase.js';
+import { MESES, validarTramos, totalMarginal, totalPlano, totalPlantel, planTarifas, comprobantesCompartidos, normalizarComprobante, construirEstadoCuenta, indicadoresMes, filasEstadoCuenta, filasLibro } from '../lib/financieroBase.js';
 
 const COLOR = { pagado: '#16a34a', en_revision: '#d97706', rechazado: '#dc2626', mora: '#dc2626', por_vencer: '#0891b2', futuro: '#cbd5e1' };
 const ETIQUETA_MES = { pagado: 'Pagado', en_revision: 'En revisión', rechazado: 'Rechazado', mora: 'En mora', por_vencer: 'Por vencer', futuro: 'Futuro' };
@@ -76,7 +76,7 @@ export default function Financiero() {
       {cargando && !datos && <div className="card cb">Cargando…</div>}
 
       {datos && ec && pestana === 'resumen' && <Resumen ec={ec} anio={anio} mes={mes} setMes={setMes} costo={costo} />}
-      {datos && ec && pestana === 'planteles' && <Planteles ec={ec} anio={anio} />}
+      {datos && ec && pestana === 'planteles' && <Planteles ec={ec} anio={anio} convenios={Object.fromEntries((datos.tarifasPlantel || []).map(t => [t.institucion_id, Number(t.tarifa_por_paralelo)]))} />}
       {datos && pestana === 'libro' && <Libro anio={anio} libro={libro} setLibro={setLibro} profile={profile} onCambio={cargar} />}
       {datos && pestana === 'tarifas' && <Tarifas datos={datos} onCambio={cargar} />}
     </div>
@@ -145,7 +145,7 @@ function Resumen({ ec, anio, mes, setMes, costo }) {
 }
 
 /* ───────── Planteles (estado de cuenta) ───────── */
-function Planteles({ ec, anio }) {
+function Planteles({ ec, anio, convenios = {} }) {
   const [texto, setTexto] = useState('');
   const [estado, setEstado] = useState('');
   const [abierto, setAbierto] = useState(null);
@@ -168,7 +168,7 @@ function Planteles({ ec, anio }) {
               {lista.map(p => (
                 <React.Fragment key={p.institucion_id}>
                   <tr>
-                    <td><strong>{p.nombre}</strong></td><td>{p.paralelos}</td><td>{usd(p.tarifaMensual)}</td>
+                    <td><strong>{p.nombre}</strong>{convenios[p.institucion_id] !== undefined && <span title={`Valor propio de este colegio: ${usd(convenios[p.institucion_id])} por paralelo`} style={{ marginLeft: 8 }}><Insignia texto={`Convenio ${usd(convenios[p.institucion_id])}`} color="#6366f1" /></span>}</td><td>{p.paralelos}</td><td>{usd(p.tarifaMensual)}</td>
                     <td style={{ color: COLOR.pagado }}>{usd(p.cobrado)}</td><td style={{ color: COLOR.en_revision }}>{usd(p.enRevision)}</td>
                     <td style={{ color: p.porCobrar ? COLOR.mora : undefined, fontWeight: p.porCobrar ? 700 : 400 }}>{usd(p.porCobrar)}</td>
                     <td>{p.cobranza === null ? '—' : `${p.cobranza}%`}</td>
@@ -236,6 +236,7 @@ function Libro({ anio, libro, setLibro, profile, onCambio }) {
     } catch (e) { setAviso('No se pudo procesar: ' + (e.message || e)); }
     setRevisando(null);
   }
+  const compartidos = comprobantesCompartidos(libro);   // mismo N.º de comprobante usado por más de un plantel
   const t = texto.toLowerCase();
   const lista = libro.filter(p => (!estado || p.estado === estado) && (!mes || p.mes === Number(mes))
     && (!t || (p.licencias_paralelo?.institucion?.nombre || '').toLowerCase().includes(t) || (p.comprobante_num || '').toLowerCase().includes(t)))
@@ -271,7 +272,7 @@ function Libro({ anio, libro, setLibro, profile, onCambio }) {
                   <td>{String(p.fecha_reporte || '').slice(0, 10)}</td>
                   <td>{p.licencias_paralelo?.institucion?.nombre || '—'}</td>
                   <td>{p.licencias_paralelo?.grado?.nombre} {p.licencias_paralelo?.paralelo?.nombre}</td>
-                  <td>{MESES[p.mes - 1]} {p.anio}</td><td>{usd(p.monto)}</td><td className="mono">{p.comprobante_num || '—'}</td>
+                  <td>{MESES[p.mes - 1]} {p.anio}</td><td>{usd(p.monto)}</td><td className="mono">{p.comprobante_num || '—'}{compartidos.has(normalizarComprobante(p.comprobante_num)) && <span title="Este N.º de comprobante aparece en más de un plantel: verifica que no sea un reuso o un error de captura" style={{ marginLeft: 6, color: COLOR.en_revision, cursor: 'help' }}>⚠</span>}</td>
                   <td><Insignia texto={{ aprobado: 'Aprobado', pendiente_revision: 'En revisión', rechazado: 'Rechazado' }[p.estado] || p.estado} color={{ aprobado: COLOR.pagado, pendiente_revision: COLOR.en_revision, rechazado: COLOR.mora }[p.estado] || '#64748b'} /></td>
                   <td>{String(p.fecha_revision || '').slice(0, 10) || '—'}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>
@@ -321,11 +322,12 @@ function Tarifas({ datos, onCambio }) {
   const errorTramos = validarTramos(normales);
   const guardados = JSON.stringify(datos.tramos.map(t => [t.desde, t.hasta, Number(t.tarifa)])) === JSON.stringify([...normales].sort((a, b) => a.desde - b.desde).map(t => [t.desde, t.hasta, t.tarifa]));
 
-  const plan = useMemo(() => (errorTramos ? [] : planTarifas(datos.licencias, normales)), [datos.licencias, errorTramos, tramos]); // eslint-disable-line react-hooks/exhaustive-deps
+  const propias = useMemo(() => Object.fromEntries((datos.tarifasPlantel || []).map(t => [t.institucion_id, Number(t.tarifa_por_paralelo)])), [datos.tarifasPlantel]);
+  const plan = useMemo(() => (errorTramos ? [] : planTarifas(datos.licencias, normales, propias)), [datos.licencias, errorTramos, tramos, propias]); // eslint-disable-line react-hooks/exhaustive-deps
   const porPlantel = useMemo(() => {
     const m = new Map();
     plan.forEach(p => {
-      if (!m.has(p.institucion_id)) m.set(p.institucion_id, { nombre: p.institucion_nombre, n: 0, actual: 0 });
+      if (!m.has(p.institucion_id)) m.set(p.institucion_id, { nombre: p.institucion_nombre, n: 0, actual: 0, propia: p.propia ? p.propuesta : null });
       const x = m.get(p.institucion_id); x.n += 1; x.actual += p.actual;
     });
     return [...m.values()].sort((a, b) => b.n - a.n);
@@ -382,16 +384,18 @@ function Tarifas({ datos, onCambio }) {
         </div>
       </div>
 
+      <TarifasPorColegio datos={datos} onCambio={onCambio} setMsgGlobal={setMsg} />
+
       <div className="card">
         <div className="ch"><h3>Qué pasaría con cada plantel</h3></div>
         <div className="cb">
           {errorTramos ? <p style={{ fontSize: 13, color: 'var(--slate)', margin: 0 }}>Corrige los tramos para ver la comparación.</p> : porPlantel.length === 0 ? <p style={{ fontSize: 13, color: 'var(--slate)', margin: 0 }}>Todavía no hay paralelos con licencia.</p> : (
             <>
               <table className="tbl" style={{ width: '100%' }}>
-                <thead><tr><th>Plantel</th><th>Paralelos</th><th>Hoy cobras</th><th>Por tramos (marginal)</th><th>Tarifa plana del tramo</th></tr></thead>
+                <thead><tr><th>Plantel</th><th>Paralelos</th><th>Hoy cobras</th><th>Por tramos / valor propio</th><th>Tarifa plana del tramo</th></tr></thead>
                 <tbody>{porPlantel.map(p => {
-                  const marg = totalMarginal(normales, p.n), plano = totalPlano(normales, p.n);
-                  return <tr key={p.nombre}><td>{p.nombre}</td><td>{p.n}</td><td>{usd(p.actual)}</td><td><strong>{usd(marg)}</strong></td><td style={{ color: plano < marg ? COLOR.mora : 'var(--slate)' }}>{usd(plano)}{plano < marg ? ' ⚠' : ''}</td></tr>;
+                  const marg = totalPlantel(normales, p.n, p.propia), plano = p.propia !== null ? marg : totalPlano(normales, p.n);
+                  return <tr key={p.nombre}><td>{p.nombre}</td><td>{p.n}</td><td>{usd(p.actual)}</td><td><strong>{usd(marg)}</strong>{p.propia !== null && <span style={{ marginLeft: 6 }}><Insignia texto="Convenio" color="#6366f1" /></span>}</td><td style={{ color: plano < marg ? COLOR.mora : 'var(--slate)' }}>{usd(plano)}{plano < marg ? ' ⚠' : ''}</td></tr>;
                 })}</tbody>
               </table>
               <p style={{ fontSize: 12, color: 'var(--slate)' }}>⚠ La tarifa plana (todo el plantel a la tarifa de su tramo) haría pagar menos a un plantel de 11 paralelos que a uno de 10; por eso se usa la marginal.</p>
@@ -419,6 +423,135 @@ function Tarifas({ datos, onCambio }) {
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                 <button className="btn btn-secondary" onClick={() => setConfirma(false)}>Cancelar</button>
                 <button className="btn btn-primary" onClick={aplicar}>Aplicar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ───────── Valor por paralelo de cada colegio ───────── */
+// El Super Admin fija un valor mensual por paralelo para UN colegio. Vale solo para ese colegio, reemplaza la tarifa por tramos
+// en sus paralelos (también en los que registre después) y lo ya pagado o en revisión conserva su monto.
+function TarifasPorColegio({ datos, onCambio, setMsgGlobal }) {
+  const [colegios, setColegios] = useState(null);
+  const [q, setQ] = useState('');
+  const [sel, setSel] = useState(null);
+  const [valor, setValor] = useState('');
+  const [nota, setNota] = useState('');
+  const [confirma, setConfirma] = useState(null);   // { tipo: 'fijar' | 'quitar' }
+  const [trabajando, setTrabajando] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => { let vivo = true; fetchColegiosParaTarifa().then(c => { if (vivo) setColegios(c); }).catch(e => vivo && setError(e.message || 'No se pudo cargar la lista de colegios.')); return () => { vivo = false; }; }, []);
+  const propias = useMemo(() => new Map((datos.tarifasPlantel || []).map(t => [t.institucion_id, t])), [datos.tarifasPlantel]);
+  const nombrePorId = useMemo(() => new Map((colegios || []).map(c => [c.id, c])), [colegios]);
+  const paralelosDe = id => datos.licencias.filter(l => l.institucion_id === id);
+
+  const resultados = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    if (!colegios || t.length < 2) return [];
+    return colegios.filter(c => `${c.nombre || ''} ${c.amie || ''} ${c.canton || ''}`.toLowerCase().includes(t)).slice(0, 8);
+  }, [colegios, q]);
+
+  function elegir(c) { setSel(c); setError(''); const p = propias.get(c.id); setValor(p ? String(p.tarifa_por_paralelo) : ''); setNota(p?.nota || ''); setQ(''); }
+  const valorNum = Number(valor);
+  const valorValido = valor !== '' && Number.isFinite(valorNum) && valorNum >= 0 && valorNum <= 1000;
+  const lics = sel ? paralelosDe(sel.id) : [];
+  const propiaSel = sel ? propias.get(sel.id) : null;
+
+  async function ejecutar() {
+    const tipo = confirma.tipo; setConfirma(null); setTrabajando(true); setError('');
+    try {
+      const n = tipo === 'fijar' ? await fijarTarifaPlantel(sel.id, valorNum, nota.trim()) : await quitarTarifaPlantel(sel.id);
+      setMsgGlobal(tipo === 'fijar'
+        ? `Valor de ${usd(valorNum)} por paralelo guardado para ${sel.nombre}. ${n} paralelo${n === 1 ? '' : 's'} actualizado${n === 1 ? '' : 's'}.`
+        : `${sel.nombre} vuelve a la tarifa por tramos. ${n} paralelo${n === 1 ? '' : 's'} actualizado${n === 1 ? '' : 's'}.`);
+      if (tipo === 'quitar') { setValor(''); setNota(''); }
+      await onCambio();
+    } catch (e) { setError('No se pudo guardar: ' + (e.message || e)); }
+    setTrabajando(false);
+  }
+
+  const filasPropias = [...propias.values()].map(t => ({ ...t, colegio: nombrePorId.get(t.institucion_id), n: paralelosDe(t.institucion_id).length }))
+    .sort((a, b) => String(a.colegio?.nombre || '').localeCompare(String(b.colegio?.nombre || '')));
+
+  return (
+    <div className="card">
+      <div className="ch"><h3>Valor por paralelo de cada colegio</h3></div>
+      <div className="cb">
+        <p style={{ fontSize: 13, marginTop: 0 }}>
+          Fija un valor mensual por paralelo <strong>solo para un colegio</strong> (por ejemplo, un convenio). Reemplaza a la tarifa por tramos en los paralelos de ese colegio, también en los que registre después, y no afecta a ningún otro.
+          Lo que ya está pagado o en revisión conserva su monto.
+        </p>
+        {error && <div className="lerr" style={{ display: 'flex', marginBottom: 10 }}>{error}</div>}
+
+        <div style={{ position: 'relative', maxWidth: 460 }}>
+          <input className="fc" placeholder={colegios ? 'Buscar colegio por nombre, AMIE o cantón…' : 'Cargando colegios…'} disabled={!colegios} value={q} onChange={e => setQ(e.target.value)} />
+          {resultados.length > 0 && (
+            <div className="card" style={{ position: 'absolute', zIndex: 5, left: 0, right: 0, margin: '4px 0 0', maxHeight: 280, overflowY: 'auto' }}>
+              {resultados.map(c => (
+                <button key={c.id} type="button" className="btn btn-ghost" style={{ display: 'block', width: '100%', textAlign: 'left', borderRadius: 0 }} onClick={() => elegir(c)}>
+                  <strong style={{ fontSize: 13 }}>{c.nombre}</strong> <span style={{ fontSize: 11.5, color: 'var(--slate)' }}>· {c.amie || 's/AMIE'} · {c.canton || ''}</span>
+                </button>))}
+            </div>
+          )}
+        </div>
+
+        {sel && (
+          <div style={{ marginTop: 14, padding: 14, border: '1px solid var(--line, #e2e8f0)', borderRadius: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+              <div>
+                <strong style={{ fontSize: 15 }}>{sel.nombre}</strong>
+                <div style={{ fontSize: 12.5, color: 'var(--slate)' }}>{sel.amie || 's/AMIE'} · {sel.canton || ''} · {lics.length} paralelo{lics.length === 1 ? '' : 's'} registrado{lics.length === 1 ? '' : 's'} para facturación</div>
+              </div>
+              <div>{propiaSel ? <Insignia texto={`Convenio vigente: ${usd(propiaSel.tarifa_por_paralelo)} por paralelo`} color="#6366f1" /> : <Insignia texto="Usa la tarifa por tramos" color="#64748b" />}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', marginTop: 12 }}>
+              <div><label className="fl">Valor mensual por paralelo (USD)</label>
+                <input className="fc" type="number" min="0" max="1000" step="0.01" style={{ width: 170 }} value={valor} onChange={e => setValor(e.target.value)} placeholder="Ej. 3.50" /></div>
+              <div style={{ flex: 1, minWidth: 220 }}><label className="fl">Nota (opcional)</label>
+                <input className="fc" maxLength={300} value={nota} onChange={e => setNota(e.target.value)} placeholder="Ej. convenio anual con la Zona 7" /></div>
+              <button className="btn btn-primary" disabled={!valorValido || trabajando || (propiaSel && Number(propiaSel.tarifa_por_paralelo) === valorNum && (propiaSel.nota || '') === nota.trim())} onClick={() => setConfirma({ tipo: 'fijar' })}>Guardar valor para este colegio</button>
+              {propiaSel && <button className="btn btn-secondary" disabled={trabajando} onClick={() => setConfirma({ tipo: 'quitar' })}>Quitar y volver a tramos</button>}
+            </div>
+            {valorValido && <div style={{ fontSize: 12.5, color: 'var(--slate)', marginTop: 8 }}>Total mensual de este colegio con ese valor: <strong>{usd(valorNum * lics.length)}</strong> ({lics.length} × {usd(valorNum)}). Por tramos pagaría {usd(totalMarginal(datos.tramos.map(t => ({ ...t, tarifa: Number(t.tarifa) })), lics.length))}.</div>}
+          </div>
+        )}
+
+        <h4 style={{ margin: '18px 0 8px' }}>Colegios con valor propio ({filasPropias.length})</h4>
+        {filasPropias.length === 0 ? <p style={{ fontSize: 13, color: 'var(--slate)', margin: 0 }}>Ningún colegio tiene un valor propio: todos pagan por tramos.</p> : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="tbl" style={{ width: '100%' }}>
+              <thead><tr><th>Colegio</th><th>AMIE</th><th>Valor por paralelo</th><th>Paralelos</th><th>Total mensual</th><th>Nota</th><th>Actualizado</th><th /></tr></thead>
+              <tbody>{filasPropias.map(f => (
+                <tr key={f.institucion_id}>
+                  <td><strong>{f.colegio?.nombre || f.institucion_id}</strong></td><td className="mono">{f.colegio?.amie || '—'}</td>
+                  <td>{usd(f.tarifa_por_paralelo)}</td><td>{f.n}</td><td>{usd(f.n * Number(f.tarifa_por_paralelo))}</td>
+                  <td style={{ fontSize: 12.5 }}>{f.nota || '—'}</td><td>{String(f.updated_at || '').slice(0, 10)}</td>
+                  <td><button className="btn btn-ghost btn-sm" onClick={() => f.colegio && elegir(f.colegio)} disabled={!f.colegio}>Editar</button></td>
+                </tr>))}</tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {confirma && sel && (
+        <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget) setConfirma(null); }}>
+          <div className="modal" style={{ maxWidth: 480 }}>
+            <div className="ch"><h3>{confirma.tipo === 'fijar' ? 'Guardar valor para este colegio' : 'Volver a la tarifa por tramos'}</h3></div>
+            <div className="cb">
+              <p style={{ fontSize: 13 }}>
+                {confirma.tipo === 'fijar'
+                  ? <>Los <strong>{lics.length}</strong> paralelo{lics.length === 1 ? '' : 's'} de <strong>{sel.nombre}</strong> pasarán a <strong>{usd(valorNum)}</strong> por mes, y los que registre después también. No cambia a ningún otro colegio.</>
+                  : <>Los paralelos de <strong>{sel.nombre}</strong> volverán a la tarifa por tramos (según su antigüedad). No cambia a ningún otro colegio.</>}
+                {' '}Lo ya pagado o en revisión <strong>conserva su monto</strong>; el cambio queda registrado en la bitácora de auditoría.
+              </p>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <button className="btn btn-secondary" onClick={() => setConfirma(null)}>Cancelar</button>
+                <button className="btn btn-primary" onClick={ejecutar}>Confirmar</button>
               </div>
             </div>
           </div>

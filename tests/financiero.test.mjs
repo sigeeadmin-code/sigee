@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { validarTramos, tarifaPorPosicion, totalMarginal, totalPlano, planTarifas, mesInicio, estadoMes, construirEstadoCuenta, indicadoresMes, filasEstadoCuenta, filasLibro } from '../src/lib/financieroBase.js';
+import { totalPlantel, comprobantesCompartidos, normalizarComprobante, validarTramos, tarifaPorPosicion, totalMarginal, totalPlano, planTarifas, mesInicio, estadoMes, construirEstadoCuenta, indicadoresMes, filasEstadoCuenta, filasLibro } from '../src/lib/financieroBase.js';
 
 const TRAMOS = [{ desde: 1, hasta: 10, tarifa: 5 }, { desde: 11, hasta: 25, tarifa: 4 }, { desde: 26, hasta: null, tarifa: 3 }];
 
@@ -118,3 +118,31 @@ assert.equal(fl[0]['Monto (USD)'], 5);
 assert.equal(fl[0]['Estado'], 'Aprobado');
 
 console.log('OK financiero: todas las pruebas pasaron');
+
+// ── valor propio por colegio: vale solo para ese colegio ──
+const lic = (id, inst, t, tarifa = 5) => ({ id, institucion_id: inst, institucion_nombre: inst, created_at: t, tarifa_mensual: tarifa });
+const licsPrueba = [lic('a1', 'A', '2026-01-01'), lic('a2', 'A', '2026-01-02'), lic('b1', 'B', '2026-01-01'), lic('b2', 'B', '2026-01-02'), lic('b3', 'B', '2026-01-03')];
+const sinPropio = planTarifas(licsPrueba, TRAMOS);
+assert.ok(sinPropio.every(p => p.propia === false), 'sin valor propio todo va por tramos');
+assert.deepEqual(sinPropio.map(p => p.propuesta), [5, 5, 5, 5, 5]);
+const conPropio = planTarifas(licsPrueba, TRAMOS, { A: 3.5 });
+assert.deepEqual(conPropio.filter(p => p.institucion_id === 'A').map(p => p.propuesta), [3.5, 3.5], 'el colegio A paga su valor propio');
+assert.deepEqual(conPropio.filter(p => p.institucion_id === 'B').map(p => p.propuesta), [5, 5, 5], 'el colegio B NO se ve afectado');
+assert.ok(conPropio.filter(p => p.institucion_id === 'A').every(p => p.propia) && conPropio.filter(p => p.institucion_id === 'B').every(p => !p.propia));
+// un valor propio de 0 (colegio exonerado) también es válido y no cae a tramos
+assert.deepEqual(planTarifas(licsPrueba, TRAMOS, { A: 0 }).filter(p => p.institucion_id === 'A').map(p => p.propuesta), [0, 0]);
+// totales: valor propio × n; sin valor propio, marginal por tramos
+assert.equal(totalPlantel(TRAMOS, 12, 3.5), 42);
+assert.equal(totalPlantel(TRAMOS, 12, null), totalMarginal(TRAMOS, 12));
+assert.equal(totalPlantel(TRAMOS, 12), totalMarginal(TRAMOS, 12));
+assert.equal(totalPlantel(TRAMOS, 0, 3.5), 0);
+
+// ── control contable: el mismo comprobante en más de un plantel se marca ──
+const pago = (comp, inst) => ({ comprobante_num: comp, licencias_paralelo: { institucion_id: inst } });
+const dup = comprobantesCompartidos([pago('001-123', 'A'), pago(' 001-123 ', 'B'), pago('777', 'A'), pago('777', 'A'), pago('', 'C'), pago(null, 'D')]);
+assert.ok(dup.has(normalizarComprobante('001-123')), 'mismo comprobante en dos planteles: se marca');
+assert.ok(!dup.has('777'), 'un comprobante repetido dentro del MISMO plantel es normal (paga varios meses/paralelos)');
+assert.equal(dup.size, 1);
+assert.equal(comprobantesCompartidos([]).size, 0);
+assert.equal(normalizarComprobante(' 00 1-123 '), '001-123');
+console.log('OK financiero: valor propio por colegio y comprobantes');

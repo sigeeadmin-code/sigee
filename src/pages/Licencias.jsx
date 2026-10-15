@@ -53,7 +53,7 @@ function VistaPlantel({ profile, institucionId }) {
 
   async function registrar(gradoId, paraleloId) {
     try {
-      await crearLicenciaParalelo(institucionId, gradoId, paraleloId, 5.00, profile.id);
+      await crearLicenciaParalelo(institucionId, gradoId, paraleloId, null, profile.id);   // la tarifa la fija la base según el colegio
       await cargar();
       setToast({ tipo: 'ok', msg: 'Paralelo registrado para facturación. Ahora reporta el pago con su comprobante.' });
     } catch (err) {
@@ -70,8 +70,8 @@ function VistaPlantel({ profile, institucionId }) {
   }
   async function enviarPago(e) {
     e.preventDefault();
-    if (!form.meses.length || !form.comprobante_num.trim() || !form.monto) {
-      setToast({ tipo: 'err', msg: 'Seleccione al menos un mes, el monto y el número de comprobante.' });
+    if (!form.meses.length || !form.comprobante_num.trim()) {
+      setToast({ tipo: 'err', msg: 'Seleccione al menos un mes y escriba el número de comprobante.' });
       return;
     }
     setSaving(true);
@@ -164,8 +164,9 @@ function VistaPlantel({ profile, institucionId }) {
                   </div>
                 </div>
                 <div className="full">
-                  <label className="fl">Monto pagado por mes ($)</label>
-                  <input className="fc" type="number" step="0.01" value={form.monto} onChange={e => setForm(f => ({ ...f, monto: e.target.value }))} />
+                  <label className="fl">Valor por mes ($) — según la tarifa de tu colegio</label>
+                  <input className="fc" type="number" step="0.01" value={form.monto} readOnly disabled title="Lo fija SIGEE; no se puede cambiar aquí" />
+                  {form.meses.length > 0 && <div style={{ fontSize: 12, color: 'var(--slate)', marginTop: 4 }}>Total a pagar por {form.meses.length} mes{form.meses.length === 1 ? '' : 'es'}: <strong>${(Number(form.monto) * form.meses.length).toFixed(2)}</strong></div>}
                 </div>
                 <div className="full">
                   <label className="fl">N.º de comprobante</label>

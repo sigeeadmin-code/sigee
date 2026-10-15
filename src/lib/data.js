@@ -1334,9 +1334,10 @@ export async function eliminarHermanoManual(id) {
 export async function fetchLicenciasParalelo(institucionId) {
   return sel('licencias_paralelo_resumen', '*', q => institucionId ? q.eq('institucion_id', institucionId) : q);
 }
-export async function crearLicenciaParalelo(institucionId, gradoId, paraleloId, tarifaMensual, creadoPor) {
+export async function crearLicenciaParalelo(institucionId, gradoId, paraleloId, _tarifaIgnorada, creadoPor) {
+  // La tarifa NO la fija el plantel: la calcula la base (valor propio del colegio o tramos). Se omite a propósito.
   const { data, error } = await supabase.from('licencias_paralelo')
-    .insert({ institucion_id: institucionId, grado_id: gradoId, paralelo_id: paraleloId, tarifa_mensual: tarifaMensual, creado_por: creadoPor })
+    .insert({ institucion_id: institucionId, grado_id: gradoId, paralelo_id: paraleloId, creado_por: creadoPor })
     .select().single();
   if (error) throw error;
   return data;
@@ -1352,13 +1353,11 @@ export async function fetchPagosPendientesGlobal() {
   return sel('licencias_paralelo_pagos', '*, licencias_paralelo!inner(institucion_id, grado_id, paralelo_id, tarifa_mensual, institucion:instituciones(nombre), grado:grados(nombre), paralelo:paralelos(nombre))',
     q => q.eq('estado', 'pendiente_revision').order('fecha_reporte'));
 }
-export async function reportarPagoMeses(licenciaId, meses, anio, montoPorMes, comprobanteNum, reportadoPor) {
-  const filas = meses.map(mes => ({
-    licencia_paralelo_id: licenciaId, anio, mes, monto: montoPorMes,
-    comprobante_num: comprobanteNum, reportado_por: reportadoPor
-  }));
-  const { error } = await supabase.from('licencias_paralelo_pagos').insert(filas);
-  if (error) throw error;
+// El monto de cada mes lo fija la base según la tarifa del paralelo; un mes rechazado se puede volver a reportar.
+export async function reportarPagoMeses(licenciaId, meses, anio, _montoIgnorado, comprobanteNum) {
+  const { data, error } = await supabase.rpc('reportar_pago_licencia', { p_licencia: licenciaId, p_anio: anio, p_meses: meses, p_comprobante: comprobanteNum });
+  if (error) throw new Error(error.message);
+  return data;
 }
 export async function revisarPagoLicencia(pagoId, aprobado, revisadoPor, notas) {
   const { error } = await supabase.from('licencias_paralelo_pagos').update({
@@ -2071,16 +2070,16 @@ export async function guardarTramosTarifa(nuevos, previos) {
   if (quitar.length) { const { error } = await supabase.from('licencias_tarifas_tramos').delete().in('id', quitar); if (error) throw error; }
 }
 export async function fetchFinancieroDatos(anio) {
-  const [licencias, pagos, tramos, config] = await Promise.all([
+  const [licencias, pagos, tramos, config, tarifasPlantel] = await Promise.all([
     todasLasFilas('licencias_paralelo_resumen', '*'),
     todasLasFilas('licencias_paralelo_pagos', '*', q => q.eq('anio', anio)),
-    fetchTramosTarifa(), fetchConfigLicencias()
+    fetchTramosTarifa(), fetchConfigLicencias(), fetchTarifasPlantel()
   ]);
-  return { licencias, pagos, tramos, config };
+  return { licencias, pagos, tramos, config, tarifasPlantel };
 }
 export async function fetchLibroCobros(anio) {
   return todasLasFilas('licencias_paralelo_pagos',
-    '*, licencias_paralelo!inner(institucion:instituciones(nombre, amie), grado:grados(nombre), paralelo:paralelos(nombre))',
+    '*, licencias_paralelo!inner(institucion_id, institucion:instituciones(nombre, amie), grado:grados(nombre), paralelo:paralelos(nombre))',
     q => q.eq('anio', anio));
 }
 // Cambia la tarifa mensual de los paralelos indicados (agrupa por tarifa). Lo ya pagado conserva su monto.
@@ -2299,4 +2298,25 @@ export async function fetchEstudiantesDeTutor(docenteId) {
 export async function actualizarEstudianteComoTutor(estudianteId, campos) {
   const { error } = await supabase.rpc('actualizar_estudiante_como_tutor', { p_estudiante: estudianteId, p: campos });
   if (error) throw new Error(error.message);
+}
+
+/* ── Valor del cobro por paralelo de cada colegio (solo vale para ese colegio) ── */
+export async function fetchTarifasPlantel() {
+  const { data, error } = await supabase.from('licencias_tarifa_plantel').select('institucion_id, tarifa_por_paralelo, nota, updated_at');
+  if (error) throw error;
+  return data || [];
+}
+// Colegios (ligero: solo lo necesario para buscarlos), con paginación porque son más de 900.
+export async function fetchColegiosParaTarifa() {
+  return todasLasFilas('instituciones', 'id, nombre, amie, canton');
+}
+export async function fijarTarifaPlantel(institucionId, tarifa, nota) {
+  const { data, error } = await supabase.rpc('fijar_tarifa_plantel', { p_inst: institucionId, p_tarifa: tarifa, p_nota: nota || null });
+  if (error) throw new Error(error.message);
+  return data;   // paralelos actualizados
+}
+export async function quitarTarifaPlantel(institucionId) {
+  const { data, error } = await supabase.rpc('quitar_tarifa_plantel', { p_inst: institucionId });
+  if (error) throw new Error(error.message);
+  return data;
 }
