@@ -1056,8 +1056,8 @@ export async function crearUsuario(datos) {
 
 // ── Académico: docentes simples + materias por paralelo + alumnos detalle ──
 export async function fetchDocentesSimple(institucionId) {
-  const rows = await sel('docentes', 'id, nombres, apellidos, cedula', q => q.eq('institucion_id', institucionId).eq('activo', true));
-  return rows.map(d => ({ id: d.id, nombre: `${d.apellidos || ''} ${d.nombres || ''}`.trim(), cedula: d.cedula }));
+  const rows = await sel('docentes', 'id, nombres, apellidos, cedula, especialidad, area', q => q.eq('institucion_id', institucionId).eq('activo', true));
+  return rows.map(d => ({ id: d.id, nombre: `${d.apellidos || ''} ${d.nombres || ''}`.trim(), cedula: d.cedula, especialidad: d.especialidad || '', area: d.area || '' }));
 }
 export async function fetchMateriasParalelo(paraleloId, periodoId) {
   const [cargas, materias, docentes] = await Promise.all([
@@ -2349,4 +2349,12 @@ export async function quitarTarifaPlantel(institucionId) {
   const { data, error } = await supabase.rpc('quitar_tarifa_plantel', { p_inst: institucionId });
   if (error) throw new Error(error.message);
   return data;
+}
+
+// ¿La especialidad / área de trabajo del docente coincide con la materia? Solo sirve para SUGERIR al elegir docente (no asigna nada).
+export function docenteCoincideConMateria(docente, nombreMateria) {
+  const toks = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length >= 4).map(w => w.slice(0, 5));
+  const m = new Set(toks(nombreMateria));
+  if (!m.size) return false;
+  return [...toks(docente.especialidad), ...toks(docente.area)].some(w => m.has(w));
 }

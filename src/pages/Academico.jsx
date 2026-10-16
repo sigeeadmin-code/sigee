@@ -6,7 +6,7 @@ import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchGradosConParalelos, crearGrado, actualizarGrado, eliminarGrado,
   crearParalelo, actualizarParalelo, eliminarParalelo,
-  fetchPeriodos, fetchDocentesSimple, fetchMaterias, crearMateria, eliminarMateria,
+  fetchPeriodos, fetchDocentesSimple, docenteCoincideConMateria, fetchMaterias, crearMateria, eliminarMateria,
   crearPeriodo, activarPeriodo, eliminarPeriodo,
   fetchMateriasParalelo, crearMateriaParalelo, actualizarMateriaParalelo, eliminarMateriaParalelo,
   fetchEstudiantesParaleloDetalle, matricularEstudiante, actualizarAlumnoDetalle,
@@ -674,6 +674,8 @@ function MateriasTab({ grado, materias, paralelo, periodoActivo, materiasCatalog
   const [editItem, setEditItem] = useState(null);
   const [form, setForm] = useState({ materiaId: '', materiaNueva: '', horasSemana: 4, docenteId: '' });
   const [saving, setSaving] = useState(false);
+  const nombreMateriaForm = form.materiaNueva || (materiasCatalogo.find(m => m.id === form.materiaId)?.nombre) || editItem?.materiaNombre || '';
+  const docentesOrdenados = docentes.map(d => ({ ...d, sugerido: docenteCoincideConMateria(d, nombreMateriaForm) })).sort((x, y) => Number(y.sugerido) - Number(x.sugerido));
 
   function abrirCrear() {
     setEditItem(null);
@@ -808,8 +810,9 @@ function MateriasTab({ grado, materias, paralelo, periodoActivo, materiasCatalog
                   <label className="fl">Docente</label>
                   <select className="fc" value={form.docenteId} onChange={e => setForm(f => ({ ...f, docenteId: e.target.value }))}>
                     <option value="">Sin asignar (pendiente)</option>
-                    {docentes.map(d => <option key={d.id} value={d.id}>{d.nombre}</option>)}
+                    {docentesOrdenados.map(d => <option key={d.id} value={d.id}>{d.sugerido ? '★ ' : ''}{d.nombre}{d.sugerido && d.especialidad ? ` — ${d.especialidad}` : ''}</option>)}
                   </select>
+                  {docentesOrdenados.some(d => d.sugerido) && <div style={{ fontSize: 11.5, color: 'var(--slate)', marginTop: 4 }}>★ Docentes cuya especialidad o área de trabajo coincide con la materia.</div>}
                 </div>
               </div>
             </div>
