@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
-import { fetchBaseDocentesPlantel, buscarBaseDocentes, asignarDocenteAMiPlantel } from '../lib/data.js';
+import { fetchBaseDocentesPlantel, buscarBaseDocentes, asignarDocenteAMiPlantel, incorporarDocenteDeBase } from '../lib/data.js';
 
 // "Base de docentes" vista por el administrador de un PLANTEL. Viene desactivada: la activa el Admin global.
 // Solo lectura, y solo lo que el Admin global asignó a este plantel desde la base central.
@@ -31,11 +31,17 @@ export default function BaseDocentesPlantel() {
     setBuscando(false);
   }
   async function asignar(r) {
-    if (!window.confirm(`¿Asignar a ${r.nombre} (${r.cedula || 's/c'}) a ${institucion?.nombre}?\n\nQuedará registrado en tu plantel y ya no estará disponible para otros colegios.`)) return;
+    if (!window.confirm(`¿Asignar a ${r.nombre} (${r.cedula || 's/c'}) a ${institucion?.nombre}?\n\nQuedará registrado en tu plantel, con su ficha en Docentes, y ya no estará disponible para otros colegios.`)) return;
     setAsignando(r.id); setErrBusq('');
     try {
       await asignarDocenteAMiPlantel(r.id);
-      setAviso(`${r.nombre} quedó asignado a tu plantel.`);
+      let msg = `${r.nombre} quedó asignado a tu plantel.`;
+      try {
+        const f = await incorporarDocenteDeBase(r.id, institucion.id);
+        msg = f.creada ? `${r.nombre} quedó asignado a tu plantel y su ficha ya está en Docentes${f.dudoso ? ' (revisa que apellidos y nombres estén bien separados)' : ''}.`
+          : `${r.nombre} quedó asignado a tu plantel (ya tenía ficha en Docentes).`;
+      } catch (e2) { msg += ' Pero no se pudo crear su ficha en Docentes: ' + (e2.message || e2); }
+      setAviso(msg);
       setRes(rs => (rs || []).map(x => x.id === r.id ? { ...x, ya_en_mi_plantel: true } : x));
       await recargar();
     } catch (e) { setErrBusq(e.message || 'No se pudo asignar.'); }

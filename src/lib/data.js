@@ -3,7 +3,7 @@ import { crearClienteBackend } from './backend.js';
 import { combinarCatalogo, clave } from './niveles.js';
 import { filtroOr } from './centralesBase.js';
 import { filaParaGuardar, agruparPorColumnas, cedulaCentral } from './importCentral.js';
-import { planAsignacion, planCruce } from './asignarDocentes.js';
+import { planAsignacion, planCruce, docenteDesdeBase } from './asignarDocentes.js';
 import { palabraClave, coincideBusqueda } from './fichaAsistencia.js';
 import { fetchCalendario } from './calendario.js';
 
@@ -2274,6 +2274,20 @@ export async function asignarDocenteAMiPlantel(baseId) {
   const { data, error } = await supabase.rpc('asignar_docente_a_mi_plantel', { p_base_id: baseId });
   if (error) throw new Error(error.message);
   return data;
+}
+// Tras asignar un docente de la base central al plantel, se crea su ficha en "Docentes" con los mismos datos y el mismo
+// criterio que usa el Admin global (apellidos/nombres, título y especialidad). Si ya hay una ficha con esa cédula, no se duplica.
+export async function incorporarDocenteDeBase(baseId, institucionId) {
+  const { data: b, error } = await supabase.from('base_docentes').select('id, cedula, nombre, especialidad, titulos').eq('id', baseId).single();
+  if (error) throw new Error(error.message);
+  const variantes = c => { const x = String(c || '').trim(); return x.startsWith('0') ? [x, x.slice(1)] : [x, '0' + x]; };
+  const { data: ya, error: e2 } = await supabase.from('docentes').select('id').eq('institucion_id', institucionId).in('cedula', variantes(b.cedula)).limit(1);
+  if (e2) throw new Error(e2.message);
+  if (ya?.length) return { creada: false, yaExistia: true, dudoso: false };
+  const { fila, dudoso } = docenteDesdeBase(b, institucionId);
+  const { error: e3 } = await supabase.from('docentes').insert({ ...fila, activo: true });
+  if (e3) throw new Error(e3.message);
+  return { creada: true, yaExistia: false, dudoso };
 }
 export async function actualizarRepresentanteComoTutor(representanteId, campos) {
   const { error } = await supabase.rpc('actualizar_representante_como_tutor', { p_representante: representanteId, p: campos });
