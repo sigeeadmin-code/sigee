@@ -6,7 +6,7 @@ import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchGradosConParalelos, crearGrado, actualizarGrado, eliminarGrado,
   crearParalelo, actualizarParalelo, eliminarParalelo,
-  fetchPeriodos, fetchDocentesSimple, docenteCoincideConMateria, fetchMaterias, crearMateria, eliminarMateria,
+  fetchPeriodos, fetchDocentesSimple, docenteCoincideConMateria, fetchTiposBachillerato, fetchFigurasProfesionales, fetchBachilleratosPlantel, fetchMaterias, crearMateria, eliminarMateria,
   crearPeriodo, activarPeriodo, eliminarPeriodo,
   fetchMateriasParalelo, crearMateriaParalelo, actualizarMateriaParalelo, eliminarMateriaParalelo,
   fetchEstudiantesParaleloDetalle, matricularEstudiante, actualizarAlumnoDetalle,
@@ -169,27 +169,38 @@ export default function Academico() {
 function CoursePanel({ grados, gradoSelId, onSelect, institucionId, recargar, showToast }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState({ nombre: '', nivel: '', orden: 0 });
+  const [form, setForm] = useState({ nombre: '', nivel: '', orden: 0, tipo_bachillerato: '', figura_id: '' });
   const [saving, setSaving] = useState(false);
+  const [bach, setBach] = useState({ tipos: [], figuras: [], catTipos: [], catFiguras: [] });
+  useEffect(() => {
+    if (!modalOpen) return;
+    Promise.all([fetchTiposBachillerato(), fetchFigurasProfesionales(), fetchBachilleratosPlantel(institucionId)])
+      .then(([catTipos, catFiguras, h]) => setBach({ tipos: h.tipos, figuras: h.figuras, catTipos, catFiguras })).catch(() => {});
+  }, [modalOpen, institucionId]);
+  const esBach = nivelCanonico({ nivel: form.nivel, nombre: form.nombre }) === 'BACHILLERATO';
+  const tipoSel = bach.catTipos.find(t => t.codigo === form.tipo_bachillerato);
 
   function abrirCrear() {
     setEditId(null);
-    setForm({ nombre: '', nivel: '', orden: grados.length });
+    setForm({ nombre: '', nivel: '', orden: grados.length, tipo_bachillerato: '', figura_id: '' });
     setModalOpen(true);
   }
   function abrirEditar(g, e) {
     e.stopPropagation();
     setEditId(g.id);
-    setForm({ nombre: g.nombre, nivel: g.nivel || '', orden: g.orden || 0 });
+    setForm({ nombre: g.nombre, nivel: g.nivel || '', orden: g.orden || 0, tipo_bachillerato: g.tipo_bachillerato || '', figura_id: g.figura_id || '' });
     setModalOpen(true);
   }
   async function guardar(e) {
     e.preventDefault();
     if (!form.nombre.trim()) return;
+    if (esBach && bach.tipos.length && !form.tipo_bachillerato) { showToast('err', 'Elige el tipo de bachillerato del curso.'); return; }
+    if (esBach && tipoSel?.requiere_figura && !form.figura_id) { showToast('err', 'Elige la figura profesional del curso.'); return; }
+    const payload = { ...form, tipo_bachillerato: esBach && form.tipo_bachillerato ? form.tipo_bachillerato : null, figura_id: esBach && tipoSel?.requiere_figura && form.figura_id ? form.figura_id : null };
     setSaving(true);
     try {
-      if (editId) await actualizarGrado(editId, form);
-      else await crearGrado(institucionId, form);
+      if (editId) await actualizarGrado(editId, payload);
+      else await crearGrado(institucionId, payload);
       setModalOpen(false);
       await recargar();
       refrescarDatos();
@@ -231,7 +242,7 @@ function CoursePanel({ grados, gradoSelId, onSelect, institucionId, recargar, sh
           >
             <div>
               <div style={{ fontSize: 13, fontWeight: g.id === gradoSelId ? 700 : 500 }}>{g.nombre}</div>
-              <div style={{ fontSize: 11, color: 'var(--slate)' }}>{g.paralelos.length} paralelo{g.paralelos.length !== 1 ? 's' : ''}</div>
+              <div style={{ fontSize: 11, color: 'var(--slate)' }}>{g.paralelos.length} paralelo{g.paralelos.length !== 1 ? 's' : ''}{g.tipo_bachillerato ? ` · ${({ ciencias: 'Ciencias', tecnico: 'Técnico', tecnico_productivo: 'BTP', internacional: 'BI' })[g.tipo_bachillerato] || g.tipo_bachillerato}` : ''}</div>
             </div>
             <div style={{ display: 'flex', gap: 4 }}>
               <button className="btn btn-ghost btn-sm" onClick={e => abrirEditar(g, e)}><span className="ti ti-pencil" /></button>
@@ -267,6 +278,24 @@ function CoursePanel({ grados, gradoSelId, onSelect, institucionId, recargar, sh
                   <label className="fl">Nombre del curso</label>
                   <input className="fc" value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))} placeholder="Ej: 8vo EGB" required />
                 </div>
+                {esBach && (
+                  <div className="full">
+                    <label className="fl">Tipo de bachillerato</label>
+                    {bach.tipos.length === 0
+                      ? <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>Tu plantel aún no tiene bachilleratos habilitados. Habilítalos en <strong>Mi plantel → Bachilleratos</strong> (o pídelo al Administrador global); mientras tanto el curso se crea sin tipo.</p>
+                      : <select className="fc" value={form.tipo_bachillerato} onChange={e => setForm(f => ({ ...f, tipo_bachillerato: e.target.value, figura_id: '' }))}>
+                          <option value="">— Elige el tipo —</option>
+                          {bach.catTipos.filter(t => bach.tipos.includes(t.codigo) || t.codigo === form.tipo_bachillerato).map(t => <option key={t.codigo} value={t.codigo}>{t.nombre}</option>)}
+                        </select>}
+                    {tipoSel?.requiere_figura && (
+                      <select className="fc" style={{ marginTop: 8 }} value={form.figura_id} onChange={e => setForm(f => ({ ...f, figura_id: e.target.value }))}>
+                        <option value="">— Elige la figura profesional —</option>
+                        {[...new Set(bach.catFiguras.filter(x => x.tipo_codigo === tipoSel.codigo).map(x => x.area))].map(ar => (
+                          <optgroup key={ar} label={`Área ${ar}`}>
+                            {bach.catFiguras.filter(x => x.tipo_codigo === tipoSel.codigo && x.area === ar && (bach.figuras.includes(x.id) || x.id === form.figura_id)).map(x => <option key={x.id} value={x.id}>{x.nombre}</option>)}
+                          </optgroup>))}
+                      </select>)}
+                  </div>)}
                 <div>
                   <label className="fl">Orden</label>
                   <input className="fc" type="number" value={form.orden} onChange={e => setForm(f => ({ ...f, orden: Number(e.target.value) }))} />
@@ -732,12 +761,25 @@ function MateriasTab({ grado, materias, paralelo, periodoActivo, materiasCatalog
     setCargandoNivel(true);
     try {
       const cat = await fetchCatalogoNivel(institucionId);
-      const nombres = cat[nivelDelCurso].nombres;
+      let nombres = cat[nivelDelCurso].nombres;
+      const horasPorNombre = {};
+      const tipo = nivelDelCurso === 'BACHILLERATO' ? grado.tipo_bachillerato : null;
+      if (tipo === 'tecnico' || tipo === 'tecnico_productivo') {
+        const fig = (await fetchFigurasProfesionales()).find(f => f.id === grado.figura_id);
+        if (!fig) { showToast('err', 'Este curso no tiene figura profesional. Edítalo y elígela.'); setCargandoNivel(false); return; }
+        const modulo = `Formación técnica: ${fig.nombre}`;
+        if (tipo === 'tecnico') {
+          nombres = [...nombres, modulo];
+          horasPorNombre[modulo] = /\b3|3ro|tercer/i.test(grado.nombre) ? 25 : 10; // horas técnicas semanales del BGU Técnico (10 / 10 / 25)
+        } else { nombres = [modulo]; }
+      } else if (tipo === 'internacional') {
+        showToast('err', 'El Bachillerato Internacional no tiene plan por defecto: agrega sus materias con "+ Agregar materia".'); setCargandoNivel(false); return;
+      }
       const yaTiene = new Set(materias.map(m => clave(m.materiaNombre)));
       const faltan = nombres.filter(n => !yaTiene.has(clave(n)));
       if (!faltan.length) { showToast('ok', `Este paralelo ya tiene todas las materias de ${NIVEL_LABEL[nivelDelCurso]}.`); setCargandoNivel(false); return; }
       if (!window.confirm(`Se agregarán ${faltan.length} materia(s) de ${NIVEL_LABEL[nivelDelCurso]} a ${paralelo.nombre} (sin docente; lo asignas después):\n\n• ${faltan.join('\n• ')}`)) { setCargandoNivel(false); return; }
-      const r = await cargarMateriasDelNivel({ institucionId, paraleloId: paralelo.id, periodoId: periodoActivo.id, nombres });
+      const r = await cargarMateriasDelNivel({ institucionId, paraleloId: paralelo.id, periodoId: periodoActivo.id, nombres, horasPorNombre });
       await recargarDetalle();
       await recargarCatalogo();
       showToast('ok', `Se agregaron ${r.agregadas} materia(s) al paralelo.`);

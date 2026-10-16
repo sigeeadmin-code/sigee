@@ -3,6 +3,7 @@ import { useSession } from '../lib/SessionContext.jsx';
 import { supabase } from '../lib/supabase.js';
 import { fetchPlanteles, actualizarPlantel } from '../lib/data.js';
 import PermisosPlantel from '../components/PermisosPlantel.jsx';
+import BachilleratosPlantel from '../components/BachilleratosPlantel.jsx';
 
 const SOST_LABEL = { Fiscal: 'Fiscal', Particular: 'Particular', Fiscomisional: 'Fiscomisional', Municipal: 'Municipal' };
 const JORNADAS_OPTS = ['Matutina', 'Vespertina', 'Nocturna'];
@@ -297,6 +298,12 @@ export default function MiPlantel() {
       {toast && <div className={'toast ' + (toast.tipo === 'ok' ? 'ok' : 'err')}>{toast.msg}</div>}
 
       <PermisosPlantel />
+      {institucion?.id && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <div className="ch"><div><h3 style={{ margin: 0 }}>🎓 Bachilleratos que ofrece tu plantel</h3><div style={{ fontSize: 11, color: 'var(--slate)' }}>Habilita los que ofrece tu colegio (puedes tener Ciencias y Técnico a la vez). Al crear un curso de Bachillerato elegirás entre ellos. El Administrador global también puede habilitarlos.</div></div></div>
+          <div className="cb"><BachilleratosPlantel institucionId={institucion.id} /></div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1684,7 +1684,7 @@ export async function guardarCatalogoNivel(institucionId, nivel, nombres) {
  * Carga al paralelo las materias del catálogo del nivel que todavía no tiene (sin docente; se asigna después).
  * Reutiliza las materias ya creadas en la institución (sin importar tildes ni mayúsculas) y crea las que falten.
  */
-export async function cargarMateriasDelNivel({ institucionId, paraleloId, periodoId, nombres, horasSemana = 4 }) {
+export async function cargarMateriasDelNivel({ institucionId, paraleloId, periodoId, nombres, horasSemana = 4, horasPorNombre = {} }) {
   const [materias, cargas] = await Promise.all([
     fetchMaterias(institucionId),
     sel('docente_materia', 'materia_id', q => q.eq('paralelo_id', paraleloId).eq('periodo_id', periodoId))
@@ -1696,7 +1696,7 @@ export async function cargarMateriasDelNivel({ institucionId, paraleloId, period
     let m = porClave.get(clave(nombre));
     if (!m) { m = await crearMateria(institucionId, { nombre }); porClave.set(clave(nombre), m); creadasEnCatalogo++; }
     if (yaCargadas.has(m.id)) { yaExistian++; continue; }
-    await crearMateriaParalelo({ materiaId: m.id, paraleloId, periodoId, docenteId: null, horasSemana });
+    await crearMateriaParalelo({ materiaId: m.id, paraleloId, periodoId, docenteId: null, horasSemana: horasPorNombre[nombre] ?? horasSemana });
     yaCargadas.add(m.id); agregadas++;
   }
   return { agregadas, yaExistian, creadasEnCatalogo };
@@ -2262,6 +2262,34 @@ export async function guardarPermisoPlantel(institucionId, campo, valor, porProf
 // Lo de la base central de docentes que el Admin global asignó a ESTE plantel (la RLS exige además que el módulo esté activo).
 export async function fetchBaseDocentesPlantel(institucionId) {
   return paginarTodo(() => supabase.from('base_docentes').select('id, cedula, nombre, canton, categoria, especialidad, titulos').eq('institucion_id', institucionId).order('nombre').order('id'));
+}
+
+/* ── Bachilleratos (Ciencias, Técnico, Técnico Productivo, Internacional) y figuras profesionales ── */
+export const fetchTiposBachillerato = () => sel('tipos_bachillerato', '*', q => q.eq('activo', true).order('orden'));
+export const fetchFigurasProfesionales = () => sel('figuras_profesionales', '*', q => q.eq('activo', true).order('tipo_codigo').order('area').order('nombre'));
+export async function fetchBachilleratosPlantel(institucionId) {
+  const [t, f] = await Promise.all([
+    sel('instituciones_bachilleratos', 'tipo_codigo, activo', q => q.eq('institucion_id', institucionId)),
+    sel('instituciones_figuras', 'figura_id, activo', q => q.eq('institucion_id', institucionId))
+  ]);
+  return { tipos: t.filter(x => x.activo).map(x => x.tipo_codigo), figuras: f.filter(x => x.activo).map(x => x.figura_id) };
+}
+export async function setBachilleratoPlantel(institucionId, tipoCodigo, activo, userId) {
+  const { error } = await supabase.from('instituciones_bachilleratos')
+    .upsert({ institucion_id: institucionId, tipo_codigo: tipoCodigo, activo, habilitado_por: userId || null, updated_at: new Date().toISOString() });
+  if (error) throw new Error(error.message);
+}
+export async function setFigurasPlantel(institucionId, figuraIds, activo, userId) {
+  if (!figuraIds.length) return;
+  const now = new Date().toISOString();
+  const { error } = await supabase.from('instituciones_figuras')
+    .upsert(figuraIds.map(id => ({ institucion_id: institucionId, figura_id: id, activo, habilitado_por: userId || null, updated_at: now })));
+  if (error) throw new Error(error.message);
+}
+export async function contarCursosConBachillerato(institucionId, tipoCodigo) {
+  const { count, error } = await supabase.from('grados').select('id', { count: 'exact', head: true }).eq('institucion_id', institucionId).eq('tipo_bachillerato', tipoCodigo);
+  if (error) return 0;
+  return count || 0;
 }
 
 // Búsqueda en TODA la base central (solo docentes sin plantel o ya asignados al propio) y asignación al plantel del administrador.

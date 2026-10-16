@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
 import { fetchPlanteles, fetchModulosPlantel, setModuloPlantel } from '../lib/data.js';
+import BachilleratosPlantel from '../components/BachilleratosPlantel.jsx';
 
 // Módulos que el Admin global habilita plantel por plantel. Por defecto TODOS están desactivados.
 // Hoy: "Base de docentes" (el admin del plantel ve lo que el Admin global le asignó de la base central).
@@ -14,6 +15,7 @@ export default function ModulosPlantel() {
   const [filtro, setFiltro] = useState('todos');    // todos | activos | inactivos
   const [guardando, setGuardando] = useState(null);
   const [pagina, setPagina] = useState(1);
+  const [bachPlantel, setBachPlantel] = useState(null);
   const porPagina = 25;
 
   const cargar = useCallback(async () => {
@@ -87,10 +89,10 @@ export default function ModulosPlantel() {
 
       <div className="card">
         <table className="data" style={{ width: '100%' }}>
-          <thead><tr><th>AMIE</th><th>Plantel</th><th>Cantón</th><th>Base de docentes</th><th>Acción</th></tr></thead>
+          <thead><tr><th>AMIE</th><th>Plantel</th><th>Cantón</th><th>Base de docentes</th><th>Acción</th><th>Bachilleratos</th></tr></thead>
           <tbody>
-            {cargando && <tr><td colSpan={5} style={{ textAlign: 'center', padding: 20 }}>Cargando…</td></tr>}
-            {!cargando && visibles.length === 0 && <tr><td colSpan={5} style={{ textAlign: 'center', padding: 20 }} className="muted">Sin resultados.</td></tr>}
+            {cargando && <tr><td colSpan={6} style={{ textAlign: 'center', padding: 20 }}>Cargando…</td></tr>}
+            {!cargando && visibles.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', padding: 20 }} className="muted">Sin resultados.</td></tr>}
             {visibles.map(p => {
               const on = !!activos[p.id]?.activo;
               return (
@@ -104,11 +106,21 @@ export default function ModulosPlantel() {
                       {guardando === p.id ? '…' : on ? 'Desactivar' : 'Activar'}
                     </button>
                   </td>
+                  <td><button className="btn btn-secondary btn-sm" onClick={() => setBachPlantel(p)}>🎓 Configurar</button></td>
                 </tr>);
             })}
           </tbody>
         </table>
       </div>
+      {bachPlantel && (
+        <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget) setBachPlantel(null); }}>
+          <div className="modal" style={{ maxWidth: 760, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div className="modal-h"><h3>Bachilleratos de {bachPlantel.nombre}</h3></div>
+            <div className="modal-b"><BachilleratosPlantel institucionId={bachPlantel.id} /></div>
+            <div className="modal-f"><button className="btn btn-primary" onClick={() => setBachPlantel(null)}>Cerrar</button></div>
+          </div>
+        </div>
+      )}
       {filtrados.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 2px' }}>
           <span style={{ fontSize: 12, color: 'var(--slate)' }}>{filtrados.length} plantel{filtrados.length === 1 ? '' : 'es'} · página {actual} de {totalPaginas}</span>
