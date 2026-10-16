@@ -3,8 +3,9 @@ import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchEstudiantePerfil, crearEstudiante, guardarEstudiantePerfil, subirArchivo,
   agregarRepresentante, actualizarRepresentante, quitarRepresentanteDeEstudiante,
-  crearMatricula, reactivarMatricula, fetchGradosConParalelos, fetchPeriodos, fetchEstudiantesParaCarga, cargarEstudiantesLote
+  crearMatricula, reactivarMatricula, fetchGradosConParalelos, fetchPeriodos, fetchEstudiantesParaCarga, cargarEstudiantesLote, crearUsuario
 } from '../lib/data.js';
+import { generarClave } from '../lib/claves.js';
 import { descargarPlantillaExcel, leerExcel, normalizarFecha, validarCedulaEC, exportarFilasExcel } from '../lib/cargaMasiva.js';
 import ImportadorInteligente from '../components/ImportadorInteligente.jsx';
 import { FormAlumno } from '../components/FormulariosPersona.jsx';
@@ -58,6 +59,7 @@ export default function Estudiantes() {
   const [matriculando, setMatriculando] = useState(false);
   const [inteligente, setInteligente] = useState(false);
   const [masivo, setMasivo] = useState(null);
+  const [acceso, setAcceso] = useState(null); // { est, email, password, guardando, error, creado }
 
   useEffect(() => { setEstudiantes(data?.estudiantes || []); }, [data]);
 
@@ -236,6 +238,35 @@ export default function Estudiantes() {
     setTab('alumno');
   }
 
+  function abrirDarAcceso(e) {
+    setAcceso({ est: e, email: '', password: generarClave(), guardando: false, error: '', creado: false });
+    fetchEstudiantePerfil(e.id).then(p => setAcceso(a => (a && a.est.id === e.id && !a.email ? { ...a, email: p?.email || '' } : a))).catch(() => {});
+  }
+  async function crearAccesoEstudiante(ev) {
+    ev.preventDefault();
+    const a = acceso;
+    const email = a.email.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email)) { setAcceso({ ...a, error: 'Escribe un correo válido (con él iniciará sesión).' }); return; }
+    if (a.password.length < 8) { setAcceso({ ...a, error: 'La contraseña debe tener al menos 8 caracteres.' }); return; }
+    setAcceso({ ...a, guardando: true, error: '' });
+    try {
+      const perfil = await fetchEstudiantePerfil(a.est.id);
+      if (!perfil) throw new Error('No se pudo leer la ficha del estudiante.');
+      await crearUsuario({
+        email, password: a.password, rol: 'estudiante', estudiante_id: a.est.id,
+        nombres: perfil.nombres || a.est.nombre, apellidos: perfil.apellidos || a.est.nombre,
+        cedula: perfil.cedula || undefined, telefono: perfil.telefono || undefined
+      });
+      setAcceso(x => ({ ...x, guardando: false, creado: true, email }));
+      setEstudiantes(es => es.map(x => x.id === a.est.id ? { ...x, acceso: true } : x));
+      refrescarDatos();
+    } catch (err) {
+      let msg = err.message || 'No se pudo crear el acceso.';
+      try { const j = await err.context?.json?.(); if (j?.error) msg = j.error; } catch (_) { /* mensaje genérico */ }
+      setAcceso(x => ({ ...x, guardando: false, error: msg }));
+    }
+  }
+
   async function abrirEditar(id) {
     setError('');
     const e = await fetchEstudiantePerfil(id);
@@ -367,7 +398,7 @@ export default function Estudiantes() {
 
       <div className="card">
         <table className="data" style={{ width: '100%' }}>
-          <thead><tr>{global && <><th>AMIE</th><th>Plantel</th></>}<th>Nombre</th><th>Cédula</th><th>Curso</th><th>Estado matrícula</th><th>Activo</th><th>Representante</th><th>Acciones</th></tr></thead>
+          <thead><tr>{global && <><th>AMIE</th><th>Plantel</th></>}<th>Nombre</th><th>Cédula</th><th>Curso</th><th>Estado matrícula</th><th>Activo</th><th>Representante</th><th>Acceso</th><th>Acciones</th></tr></thead>
           <tbody>
             {visibles.map(e => (
               <tr key={e.id}>
@@ -401,6 +432,12 @@ export default function Estudiantes() {
                   )}
                 </td>
                 <td>{e.representante || '—'}</td>
+                <td>
+                  {global ? <span className="muted" style={{ fontSize: 11 }}>—</span>
+                    : e.acceso ? <span className="badge b-ok">Con acceso</span>
+                    : puedeActivarDesactivar ? <button className="btn btn-primary btn-sm" onClick={() => abrirDarAcceso(e)}>🔑 Dar acceso</button>
+                    : <span className="badge b-muted">Sin acceso</span>}
+                </td>
                 <td>{global ? <span className="muted" style={{ fontSize: 11 }}>—</span> : <button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(e.id)}>✏️ Editar</button>}</td>
               </tr>
             ))}
@@ -645,6 +682,50 @@ export default function Estudiantes() {
               )}
             </div>
           </div>
+        </div>
+      )}
+      {acceso && (
+        <div className="modal-bg open" onClick={ev => { if (ev.target === ev.currentTarget && !acceso.guardando) setAcceso(null); }}>
+          {!acceso.creado ? (
+            <form className="modal" onSubmit={crearAccesoEstudiante} style={{ maxWidth: 480 }}>
+              <div className="modal-h"><h3>Dar acceso a {acceso.est.nombre}</h3></div>
+              <div className="modal-b">
+                <p style={{ fontSize: 13, marginBottom: 12 }}>Se creará un usuario con rol <strong>Estudiante</strong> enlazado a su ficha, para que vea sus calificaciones, asistencia y horario.</p>
+                <div className="form-grid">
+                  <div className="full">
+                    <label className="fl">Correo (será su usuario)</label>
+                    <input className="fc" type="email" value={acceso.email} onChange={ev => setAcceso(a => ({ ...a, email: ev.target.value }))} placeholder="estudiante@correo.com" autoFocus />
+                  </div>
+                  <div className="full">
+                    <label className="fl">Contraseña inicial</label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input className="fc" style={{ fontFamily: 'monospace' }} value={acceso.password} onChange={ev => setAcceso(a => ({ ...a, password: ev.target.value }))} />
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAcceso(a => ({ ...a, password: generarClave() }))}>Generar otra</button>
+                    </div>
+                  </div>
+                </div>
+                {acceso.error && <p style={{ color: 'var(--red)', fontSize: 13, marginTop: 10 }}>{acceso.error}</p>}
+              </div>
+              <div className="modal-f">
+                <button type="button" className="btn btn-secondary" disabled={acceso.guardando} onClick={() => setAcceso(null)}>Cancelar</button>
+                <button type="submit" className="btn btn-primary" disabled={acceso.guardando}>{acceso.guardando ? 'Creando…' : 'Crear acceso'}</button>
+              </div>
+            </form>
+          ) : (
+            <div className="modal" style={{ maxWidth: 460 }}>
+              <div className="modal-h"><h3>Acceso creado</h3></div>
+              <div className="modal-b">
+                <p style={{ fontSize: 13, marginBottom: 12 }}>Copia estos datos ahora y entrégalos por un canal seguro: la contraseña no se puede volver a consultar.</p>
+                <div className="form-grid">
+                  <div className="full"><label className="fl">Correo</label><input className="fc" readOnly value={acceso.email} onFocus={ev => ev.target.select()} /></div>
+                  <div className="full"><label className="fl">Contraseña</label><input className="fc" readOnly style={{ fontFamily: 'monospace' }} value={acceso.password} onFocus={ev => ev.target.select()} /></div>
+                </div>
+              </div>
+              <div className="modal-f">
+                <button type="button" className="btn btn-primary" onClick={() => { navigator.clipboard?.writeText(`Correo: ${acceso.email}\nContraseña: ${acceso.password}`); setAcceso(null); }}>Copiar y cerrar</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

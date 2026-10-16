@@ -2264,6 +2264,22 @@ export async function fetchBaseDocentesPlantel(institucionId) {
   return paginarTodo(() => supabase.from('base_docentes').select('id, cedula, nombre, canton, categoria, especialidad, titulos').eq('institucion_id', institucionId).order('nombre').order('id'));
 }
 
+// Búsqueda en TODA la base central (solo docentes sin plantel o ya asignados al propio) y asignación al plantel del administrador.
+export async function buscarBaseDocentes(texto) {
+  const { data, error } = await supabase.rpc('buscar_base_docentes', { p_q: texto, p_limit: 25 });
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+export async function asignarDocenteAMiPlantel(baseId) {
+  const { data, error } = await supabase.rpc('asignar_docente_a_mi_plantel', { p_base_id: baseId });
+  if (error) throw new Error(error.message);
+  return data;
+}
+export async function actualizarRepresentanteComoTutor(representanteId, campos) {
+  const { error } = await supabase.rpc('actualizar_representante_como_tutor', { p_representante: representanteId, p: campos });
+  if (error) throw new Error(error.message);
+}
+
 /* ── Perfil del docente y edición de estudiantes por el docente tutor ─────── */
 export async function fetchMiFichaDocente(profileId) {
   const { data, error } = await supabase.from('docentes').select('*').eq('profile_id', profileId).limit(1).maybeSingle();
