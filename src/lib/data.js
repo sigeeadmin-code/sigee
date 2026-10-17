@@ -2292,6 +2292,11 @@ export async function contarCursosConBachillerato(institucionId, tipoCodigo) {
   return count || 0;
 }
 
+// Docentes activos del plantel que todavía no tienen cuenta de acceso (para el alta masiva de accesos).
+export async function fetchDocentesSinAcceso(institucionId) {
+  return sel('docentes', 'id, nombres, apellidos, cedula, email, telefono', q => q.eq('institucion_id', institucionId).eq('activo', true).is('profile_id', null).order('apellidos'));
+}
+
 // Búsqueda en TODA la base central (solo docentes sin plantel o ya asignados al propio) y asignación al plantel del administrador.
 export async function buscarBaseDocentes(texto) {
   const { data, error } = await supabase.rpc('buscar_base_docentes', { p_q: texto, p_limit: 25 });

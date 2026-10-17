@@ -10,6 +10,7 @@ import { cuentasQueCoinciden } from '../lib/vinculos.js';
 import ImportadorInteligente from '../components/ImportadorInteligente.jsx';
 import { FormDocentePersonales, FormDocenteTitulos } from '../components/FormulariosPersona.jsx';
 import RestablecerClaveModal from '../components/RestablecerClaveModal.jsx';
+import AccesoMasivoDocentes from '../components/AccesoMasivoDocentes.jsx';
 import { descargarPlantillaExcel, leerExcel, normalizarFecha, validarCedulaEC, exportarFilasExcel } from '../lib/cargaMasiva.js';
 
 const PLANTILLA_DOCENTES_COLS = [
@@ -92,6 +93,7 @@ export default function Docentes() {
   const [catalogo, setCatalogo] = useState({ materias: [], grados: [], periodos: [] });
   const [nuevaCarga, setNuevaCarga] = useState({ materiaId: '', gradoId: '', paraleloId: '', periodoId: '' });
   const [restablecer, setRestablecer] = useState(null);
+  const [accesoMasivo, setAccesoMasivo] = useState(false);
   const [acceso, setAcceso] = useState(null); // { docente, email, password, guardando, error, creado }
   const [inteligente, setInteligente] = useState(false);
   const [masivo, setMasivo] = useState(null); // { filas: [{payload, errores, fila}], subiendo, resultado }
@@ -385,6 +387,7 @@ export default function Docentes() {
         <h2>Docentes</h2>
         <div style={{ display: 'flex', gap: 8 }}>
           {esSuperAdmin && <button className="btn btn-secondary" onClick={exportarLista} disabled={filtrados.length === 0} title="Descarga en Excel la lista que ves ahora (con los filtros aplicados)">⬇️ Exportar Excel</button>}
+          {!global && puedeActivarDesactivar && <button className="btn btn-secondary" onClick={() => setAccesoMasivo(true)} title="Crea el usuario y la contraseña de todos los docentes que aún no tienen acceso">🔑 Dar acceso a todos</button>}
           {!global && <button className="btn btn-primary" onClick={() => setInteligente(true)} title="Sube tu lista con las columnas en cualquier orden: yo las detecto y las acomodo">✨ Carga inteligente</button>}
           {!global && <button className="btn btn-ghost" onClick={abrirCargaMasiva}>📥 Carga con plantilla (Excel)</button>}
           {!global && <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo docente</button>}
@@ -428,6 +431,7 @@ export default function Docentes() {
           onClose={() => { setInteligente(false); refrescarDatos(); }}
         />
       )}
+      {accesoMasivo && <AccesoMasivoDocentes institucion={institucion} onClose={() => setAccesoMasivo(false)} onDone={() => refrescarDatos()} />}
       {restablecer && <RestablecerClaveModal usuarios={restablecer} onClose={() => setRestablecer(null)} />}
 
       {acceso && (
