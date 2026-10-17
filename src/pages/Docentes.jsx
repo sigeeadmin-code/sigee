@@ -11,6 +11,7 @@ import ImportadorInteligente from '../components/ImportadorInteligente.jsx';
 import { FormDocentePersonales, FormDocenteTitulos } from '../components/FormulariosPersona.jsx';
 import RestablecerClaveModal from '../components/RestablecerClaveModal.jsx';
 import AccesoMasivoDocentes from '../components/AccesoMasivoDocentes.jsx';
+import { JORNADAS as JORNADAS_TURNO, jornadasDePlantel, normalizarJornadas } from '../lib/jornadas.js';
 import { descargarPlantillaExcel, leerExcel, normalizarFecha, validarCedulaEC, exportarFilasExcel } from '../lib/cargaMasiva.js';
 
 const PLANTILLA_DOCENTES_COLS = [
@@ -633,11 +634,14 @@ export default function Docentes() {
                     <input className="fc" value={modal.categoria || ''} onChange={e => upd('categoria', e.target.value)} /></div>
                   <div><label className="fl">RMU mensual (USD)</label>
                     <input className="fc" type="number" step="0.01" value={modal.rmu ?? 0} onChange={e => upd('rmu', +e.target.value)} /></div>
-                  <div><label className="fl">Jornada</label>
-                    <select className="fc" value={modal.jornada || ''} onChange={e => upd('jornada', e.target.value)}>
-                      <option value="">Seleccione…</option>
-                      {JORNADAS.map(j => <option key={j} value={j}>{j}</option>)}
-                    </select></div>
+                  <div><label className="fl">Jornada(s) en que trabaja</label>
+                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', padding: '8px 2px' }}>
+                      {JORNADAS_TURNO.filter(j => jornadasDePlantel(institucion).includes(j) || normalizarJornadas(modal.jornada).includes(j)).map(j => (
+                        <label key={j} style={{ display: 'flex', gap: 5, alignItems: 'center', fontSize: 13, cursor: 'pointer' }}>
+                          <input type="checkbox" checked={normalizarJornadas(modal.jornada).includes(j)}
+                            onChange={() => { const act = normalizarJornadas(modal.jornada); const nuevo = act.includes(j) ? act.filter(x => x !== j) : [...act, j]; upd('jornada', JORNADAS_TURNO.filter(x => nuevo.includes(x)).join(', ')); }} />{j}
+                        </label>))}
+                    </div></div>
                   <div><label className="fl">Fecha de ingreso</label>
                     <input className="fc" type="date" value={modal.fecha_ingreso || ''} onChange={e => upd('fecha_ingreso', e.target.value)} /></div>
                   <div><label className="fl">Años de servicio</label>

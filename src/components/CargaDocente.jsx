@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
+import { jornadasDePlantel, jornadasDeDocente } from '../lib/jornadas.js';
 import { fetchReporteCargaHoraria, fetchConfigCargaHoraria, guardarConfigCargaHoraria, fetchMinutosPeriodo } from '../lib/data.js';
 import { exportarFilasExcel } from '../lib/cargaMasiva.js';
 
@@ -18,7 +19,9 @@ function estadoDe(d, cfg) {
 // Reporte de carga horaria de los docentes: materias, cursos y paralelos, horas por día / semana / mes,
 // mayor carga, y docentes sin carga o con carga baja (los que tienen un cargo, como inspector, salen como justificados).
 export default function CargaDocente({ institucionId, periodoActivo, showToast }) {
-  const { profile } = useSession();
+  const { profile, institucion } = useSession();
+  const jornadasPlantel = jornadasDePlantel(institucion);
+  const [jornada, setJornada] = useState('');   // '' = todas
   const puedeConfig = ['super_admin', 'admin_plantel'].includes(profile.rolDb);
   const [filas, setFilas] = useState(null);
   const [cfg, setCfg] = useState({ maxima_semana: 30, minima_semana: 20, semanas_mes: 4 });
@@ -39,7 +42,20 @@ export default function CargaDocente({ institucionId, periodoActivo, showToast }
     return () => { vivo = false; };
   }, [institucionId, periodoActivo?.id]);
 
-  const datos = useMemo(() => (filas || []).map(d => ({ ...d, estado: estadoDe(d, cfg), mes: d.horas * cfg.semanas_mes })), [filas, cfg]);
+  // Con una jornada elegida solo cuentan las clases de los paralelos de ESA jornada y salen los docentes que trabajan en ella
+  const datos = useMemo(() => {
+    const base = (filas || []).map(d => {
+      const declaradas = jornadasDeDocente(d.jornada);
+      const enJornadas = [...new Set((d.detalle || []).map(x => x.jornada))];
+      const fuera = declaradas ? enJornadas.filter(j => !declaradas.includes(j)) : [];
+      if (!jornada) return { ...d, declaradas, fuera, sinJornada: !declaradas };
+      const det = (d.detalle || []).filter(x => x.jornada === jornada);
+      return { ...d, declaradas, fuera, sinJornada: !declaradas, detalle: det, horas: det.reduce((a, x) => a + (x.horas || 0), 0), bloques: det.reduce((a, x) => a + (x.bloques || 0), 0),
+        n_materias: det.length, n_paralelos: new Set(det.map(x => x.paralelo + '|' + x.curso)).size, por_dia: d.por_dia_j?.[jornada] || {} };
+    }).filter(d => !jornada || d.detalle.length > 0 || (d.declaradas && d.declaradas.includes(jornada)));
+    return base.map(d => ({ ...d, estado: estadoDe(d, cfg), mes: d.horas * cfg.semanas_mes }));
+  }, [filas, cfg, jornada]);
+  const sinJornadaN = (filas || []).filter(d => !jornadasDeDocente(d.jornada)).length;
   const cuenta = k => datos.filter(d => d.estado.k === k).length;
   const conCarga = datos.filter(d => d.horas > 0).length;
   const mayor = useMemo(() => [...datos].sort((a, b) => b.horas - a.horas)[0], [datos]);
@@ -66,13 +82,13 @@ export default function CargaDocente({ institucionId, periodoActivo, showToast }
   const horasReloj = h => Math.round((h * minutos / 60) * 10) / 10;
   function exportarResumen() {
     exportarFilasExcel(`carga_horaria_docentes_${new Date().toISOString().slice(0, 10)}.xlsx`, visibles.map(d => ({
-      'Cédula': d.cedula, 'Docente': nombreDe(d), 'Cargo/Función': d.cargo || '', 'Materias': d.n_materias, 'Paralelos': d.n_paralelos,
+      'Cédula': d.cedula, 'Docente': nombreDe(d), 'Cargo/Función': d.cargo || '', 'Jornada': d.declaradas ? d.declaradas.join(', ') : '', 'Materias': d.n_materias, 'Paralelos': d.n_paralelos,
       'Horas/semana': d.horas, ...Object.fromEntries(DIAS.map(x => [x, d.por_dia?.[x] || 0])), [`Horas/mes (≈${cfg.semanas_mes} sem.)`]: d.mes,
       [`Horas reloj/semana (${minutos} min)`]: horasReloj(d.horas), 'Períodos sin ubicar en el horario': Math.max(0, d.horas - d.bloques), 'Estado': d.estado.txt })));
   }
   function exportarDetalle() {
     const out = [];
-    visibles.forEach(d => (d.detalle || []).forEach(x => out.push({ 'Cédula': d.cedula, 'Docente': nombreDe(d), 'Curso': x.curso, 'Paralelo': x.paralelo, 'Materia': x.materia, 'Horas/semana': x.horas, 'Períodos en el horario': x.bloques })));
+    visibles.forEach(d => (d.detalle || []).forEach(x => out.push({ 'Cédula': d.cedula, 'Docente': nombreDe(d), 'Jornada': x.jornada, 'Curso': x.curso, 'Paralelo': x.paralelo, 'Materia': x.materia, 'Horas/semana': x.horas, 'Períodos en el horario': x.bloques })));
     exportarFilasExcel(`carga_horaria_detalle_${new Date().toISOString().slice(0, 10)}.xlsx`, out);
   }
 
@@ -93,6 +109,7 @@ export default function CargaDocente({ institucionId, periodoActivo, showToast }
         {kpi('Docentes activos', datos.length)}
         {kpi('Con carga', conCarga)}
         {kpi('Sin carga', sinTodos, `${cuenta('cargo')} con cargo · ${cuenta('sin')} por revisar`, cuenta('sin') ? 'var(--red)' : undefined)}
+        {sinJornadaN > 0 && kpi('Sin jornada en su ficha', sinJornadaN, 'edítalos en Docentes → Laboral', '#d97706')}
         {kpi('Carga baja', cuenta('baja'), `menos de ${cfg.minima_semana} h/sem`, cuenta('baja') ? '#d97706' : undefined)}
         {kpi('Exceden el máximo', cuenta('excede'), `más de ${cfg.maxima_semana} h/sem`, cuenta('excede') ? 'var(--red)' : undefined)}
         {mayor && mayor.horas > 0 && kpi('Mayor carga', `${mayor.horas} h`, nombreDe(mayor))}
@@ -106,7 +123,7 @@ export default function CargaDocente({ institucionId, periodoActivo, showToast }
               <input className="fc" type="number" min="0" style={{ width: 150 }} disabled={!puedeConfig} value={cfgForm?.[k] ?? ''} onChange={e => setCfgForm(f => ({ ...f, [k]: e.target.value }))} /></div>))}
           {puedeConfig && <button className="btn btn-primary" disabled={guardando} onClick={guardarCfg}>{guardando ? 'Guardando…' : 'Guardar'}</button>}
         </div>
-        <p className="muted" style={{ fontSize: 12, margin: '8px 0 0' }}>Una hora es un período de clase de {minutos} min. Los valores 30 y 20 son iniciales: ajústalos a la normativa de tu institución. Horas/mes = horas por semana × semanas por mes.</p>
+        <p className="muted" style={{ fontSize: 12, margin: '8px 0 0' }}>{jornada ? `Mostrando solo la jornada ${jornada}. ` : ''}Una hora es un período de clase de {minutos} min. Los valores 30 y 20 son iniciales: ajústalos a la normativa de tu institución. Horas/mes = horas por semana × semanas por mes.</p>
       </div>
 
       {top.length > 0 && top[0].horas > 0 && (
@@ -124,6 +141,10 @@ export default function CargaDocente({ institucionId, periodoActivo, showToast }
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
         <input className="fc" style={{ width: 240 }} placeholder="Buscar docente o cédula…" value={q} onChange={e => setQ(e.target.value)} />
+        <select className="fc" style={{ width: 170 }} value={jornada} onChange={e => setJornada(e.target.value)} title="Separar por jornada">
+          <option value="">Todas las jornadas</option>
+          {jornadasPlantel.map(j => <option key={j} value={j}>Jornada {j}</option>)}
+        </select>
         <select className="fc" style={{ width: 200 }} value={filtro} onChange={e => setFiltro(e.target.value)}>
           <option value="todos">Todos ({datos.length})</option>
           <option value="sin_todos">Sin carga ({sinTodos})</option>
@@ -143,18 +164,18 @@ export default function CargaDocente({ institucionId, periodoActivo, showToast }
       <div className="card" style={{ overflowX: 'auto' }}>
         <table className="data" style={{ width: '100%' }}>
           <thead><tr>
-            <th>#</th><th>Docente</th><th>Cargo</th><th>Mat.</th><th>Paral.</th><th>H/sem</th>
+            <th>#</th><th>Docente</th><th>Cargo</th><th>Jornada</th><th>Mat.</th><th>Paral.</th><th>H/sem</th>
             {DIAS.map(x => <th key={x} title={x}>{DIA_C[x]}</th>)}
             <th title={`≈ ${cfg.semanas_mes} semanas`}>H/mes</th><th title={`Horas reloj de ${minutos} min`}>H reloj/sem</th><th>Estado</th><th></th>
           </tr></thead>
           <tbody>
-            {visibles.length === 0 && <tr><td colSpan={14} className="muted" style={{ textAlign: 'center', padding: 16 }}>Sin docentes con ese filtro.</td></tr>}
+            {visibles.length === 0 && <tr><td colSpan={15} className="muted" style={{ textAlign: 'center', padding: 16 }}>Sin docentes con ese filtro.</td></tr>}
             {visibles.map((d, i) => (
               <React.Fragment key={d.id}>
                 <tr>
                   <td>{i + 1}</td>
                   <td><strong>{nombreDe(d)}</strong><div className="mono muted" style={{ fontSize: 11 }}>{d.cedula}</div></td>
-                  <td>{d.cargo || '—'}</td><td>{d.n_materias}</td><td>{d.n_paralelos}</td>
+                  <td>{d.cargo || '—'}</td><td style={{ fontSize: 12 }}>{d.declaradas ? d.declaradas.join(', ') : <span className="badge b-warn" title="Su ficha no tiene jornada definida">sin definir</span>}{d.fuera.length > 0 && <span title={`Tiene clases en ${d.fuera.join(', ')}, que no figura en su ficha`} style={{ color: '#d97706', marginLeft: 4 }}>⚠</span>}</td><td>{d.n_materias}</td><td>{d.n_paralelos}</td>
                   <td><strong>{d.horas}</strong>{d.horas > d.bloques && <span title={`Faltan ${d.horas - d.bloques} períodos por ubicar en el horario`} style={{ color: '#d97706', marginLeft: 4 }}>⚠</span>}</td>
                   {DIAS.map(x => <td key={x}>{d.por_dia?.[x] || '·'}</td>)}
                   <td>{d.mes}</td><td>{horasReloj(d.horas)}</td>
@@ -162,7 +183,7 @@ export default function CargaDocente({ institucionId, periodoActivo, showToast }
                   <td>{d.n_materias > 0 && <button className="btn btn-ghost btn-sm" onClick={() => setAbierto(abierto === d.id ? '' : d.id)}>{abierto === d.id ? '▲' : '▼'}</button>}</td>
                 </tr>
                 {abierto === d.id && (
-                  <tr><td colSpan={14} style={{ background: 'var(--bg, #f8fafc)' }}>
+                  <tr><td colSpan={15} style={{ background: 'var(--bg, #f8fafc)' }}>
                     <table className="data" style={{ width: '100%', margin: '4px 0' }}>
                       <thead><tr><th>Curso</th><th>Paralelo</th><th>Materia</th><th>Horas/sem</th><th>En el horario</th></tr></thead>
                       <tbody>{(d.detalle || []).map((x, j) => <tr key={j}><td>{x.curso}</td><td>{x.paralelo}</td><td>{x.materia}</td><td>{x.horas}</td><td>{x.bloques}</td></tr>)}</tbody>
@@ -173,7 +194,7 @@ export default function CargaDocente({ institucionId, periodoActivo, showToast }
         </table>
       </div>
       <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-        L, M, X, J, V = períodos por día según el horario cargado. ⚠ = hay horas asignadas que aún no están ubicadas en el horario.
+        L, M, X, J, V = períodos por día según el horario cargado. ⚠ junto a las horas = hay horas asignadas que aún no están ubicadas en el horario; ⚠ junto a la jornada = tiene clases en una jornada que no figura en su ficha.
         Los docentes sin carga que tienen un cargo en su ficha (por ejemplo, Inspector) aparecen como justificados; edita el campo «Función / Cargo» de la ficha para registrarlo.
       </p>
     </div>

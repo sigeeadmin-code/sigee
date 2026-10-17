@@ -5,6 +5,7 @@ import {
 } from '../lib/data.js';
 import { construirFranjas, validarJornada, generarHorario, moverEnPropuesta, destinosValidos, DIAS } from '../lib/horarioAuto.js';
 import { colorDeMateria } from '../lib/horarioUI.js';
+import { JORNADAS } from '../lib/jornadas.js';
 
 /** Deduce los parámetros del constructor a partir de las franjas vigentes (para precargar el formulario). */
 function parametrosDesde(franjas) {
@@ -29,9 +30,11 @@ const overlay = { position: 'fixed', inset: 0, background: 'rgba(15,23,42,.45)',
 const caja = { background: 'var(--card, #fff)', borderRadius: 14, width: '100%', boxShadow: '0 20px 50px rgba(0,0,0,.25)' };
 
 /* ───────────────────────────── Jornada y recreos ───────────────────────────── */
-export function JornadaModal({ franjas, bloquesInst, institucionId, onClose, onSaved }) {
+export function JornadaModal({ mapa, jornadaInicial = 'Matutina', jornadas = ['Matutina'], jornadaDe, bloquesInst, institucionId, onClose, onSaved }) {
   const { profile } = useSession();
-  const [p, setP] = useState(() => parametrosDesde(franjas));
+  const [jornadaSel, setJornadaSel] = useState(jornadaInicial);
+  const [p, setP] = useState(() => parametrosDesde(mapa[jornadaInicial]));
+  const cambiarJornada = j => { setJornadaSel(j); setP(parametrosDesde(mapa[j])); setError(''); };
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
 
@@ -42,7 +45,7 @@ export function JornadaModal({ franjas, bloquesInst, institucionId, onClose, onS
   }, [p, errores]);
 
   const etiquetasClase = new Set(vista.filter(f => f.tipo === 'clase').map(f => f.label));
-  const huerfanos = bloquesInst.filter(b => !etiquetasClase.has(b.franja));
+  const huerfanos = bloquesInst.filter(b => jornadaDe(b.paralelo_id) === jornadaSel && !etiquetasClase.has(b.franja));
 
   const setRecreo = (i, campo, v) => setP(x => ({ ...x, recreos: x.recreos.map((r, k) => (k === i ? { ...r, [campo]: v } : r)) }));
   const agregarRecreo = () => {
@@ -57,7 +60,7 @@ export function JornadaModal({ franjas, bloquesInst, institucionId, onClose, onS
     if (huerfanos.length && !window.confirm(`Con esta jornada, ${huerfanos.length} clase(s) ya asignadas quedan en horas que dejan de existir y se ELIMINARÁN del horario. ¿Continuar?`)) return;
     setGuardando(true); setError('');
     try {
-      await guardarHorarioConfig(institucionId, vista.map(({ inicio, fin, tipo }) => ({ inicio, fin, tipo })), profile.id);
+      await guardarHorarioConfig(institucionId, vista.map(({ inicio, fin, tipo }) => ({ inicio, fin, tipo })), profile.id, jornadaSel);
       if (huerfanos.length) await eliminarBloquesHorario(huerfanos.map(b => b.id));
       onSaved();
     } catch (e) { setError(e.message || 'No se pudo guardar la jornada.'); }
@@ -74,8 +77,12 @@ export function JornadaModal({ franjas, bloquesInst, institucionId, onClose, onS
         </div>
         <div style={{ padding: 20 }}>
           <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--slate)' }}>
-            Define a qué hora empieza la jornada, cuánto dura cada clase y dónde van los recreos (puedes poner varios). Vale para todo el plantel.
+            Cada jornada tiene su propio horario. Define a qué hora empieza, cuánto dura cada clase y dónde van los recreos (puedes poner varios). Vale para los paralelos de la jornada elegida.
           </p>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+            {JORNADAS.filter(j => jornadas.includes(j) || j === jornadaSel).map(j => (
+              <button key={j} type="button" className={'btn btn-sm ' + (j === jornadaSel ? 'btn-primary' : 'btn-secondary')} onClick={() => cambiarJornada(j)} disabled={guardando}>{j}</button>))}
+          </div>
           <div className="form-grid">
             <div><label className="fl">Hora de inicio</label><input className="fc" type="time" value={p.inicio} onChange={e => setP({ ...p, inicio: e.target.value })} /></div>
             <div><label className="fl">Duración de cada clase (min)</label><input className="fc" type="number" min="20" max="120" value={p.duracion} onChange={e => setP({ ...p, duracion: e.target.value })} /></div>
@@ -124,7 +131,7 @@ export function JornadaModal({ franjas, bloquesInst, institucionId, onClose, onS
         </div>
         <div style={{ padding: '14px 20px', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button className="btn btn-secondary" onClick={onClose} disabled={guardando}>Cancelar</button>
-          <button className="btn btn-primary" onClick={guardar} disabled={guardando || errores.length > 0}>{guardando ? 'Guardando…' : 'Guardar jornada'}</button>
+          <button className="btn btn-primary" onClick={guardar} disabled={guardando || errores.length > 0}>{guardando ? 'Guardando…' : `Guardar jornada ${jornadaSel}`}</button>
         </div>
       </div>
     </div>
@@ -190,7 +197,7 @@ function GrillaPropuesta({ franjas, bloques, cargaPorId, tomado, setTomado, vali
   );
 }
 
-export function GeneradorModal({ institucionId, periodoActivo, grados, paraleloActualId, franjas, bloquesInst, onClose, onApplied }) {
+export function GeneradorModal({ institucionId, periodoActivo, grados, paraleloActualId, franjas, jornada = 'Matutina', bloquesInst, onClose, onApplied }) {
   const [alcance, setAlcance] = useState('paralelo'); // 'paralelo' | 'todos'
   const [conservar, setConservar] = useState(true);
   const [cargas, setCargas] = useState([]);
@@ -207,8 +214,8 @@ export function GeneradorModal({ institucionId, periodoActivo, grados, paraleloA
 
   const clases = franjas.filter(f => f.tipo === 'clase').map(f => f.label);
   const paralelosAll = useMemo(
-    () => grados.flatMap(g => g.paralelos.map(p => ({ id: p.id, nombre: `${g.nombre} "${p.nombre}"` }))),
-    [grados]
+    () => grados.flatMap(g => g.paralelos.filter(p => (p.jornada || 'Matutina') === jornada).map(p => ({ id: p.id, nombre: `${g.nombre} "${p.nombre}"` }))),
+    [grados, jornada]
   );
   const nombrePar = Object.fromEntries(paralelosAll.map(p => [p.id, p.nombre]));
 
@@ -326,7 +333,7 @@ export function GeneradorModal({ institucionId, periodoActivo, grados, paraleloA
             <>
               <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14, fontSize: 13 }}>
                 <label><input type="radio" checked={alcance === 'paralelo'} onChange={() => setAlcance('paralelo')} /> Solo este paralelo ({nombrePar[paraleloActualId] || '—'})</label>
-                <label><input type="radio" checked={alcance === 'todos'} onChange={() => setAlcance('todos')} /> Todos los paralelos del colegio</label>
+                <label><input type="radio" checked={alcance === 'todos'} onChange={() => setAlcance('todos')} /> Todos los paralelos de la jornada {jornada}</label>
                 <label title="Las clases ya asignadas no se tocan: solo se llenan los huecos">
                   <input type="checkbox" checked={conservar} onChange={e => setConservar(e.target.checked)} /> Conservar las clases ya asignadas
                 </label>

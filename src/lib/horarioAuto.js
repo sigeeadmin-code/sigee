@@ -53,6 +53,29 @@ export function validarJornada({ inicio, duracion, clases, recreos = [] }) {
 // Las 7 etiquetas de clase coinciden EXACTAMENTE con las que ya usan los horarios guardados.
 export const FRANJAS_DEFAULT = construirFranjas({ inicio: '07:00', duracion: 40, clases: 7, recreos: [{ despuesDe: 3, minutos: 20 }] });
 
+/** Jornada por defecto de cada turno (el plantel la ajusta en «Jornada y recreos»). */
+export function franjasPorDefectoDe(jornada) {
+  if (jornada === 'Vespertina') return construirFranjas({ inicio: '13:00', duracion: 40, clases: 7, recreos: [{ despuesDe: 3, minutos: 20 }] });
+  if (jornada === 'Nocturna') return construirFranjas({ inicio: '18:00', duracion: 40, clases: 5, recreos: [{ despuesDe: 3, minutos: 15 }] });
+  return FRANJAS_DEFAULT;
+}
+/** Franjas guardadas de una jornada; si no hay, las de por defecto de ese turno. */
+export function franjasDeJornada(guardadas, jornada) {
+  if (!Array.isArray(guardadas) || !guardadas.length) return franjasPorDefectoDe(jornada);
+  const n = normalizarFranjas(guardadas);
+  return n === FRANJAS_DEFAULT && jornada !== 'Matutina' ? franjasPorDefectoDe(jornada) : n;
+}
+/** Franjas a mostrar para un conjunto de clases (docente o estudiante): las de la jornada donde caen; si son varias, solo las horas de clase. */
+export function franjasParaBloques(mapa, bloques) {
+  const labels = new Set(bloques.map(b => b.franja));
+  const usadas = ['Matutina', 'Vespertina', 'Nocturna'].filter(j => (mapa[j] || []).some(x => x.tipo === 'clase' && labels.has(x.label)));
+  if (usadas.length === 0) return mapa.Matutina || FRANJAS_DEFAULT;
+  if (usadas.length === 1) return mapa[usadas[0]];
+  const m = new Map();
+  usadas.forEach(j => mapa[j].filter(x => x.tipo === 'clase').forEach(x => m.set(x.label, x)));
+  return [...m.values()].sort((a, b) => a.inicio.localeCompare(b.inicio));
+}
+
 /** Acepta lo guardado en BD y devuelve franjas válidas; si algo no cuadra, cae a la jornada por defecto. */
 export function normalizarFranjas(guardadas) {
   if (!Array.isArray(guardadas) || !guardadas.length) return FRANJAS_DEFAULT;

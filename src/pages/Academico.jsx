@@ -4,6 +4,7 @@ import {
 } from 'recharts';
 import { useSession } from '../lib/SessionContext.jsx';
 import CargaDocente from '../components/CargaDocente.jsx';
+import { jornadasDePlantel, docenteTrabajaEn, jornadasDeDocente } from '../lib/jornadas.js';
 import {
   fetchGradosConParalelos, crearGrado, actualizarGrado, eliminarGrado,
   crearParalelo, actualizarParalelo, eliminarParalelo,
@@ -319,6 +320,8 @@ function CoursePanel({ grados, gradoSelId, onSelect, institucionId, recargar, sh
 
 // ─── Panel 2: Paralelos del curso seleccionado ─────────────────────────
 function ParallelPanel({ grado, paraleloSelId, onSelect, docentes, recargar, showToast }) {
+  const { institucion } = useSession();
+  const jornadasPlantel = jornadasDePlantel(institucion);
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({ nombre: '', jornada: 'Matutina', tutor_docente_id: '', especialidad: '' });
@@ -326,7 +329,7 @@ function ParallelPanel({ grado, paraleloSelId, onSelect, docentes, recargar, sho
 
   function abrirCrear() {
     setEditId(null);
-    setForm({ nombre: '', jornada: 'Matutina', tutor_docente_id: '', especialidad: '' });
+    setForm({ nombre: '', jornada: jornadasPlantel[0] || 'Matutina', tutor_docente_id: '', especialidad: '' });
     setModalOpen(true);
   }
   function abrirEditar(p, e) {
@@ -419,14 +422,14 @@ function ParallelPanel({ grado, paraleloSelId, onSelect, docentes, recargar, sho
                 <div>
                   <label className="fl">Jornada</label>
                   <select className="fc" value={form.jornada} onChange={e => setForm(f => ({ ...f, jornada: e.target.value }))}>
-                    {JORNADAS.map(j => <option key={j} value={j}>{j}</option>)}
+                    {JORNADAS.filter(j => jornadasPlantel.includes(j) || j === form.jornada).map(j => <option key={j} value={j}>{j}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="fl">Tutor/a</label>
                   <select className="fc" value={form.tutor_docente_id} onChange={e => setForm(f => ({ ...f, tutor_docente_id: e.target.value }))}>
                     <option value="">Sin asignar</option>
-                    {docentes.map(d => <option key={d.id} value={d.id}>{d.nombre}</option>)}
+                    {docentes.filter(d => docenteTrabajaEn(d.jornada, form.jornada) || d.id === form.tutor_docente_id).map(d => <option key={d.id} value={d.id}>{d.nombre}{jornadasDeDocente(d.jornada) ? '' : ' (sin jornada)'}</option>)}
                   </select>
                 </div>
                 <div className="full">
@@ -708,7 +711,12 @@ function MateriasTab({ grado, materias, paralelo, periodoActivo, materiasCatalog
   const [form, setForm] = useState({ materiaId: '', materiaNueva: '', horasSemana: 4, docenteId: '' });
   const [saving, setSaving] = useState(false);
   const nombreMateriaForm = form.materiaNueva || (materiasCatalogo.find(m => m.id === form.materiaId)?.nombre) || editItem?.materiaNombre || '';
-  const docentesOrdenados = docentes.map(d => ({ ...d, sugerido: docenteCoincideConMateria(d, nombreMateriaForm) })).sort((x, y) => Number(y.sugerido) - Number(x.sugerido));
+  const jornadaParalelo = paralelo?.jornada || 'Matutina';
+  // Solo salen los docentes de la jornada del paralelo (los que no tienen jornada definida salen al final, marcados)
+  const docentesOrdenados = docentes
+    .filter(d => docenteTrabajaEn(d.jornada, jornadaParalelo) || d.id === form.docenteId)
+    .map(d => ({ ...d, sugerido: docenteCoincideConMateria(d, nombreMateriaForm), sinJornada: !jornadasDeDocente(d.jornada) }))
+    .sort((x, y) => Number(x.sinJornada) - Number(y.sinJornada) || Number(y.sugerido) - Number(x.sugerido));
 
   function abrirCrear() {
     setEditItem(null);
@@ -856,8 +864,9 @@ function MateriasTab({ grado, materias, paralelo, periodoActivo, materiasCatalog
                   <label className="fl">Docente</label>
                   <select className="fc" value={form.docenteId} onChange={e => setForm(f => ({ ...f, docenteId: e.target.value }))}>
                     <option value="">Sin asignar (pendiente)</option>
-                    {docentesOrdenados.map(d => <option key={d.id} value={d.id}>{d.sugerido ? '★ ' : ''}{d.nombre}{d.sugerido && d.especialidad ? ` — ${d.especialidad}` : ''}</option>)}
+                    {docentesOrdenados.map(d => <option key={d.id} value={d.id}>{d.sugerido ? '★ ' : ''}{d.nombre}{d.sugerido && d.especialidad ? ` — ${d.especialidad}` : ''}{d.sinJornada ? ' (sin jornada)' : ''}</option>)}
                   </select>
+                  <div style={{ fontSize: 11.5, color: 'var(--slate)', marginTop: 4 }}>Se muestran los docentes de la jornada {jornadaParalelo}.</div>
                   {docentesOrdenados.some(d => d.sugerido) && <div style={{ fontSize: 11.5, color: 'var(--slate)', marginTop: 4 }}>★ Docentes cuya especialidad o área de trabajo coincide con la materia.</div>}
                 </div>
               </div>

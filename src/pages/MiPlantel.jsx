@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase.js';
 import { fetchPlanteles, actualizarPlantel } from '../lib/data.js';
 import PermisosPlantel from '../components/PermisosPlantel.jsx';
 import BachilleratosPlantel from '../components/BachilleratosPlantel.jsx';
+import { jornadasDePlantel } from '../lib/jornadas.js';
 
 const SOST_LABEL = { Fiscal: 'Fiscal', Particular: 'Particular', Fiscomisional: 'Fiscomisional', Municipal: 'Municipal' };
 const JORNADAS_OPTS = ['Matutina', 'Vespertina', 'Nocturna'];
@@ -41,7 +42,7 @@ export default function MiPlantel() {
     if (!plantel) return;
     setForm({
       ...plantel,
-      jornadas: Array.isArray(plantel.jornadas) && plantel.jornadas.length ? plantel.jornadas : (plantel.jornada ? [plantel.jornada] : ['Matutina']),
+      jornadas: jornadasDePlantel(plantel),
       modalidades: Array.isArray(plantel.modalidades) && plantel.modalidades.length ? plantel.modalidades : ['Presencial'],
       num_estudiantes_ref: plantel.num_estudiantes_ref ?? '',
       num_docentes_ref: plantel.num_docentes_ref ?? ''
@@ -158,7 +159,7 @@ export default function MiPlantel() {
               <Dato label="Sostenimiento" value={SOST_LABEL[plantel.sostenimiento] || plantel.sostenimiento} />
               <Dato label="Nivel educativo" value={plantel.nivel_educativo} />
               <Dato label="Régimen" value={plantel.regimen} />
-              <Dato label="Jornadas" value={(plantel.jornadas?.length ? plantel.jornadas : [plantel.jornada]).filter(Boolean).join(', ')} />
+              <Dato label="Jornadas" value={jornadasDePlantel(plantel).join(', ')} />
               <Dato label="Modalidad" value={plantel.modalidades?.join(', ')} />
               <Dato label="Rector/a" value={plantel.rector} />
             </div>

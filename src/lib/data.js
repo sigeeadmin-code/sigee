@@ -1056,8 +1056,8 @@ export async function crearUsuario(datos) {
 
 // ── Académico: docentes simples + materias por paralelo + alumnos detalle ──
 export async function fetchDocentesSimple(institucionId) {
-  const rows = await sel('docentes', 'id, nombres, apellidos, cedula, especialidad, area', q => q.eq('institucion_id', institucionId).eq('activo', true));
-  return rows.map(d => ({ id: d.id, nombre: `${d.apellidos || ''} ${d.nombres || ''}`.trim(), cedula: d.cedula, especialidad: d.especialidad || '', area: d.area || '' }));
+  const rows = await sel('docentes', 'id, nombres, apellidos, cedula, especialidad, area, jornada', q => q.eq('institucion_id', institucionId).eq('activo', true));
+  return rows.map(d => ({ id: d.id, nombre: `${d.apellidos || ''} ${d.nombres || ''}`.trim(), cedula: d.cedula, especialidad: d.especialidad || '', area: d.area || '', jornada: d.jornada || '' }));
 }
 export async function fetchMateriasParalelo(paraleloId, periodoId) {
   const [cargas, materias, docentes] = await Promise.all([
@@ -1588,14 +1588,22 @@ export async function fetchBoletaEstudiante(estudianteId, periodoId) {
 }
 
 /* ── Horario: jornada (franjas y recreos), cargas para el generador y aplicación atómica ── */
-export async function fetchHorarioConfig(institucionId) {
+export async function fetchHorarioConfig(institucionId, jornada = 'Matutina') {
   if (!institucionId) return null;
-  const rows = await sel('horario_config', 'franjas', q => q.eq('institucion_id', institucionId));
+  const rows = await sel('horario_config', 'franjas', q => q.eq('institucion_id', institucionId).eq('jornada', jornada));
   return rows[0]?.franjas || null;
 }
-export async function guardarHorarioConfig(institucionId, franjas, profileId) {
+/** Configuración de TODAS las jornadas del plantel: { Matutina: franjas|null, Vespertina: ..., Nocturna: ... } */
+export async function fetchHorarioConfigs(institucionId) {
+  const out = { Matutina: null, Vespertina: null, Nocturna: null };
+  if (!institucionId) return out;
+  const rows = await sel('horario_config', 'jornada, franjas', q => q.eq('institucion_id', institucionId));
+  rows.forEach(r => { out[r.jornada] = r.franjas; });
+  return out;
+}
+export async function guardarHorarioConfig(institucionId, franjas, profileId, jornada = 'Matutina') {
   const { error } = await supabase.from('horario_config')
-    .upsert({ institucion_id: institucionId, franjas, updated_by: profileId || null, updated_at: new Date().toISOString() });
+    .upsert({ institucion_id: institucionId, jornada, franjas, updated_by: profileId || null, updated_at: new Date().toISOString() }, { onConflict: 'institucion_id,jornada' });
   if (error) throw error;
 }
 export async function eliminarBloquesHorario(ids) {
@@ -2308,8 +2316,8 @@ export async function guardarConfigCargaHoraria(institucionId, cfg, userId) {
 }
 export async function fetchMinutosPeriodo(institucionId) {
   try {
-    const { data } = await supabase.from('horario_config').select('franjas').eq('institucion_id', institucionId).maybeSingle();
-    const f = (data?.franjas || []).find(x => x.tipo === 'clase');
+    const { data: rows } = await supabase.from('horario_config').select('franjas').eq('institucion_id', institucionId).order('jornada', { ascending: false }).limit(1);
+    const f = (rows?.[0]?.franjas || []).find(x => x.tipo === 'clase');
     if (!f) return 40;
     const [h1, m1] = f.inicio.split(':').map(Number); const [h2, m2] = f.fin.split(':').map(Number);
     const mins = (h2 * 60 + m2) - (h1 * 60 + m1);

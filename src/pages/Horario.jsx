@@ -3,26 +3,29 @@ import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchGradosConParalelos, fetchMateriasParalelo, fetchHorario, fetchHorarioDocente, fetchHorarioParalelo,
   guardarBloqueHorario, eliminarBloqueHorario, fetchAulas, fetchCargasDocente,
-  fetchEstudianteIdPorProfile, fetchHijosDeRepresentante, fetchProgramacionEstudiante, fetchHorarioConfig,
-  moverBloqueHorario, fetchCargasHorario
+  fetchEstudianteIdPorProfile, fetchHijosDeRepresentante, fetchProgramacionEstudiante,
+  moverBloqueHorario, fetchCargasHorario, fetchHorarioConfigs
 } from '../lib/data.js';
-import { FRANJAS_DEFAULT, normalizarFranjas, destinosValidos } from '../lib/horarioAuto.js';
+import { FRANJAS_DEFAULT, franjasDeJornada, franjasParaBloques, destinosValidos } from '../lib/horarioAuto.js';
+import { JORNADAS, jornadasDePlantel } from '../lib/jornadas.js';
 import { colorDeMateria } from '../lib/horarioUI.js';
 import { JornadaModal, GeneradorModal } from './HorarioModales.jsx';
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
 const HOY_NOMBRE = DIAS[new Date().getDay() - 1] || null; // domingo/sábado -> null, no resalta ningún día
 
-/** Jornada del plantel (franjas de clase y recreos). Si no se configuró, usa la jornada por defecto. */
+/** Jornadas del plantel (franjas de clase y recreos de cada turno). Devuelve { Matutina, Vespertina, Nocturna } con franjas válidas. */
 function useFranjas(institucionId) {
-  const [franjas, setFranjas] = useState(FRANJAS_DEFAULT);
+  const [mapa, setMapa] = useState(() => Object.fromEntries(JORNADAS.map(j => [j, franjasDeJornada(null, j)])));
   const cargar = useCallback(async () => {
     if (!institucionId) return;
-    try { setFranjas(normalizarFranjas(await fetchHorarioConfig(institucionId))); }
-    catch (e) { setFranjas(FRANJAS_DEFAULT); }
+    try {
+      const cfg = await fetchHorarioConfigs(institucionId);
+      setMapa(Object.fromEntries(JORNADAS.map(j => [j, franjasDeJornada(cfg[j], j)])));
+    } catch (e) { setMapa(Object.fromEntries(JORNADAS.map(j => [j, franjasDeJornada(null, j)]))); }
   }, [institucionId]);
   useEffect(() => { cargar(); }, [cargar]);
-  return [franjas, cargar];
+  return [mapa, cargar];
 }
 
 function GrillaHorario({ bloques, resolverEtiqueta, aulaEtiqueta, alto = 56, franjas = FRANJAS_DEFAULT }) {
@@ -95,7 +98,7 @@ function Leyenda({ items }) {
 function MiHorarioDocente() {
   const { profile, institucion, data } = useSession();
   const institucionId = institucion?.id;
-  const [franjas] = useFranjas(institucionId);
+  const [mapaFranjas] = useFranjas(institucionId);
   const [cargas, setCargas] = useState([]);
   const [bloques, setBloques] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -117,6 +120,7 @@ function MiHorarioDocente() {
   const cargaPorId = useMemo(() => Object.fromEntries(cargas.map(c => [c.id, c])), [cargas]);
   const materiasUnicas = useMemo(() => [...new Set(cargas.map(c => c.materiaNombre))], [cargas]);
   const totalHoras = bloques.length;
+  const franjas = useMemo(() => franjasParaBloques(mapaFranjas, bloques), [mapaFranjas, bloques]);
 
   if (loading) return <p style={{ fontSize: 13, color: 'var(--slate)' }}>Cargando…</p>;
   if (!cargas.length) return <div className="empty"><span className="ti ti-clock" /><p>Todavía no tienes materias asignadas en {data?.periodoActivo?.nombre || 'el período activo'}.</p></div>;
@@ -142,13 +146,14 @@ function MiHorarioDocente() {
 function MiHorarioCurso() {
   const { profile, institucion, data } = useSession();
   const esPadre = profile.rolDb === 'padre';
-  const [franjas] = useFranjas(institucion?.id);
+  const [mapaFranjas] = useFranjas(institucion?.id);
   const [hijos, setHijos] = useState([]);
   const [estudianteId, setEstudianteId] = useState(null);
   const [prog, setProg] = useState(null);
   const [bloques, setBloques] = useState([]);
   const [materias, setMaterias] = useState([]);
   const [loading, setLoading] = useState(true);
+  const franjas = useMemo(() => franjasParaBloques(mapaFranjas, bloques), [mapaFranjas, bloques]);
 
   useEffect(() => {
     let activo = true;
@@ -241,7 +246,7 @@ function EditorHorario() {
   const [seleccion, setSeleccion] = useState(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
-  const [franjas, recargarFranjas] = useFranjas(institucionId);
+  const [mapaFranjas, recargarFranjas] = useFranjas(institucionId);
   const [bloquesInst, setBloquesInst] = useState([]);
   const [modalJornada, setModalJornada] = useState(false);
   const [modalGenerador, setModalGenerador] = useState(false);
@@ -269,6 +274,10 @@ function EditorHorario() {
   useEffect(() => { cargarBase(); }, [cargarBase]);
 
   const gradoSel = grados.find(g => g.id === gradoId);
+  // Cada paralelo trabaja en su jornada (matutina, vespertina o nocturna) y usa las horas y recreos de ESA jornada
+  const jornadaDe = useCallback(pid => { for (const g of grados) { const p = g.paralelos.find(x => x.id === pid); if (p) return p.jornada || 'Matutina'; } return 'Matutina'; }, [grados]);
+  const jornadaActual = jornadaDe(paraleloId);
+  const franjas = mapaFranjas[jornadaActual] || FRANJAS_DEFAULT;
 
   const cargarDetalle = useCallback(async () => {
     if (!paraleloId || !periodoActivo || !institucionId) return;
@@ -358,6 +367,7 @@ function EditorHorario() {
           <div style={{ fontSize: 13, color: 'var(--slate)' }}>Elige una materia de la izquierda y haz clic en una celda vacía para asignarla, o arrastra una clase para moverla · {periodoActivo.nombre}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <span className="badge b-info" style={{ alignSelf: 'center' }}>Jornada {jornadaActual}</span>
           <button className="btn btn-secondary btn-sm" onClick={() => setModalJornada(true)}>☕ Jornada y recreos</button>
           <button className="btn btn-primary btn-sm" disabled={!paraleloId} onClick={() => setModalGenerador(true)}>✨ Generar automáticamente</button>
         </div>
@@ -384,7 +394,7 @@ function EditorHorario() {
               </select>
               <label className="fl" style={{ marginTop: 12 }}>Paralelo</label>
               <select className="fc" value={paraleloId} onChange={e => { setParaleloId(e.target.value); setSeleccion(null); }}>
-                {(gradoSel?.paralelos || []).map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                {(gradoSel?.paralelos || []).map(p => <option key={p.id} value={p.id}>{p.nombre} · {p.jornada || 'Matutina'}</option>)}
               </select>
               <label className="fl" style={{ marginTop: 12 }}>Aula (opcional)</label>
               <select className="fc" value={aulaId} onChange={e => setAulaId(e.target.value)}>
@@ -472,7 +482,8 @@ function EditorHorario() {
 
       {modalJornada && (
         <JornadaModal
-          franjas={franjas} bloquesInst={bloquesInst} institucionId={institucionId}
+          mapa={mapaFranjas} jornadaInicial={jornadaActual} jornadas={jornadasDePlantel(institucion)} jornadaDe={jornadaDe}
+          bloquesInst={bloquesInst} institucionId={institucionId}
           onClose={() => setModalJornada(false)}
           onSaved={async () => { setModalJornada(false); await recargarFranjas(); await cargarDetalle(); refrescarDatos(); setToast({ tipo: 'ok', msg: 'Jornada y recreos guardados.' }); }}
         />
@@ -480,7 +491,7 @@ function EditorHorario() {
       {modalGenerador && (
         <GeneradorModal
           institucionId={institucionId} periodoActivo={periodoActivo} grados={grados} paraleloActualId={paraleloId}
-          franjas={franjas} bloquesInst={bloquesInst}
+          franjas={franjas} jornada={jornadaActual} bloquesInst={bloquesInst}
           onClose={() => setModalGenerador(false)}
           onApplied={async () => { setModalGenerador(false); await cargarDetalle(); refrescarDatos(); setToast({ tipo: 'ok', msg: 'Horario aplicado.' }); }}
         />
