@@ -2292,6 +2292,31 @@ export async function contarCursosConBachillerato(institucionId, tipoCodigo) {
   return count || 0;
 }
 
+/* ── Carga horaria de los docentes ── */
+export async function fetchReporteCargaHoraria(institucionId) {
+  const { data, error } = await supabase.rpc('reporte_carga_horaria', { p_institucion: institucionId || null });
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+export async function fetchConfigCargaHoraria(institucionId) {
+  const { data } = await supabase.from('carga_horaria_config').select('*').eq('institucion_id', institucionId).maybeSingle();
+  return { maxima_semana: data?.maxima_semana ?? 30, minima_semana: data?.minima_semana ?? 20, semanas_mes: data?.semanas_mes ?? 4, guardada: !!data };
+}
+export async function guardarConfigCargaHoraria(institucionId, cfg, userId) {
+  const { error } = await supabase.from('carga_horaria_config').upsert({ institucion_id: institucionId, maxima_semana: cfg.maxima_semana, minima_semana: cfg.minima_semana, semanas_mes: cfg.semanas_mes, updated_by: userId || null, updated_at: new Date().toISOString() });
+  if (error) throw new Error(error.message);
+}
+export async function fetchMinutosPeriodo(institucionId) {
+  try {
+    const { data } = await supabase.from('horario_config').select('franjas').eq('institucion_id', institucionId).maybeSingle();
+    const f = (data?.franjas || []).find(x => x.tipo === 'clase');
+    if (!f) return 40;
+    const [h1, m1] = f.inicio.split(':').map(Number); const [h2, m2] = f.fin.split(':').map(Number);
+    const mins = (h2 * 60 + m2) - (h1 * 60 + m1);
+    return mins > 0 ? mins : 40;
+  } catch (_) { return 40; }
+}
+
 // Docentes activos del plantel que todavía no tienen cuenta de acceso (para el alta masiva de accesos).
 export async function fetchDocentesSinAcceso(institucionId) {
   return sel('docentes', 'id, nombres, apellidos, cedula, email, telefono', q => q.eq('institucion_id', institucionId).eq('activo', true).is('profile_id', null).order('apellidos'));

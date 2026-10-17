@@ -3,6 +3,7 @@ import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
 import { useSession } from '../lib/SessionContext.jsx';
+import CargaDocente from '../components/CargaDocente.jsx';
 import {
   fetchGradosConParalelos, crearGrado, actualizarGrado, eliminarGrado,
   crearParalelo, actualizarParalelo, eliminarParalelo,
@@ -133,10 +134,13 @@ export default function Academico() {
       <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
         <button className={'btn btn-sm ' + (vista === 'resumen' ? 'btn-primary' : 'btn-secondary')} onClick={() => setVista('resumen')}>Resumen</button>
         <button className={'btn btn-sm ' + (vista === 'gestion' ? 'btn-primary' : 'btn-secondary')} onClick={() => setVista('gestion')}>Gestión</button>
+        <button className={'btn btn-sm ' + (vista === 'carga' ? 'btn-primary' : 'btn-secondary')} onClick={() => setVista('carga')}>Carga docente</button>
         <button className={'btn btn-sm ' + (vista === 'config' ? 'btn-primary' : 'btn-secondary')} onClick={() => setVista('config')}>Configuración</button>
       </div>
 
-      {vista === 'config' ? (
+      {vista === 'carga' ? (
+        <CargaDocente institucionId={institucionId} periodoActivo={periodoActivo} showToast={showToast} />
+      ) : vista === 'config' ? (
         <ConfiguracionTab institucionId={institucionId} showToast={showToast} recargarPeriodos={cargarBase} />
       ) : vista === 'resumen' ? (
         <ResumenTab institucionId={institucionId} periodoActivo={periodoActivo} showToast={showToast} />
