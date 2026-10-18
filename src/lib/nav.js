@@ -14,7 +14,7 @@ export const NAV_BY_ROL = {
       { to: '/base-docentes', label: 'Base de docentes', icon: 'ti ti-database' },
       { to: '/estudiantes-desvinculados', label: 'Estudiantes desvinculados', icon: 'ti ti-user-minus' },
       { to: '/base-estudiantes', label: 'Base de estudiantes', icon: 'ti ti-database-import' },
-      { to: '/usuarios', label: 'Usuarios', icon: 'ti ti-user-cog' }
+      { to: '/usuarios', label: 'Usuarios', icon: 'ti ti-user-cog', soloRolDb: ['super_admin', 'admin_plantel'] }
     ]},
     { cat: 'Académico', items: [
       { to: '/academico', label: 'Materias y Cursos', icon: 'ti ti-books' },
@@ -52,7 +52,7 @@ export const NAV_BY_ROL = {
       { to: '/estudiantes', label: 'Estudiantes', icon: 'ti ti-users' },
       { to: '/base-docentes', label: 'Base de docentes', icon: 'ti ti-database', modulo: 'base_docentes' },
       { to: '/encadenamiento', label: 'Encadenamiento', icon: 'ti ti-link' },
-      { to: '/usuarios', label: 'Usuarios', icon: 'ti ti-user-cog' }
+      { to: '/usuarios', label: 'Usuarios', icon: 'ti ti-user-cog', soloRolDb: ['super_admin', 'admin_plantel'] }
     ]},
     { cat: 'Académico', items: [
       { to: '/academico', label: 'Materias y Cursos', icon: 'ti ti-books' },
@@ -192,4 +192,16 @@ export function rolesConAcceso(path) {
   return Object.entries(NAV_BY_ROL)
     .filter(([, categorias]) => categorias.some(cat => cat.items.some(it => it.to === path)))
     .map(([rol]) => rol);
+}
+
+/**
+ * Algunas pantallas (Usuarios) solo son para ciertos roles reales de la base de datos aunque el rol comparta el menú de su grupo
+ * (por ejemplo, supervisor_plantel y contador_general usan el menú del administrador de plantel pero NO deben ver Usuarios).
+ */
+export function itemVisibleParaRolDb(item, rolDb) {
+  return !item.soloRolDb || item.soloRolDb.includes(rolDb);
+}
+export function rutaPermitidaParaRolDb(path, rolGrupo, rolDb) {
+  const items = (NAV_BY_ROL[rolGrupo] || []).flatMap(c => c.items).filter(it => it.to === path);
+  return items.length > 0 && items.some(it => itemVisibleParaRolDb(it, rolDb));
 }

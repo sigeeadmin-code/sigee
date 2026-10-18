@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useSession } from '../lib/SessionContext.jsx';
-import { NAV_BY_ROL } from '../lib/nav.js';
+import { NAV_BY_ROL, itemVisibleParaRolDb } from '../lib/nav.js';
 import { ROLE_LABELS } from '../lib/supabase.js';
 export default function Shell() {
   const { profile, institucion, logout, permisos, esTutor } = useSession();
@@ -11,7 +11,7 @@ export default function Shell() {
   ];
   // Ítems condicionales: 'Mis estudiantes' solo aparece al docente que es tutor de algún curso.
   const categorias = (NAV_BY_ROL[profile.rol] || MENU_MINIMO)
-    .map(g => ({ ...g, items: g.items.filter(it => it.requiere !== 'tutor' || esTutor) }))
+    .map(g => ({ ...g, items: g.items.filter(it => (it.requiere !== 'tutor' || esTutor) && itemVisibleParaRolDb(it, profile.rolDb)) }))
     .filter(g => g.items.length);
   const initials = ((profile.nombres?.[0] || '') + (profile.apellidos?.[0] || '')).toUpperCase() || 'U';
   const isGlobal = profile.rol === 'super_admin';

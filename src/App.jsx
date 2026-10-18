@@ -1,7 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { SessionProvider, useSession } from './lib/SessionContext.jsx';
-import { rolesConAcceso } from './lib/nav.js';
+import { rolesConAcceso, rutaPermitidaParaRolDb } from './lib/nav.js';
 import AvisoVersionNueva from './components/AvisoVersionNueva.jsx';
 import Login from './pages/Login.jsx';
 import Shell from './pages/Shell.jsx';
@@ -64,7 +64,7 @@ function Protegida({ path, children }) {
   // profile.rolDb es el crudo de la BD. Deben compararse contra el mismo tipo
   // que las claves de NAV_BY_ROL (agrupado), o el guardián bloquea a roles
   // que sí deberían entrar (pasó con inspector_general, estudiante, etc).
-  const permitido = rolesConAcceso(path).includes(profile.rol);
+  const permitido = rolesConAcceso(path).includes(profile.rol) && rutaPermitidaParaRolDb(path, profile.rol, profile.rolDb);
   return permitido ? children : <AccesoDenegado />;
 }
 
