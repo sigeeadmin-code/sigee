@@ -1032,6 +1032,10 @@ export async function fetchUsuarios(institucionId, isSuperAdmin) {
     ? sel('profiles', cols, q => q.order('created_at', { ascending: false }))
     : sel('profiles', cols, q => q.eq('institucion_id', institucionId).order('created_at', { ascending: false }));
 }
+export async function editarUsuario(id, { nombres, apellidos, telefono, rol }) {
+  const { error } = await supabase.rpc('editar_usuario', { p_user: id, p_nombres: nombres, p_apellidos: apellidos, p_telefono: telefono || '', p_rol: rol });
+  if (error) throw new Error(error.message);
+}
 export async function actualizarUsuario(id, cambios) {
   const { error } = await supabase.from('profiles').update(cambios).eq('id', id);
   if (error) throw error;

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
-import { fetchPlanteles, fetchUsuarios, crearUsuario, actualizarUsuario, fetchInstitucionesBusqueda, fetchFichasSinCuenta } from '../lib/data.js';
+import { fetchPlanteles, fetchUsuarios, crearUsuario, actualizarUsuario, editarUsuario, fetchInstitucionesBusqueda, fetchFichasSinCuenta } from '../lib/data.js';
 import { fichaUnicaQueCoincide } from '../lib/vinculos.js';
 import BuscadorInstitucion from '../components/BuscadorInstitucion.jsx';
 import RestablecerClaveModal from '../components/RestablecerClaveModal.jsx';
@@ -45,6 +45,7 @@ export default function Usuarios() {
 
   const [usuarios, setUsuarios] = useState([]);
   const [planteles, setPlanteles] = useState([]);
+  const [editando, setEditando] = useState(null);       // { u, nombres, apellidos, telefono, rol, guardando, error }
   const [restablecer, setRestablecer] = useState(null);   // cuentas a las que se les restablece la contraseña
   const [sel, setSel] = useState(() => new Set());
   const [instBusqueda, setInstBusqueda] = useState([]);
@@ -135,6 +136,22 @@ export default function Usuarios() {
   }, [modalOpen, instParaFichas]);
   const fichaSugerida = useMemo(() => fichaUnicaQueCoincide({ cedula: form.cedula, email: form.email }, fichas || []), [form.cedula, form.email, fichas]);
   const fichaFinal = form.rol !== 'docente' ? '' : (fichaElegida !== null ? fichaElegida : (fichaSugerida?.id || ''));
+
+  function abrirEditar(u) { setEditando({ u, nombres: u.nombres || '', apellidos: u.apellidos || '', telefono: u.telefono || '', rol: u.rol, guardando: false, error: '' }); }
+  async function guardarEdicion(e) {
+    e.preventDefault();
+    const ed = editando;
+    if (!ed.nombres.trim() || !ed.apellidos.trim()) { setEditando({ ...ed, error: 'Escribe nombres y apellidos.' }); return; }
+    if (ed.rol !== ed.u.rol && !window.confirm(`Vas a cambiar el rol de ${ed.u.nombres} ${ed.u.apellidos} de «${ROLE_LABEL[ed.u.rol]}» a «${ROLE_LABEL[ed.rol]}». ¿Continuar?`)) return;
+    setEditando({ ...ed, guardando: true, error: '' });
+    try {
+      await editarUsuario(ed.u.id, { nombres: ed.nombres, apellidos: ed.apellidos, telefono: ed.telefono, rol: ed.rol });
+      setToast({ tipo: 'ok', msg: `${ed.nombres} ${ed.apellidos}: datos guardados${ed.rol !== ed.u.rol ? ` · ahora es ${ROLE_LABEL[ed.rol]}` : ''}.` });
+      setEditando(null);
+      await cargar();
+      refrescarDatos();
+    } catch (err) { setEditando(x => ({ ...x, guardando: false, error: err.message || 'No se pudo guardar.' })); }
+  }
 
   async function toggleActivo(u) {
     try {
@@ -265,6 +282,7 @@ export default function Usuarios() {
                     {esSuperAdmin && <td>{u.instituciones?.nombre || '—'}</td>}
                     <td><span className={'badge ' + (u.activo ? 'b-ok' : 'b-muted')}>{u.activo ? 'Activo' : 'Inactivo'}</span></td>
                     <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {(esSuperAdmin || !NIVEL_SIGEE.includes(u.rol)) && <button className="btn btn-secondary btn-sm" title="Editar datos y rol del usuario" style={{ marginRight: 6 }} onClick={() => abrirEditar(u)}>✏️ Editar</button>}
                       <button className="btn btn-secondary btn-sm" title="Asignar una contraseña nueva a esta cuenta" style={{ marginRight: 6 }}
                         onClick={() => setRestablecer([{ id: u.id, nombre: `${u.nombres} ${u.apellidos}`.trim(), email: u.email }])}>🔑 Restablecer</button>
                       <button className="btn btn-ghost btn-sm" onClick={() => toggleActivo(u)}>
@@ -292,6 +310,37 @@ export default function Usuarios() {
         <RestablecerClaveModal usuarios={restablecer} onClose={() => { setRestablecer(null); setSel(new Set()); }} />
       )}
 
+      {editando && (
+        <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget && !editando.guardando) setEditando(null); }}>
+          <form className="modal" onSubmit={guardarEdicion} style={{ maxWidth: 520 }}>
+            <div className="modal-h"><h3>Editar usuario</h3></div>
+            <div className="modal-b">
+              <p className="muted" style={{ fontSize: 12.5, marginTop: 0 }}>{editando.u.email}{editando.u.instituciones?.nombre ? ` · ${editando.u.instituciones.nombre}` : ''}</p>
+              <div className="form-grid">
+                <div><label className="fl">Nombres</label><input className="fc" value={editando.nombres} onChange={e => setEditando(x => ({ ...x, nombres: e.target.value }))} /></div>
+                <div><label className="fl">Apellidos</label><input className="fc" value={editando.apellidos} onChange={e => setEditando(x => ({ ...x, apellidos: e.target.value }))} /></div>
+                <div><label className="fl">Teléfono</label><input className="fc" value={editando.telefono} onChange={e => setEditando(x => ({ ...x, telefono: e.target.value }))} /></div>
+                <div><label className="fl">Rol</label>
+                  <select className="fc" value={editando.rol} disabled={editando.u.id === profile.id} onChange={e => setEditando(x => ({ ...x, rol: e.target.value }))}>
+                    {(esSuperAdmin ? ROLES_TODOS : ROLES_PLANTEL).map(r => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+                  </select>
+                  {editando.u.id === profile.id && <div className="muted" style={{ fontSize: 11.5 }}>No puedes cambiar tu propio rol.</div>}
+                </div>
+              </div>
+              {editando.rol !== editando.u.rol && (
+                <p style={{ fontSize: 12.5, background: 'rgba(245,158,11,.12)', padding: 10, borderRadius: 8, marginTop: 12 }}>
+                  El cambio de rol se aplica la próxima vez que la persona inicie sesión.
+                  {editando.u.rol === 'docente' && ' Seguirá teniendo su ficha de docente y sus clases asignadas, pero con el nuevo rol dejará de ver las pantallas propias de docente (Mis estudiantes, Mi horario).'}
+                </p>)}
+              {editando.error && <p style={{ color: 'var(--red)', fontSize: 13, marginTop: 10 }}>{editando.error}</p>}
+            </div>
+            <div className="modal-f">
+              <button type="button" className="btn btn-secondary" disabled={editando.guardando} onClick={() => setEditando(null)}>Cancelar</button>
+              <button type="submit" className="btn btn-primary" disabled={editando.guardando}>{editando.guardando ? 'Guardando…' : 'Guardar cambios'}</button>
+            </div>
+          </form>
+        </div>
+      )}
       {modalOpen && credencialesCreadas && (
         <div className="modal-bg open">
           <div className="modal" style={{ maxWidth: 460 }}>
