@@ -4,6 +4,7 @@ import {
 } from 'recharts';
 import { useSession } from '../lib/SessionContext.jsx';
 import CargaDocente from '../components/CargaDocente.jsx';
+import { cmpNombre } from '../lib/ordenar.js';
 import { jornadasDePlantel, docenteTrabajaEn, jornadasDeDocente } from '../lib/jornadas.js';
 import {
   fetchGradosConParalelos, crearGrado, actualizarGrado, eliminarGrado,
@@ -455,7 +456,7 @@ function SubjectStudentPanel({
   materiasCatalogo, docentes, institucionId, periodoActivo, recargarDetalle, recargarCatalogo, showToast
 }) {
   const [q, setQ] = useState('');
-  const filtrados = alumnos.filter(a => {
+  const filtrados = [...alumnos].sort(cmpNombre).filter(a => {
     if (!q) return true;
     const texto = `${a.nombres} ${a.apellidos} ${a.cedula || ''}`.toLowerCase();
     return texto.includes(q.toLowerCase());

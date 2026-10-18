@@ -11,6 +11,7 @@ import ImportadorInteligente from '../components/ImportadorInteligente.jsx';
 import { FormDocentePersonales, FormDocenteTitulos } from '../components/FormulariosPersona.jsx';
 import RestablecerClaveModal from '../components/RestablecerClaveModal.jsx';
 import AccesoMasivoDocentes from '../components/AccesoMasivoDocentes.jsx';
+import { cmpNombre } from '../lib/ordenar.js';
 import { JORNADAS as JORNADAS_TURNO, jornadasDePlantel, normalizarJornadas } from '../lib/jornadas.js';
 import { descargarPlantillaExcel, leerExcel, normalizarFecha, validarCedulaEC, exportarFilasExcel } from '../lib/cargaMasiva.js';
 
@@ -116,7 +117,7 @@ export default function Docentes() {
     setCargas(await fetchCargasPorDocenteId(docenteId, institucion.id));
   }
 
-  const filtrados = docentes.filter(d => {
+  const filtrados = [...docentes].sort(cmpNombre).filter(d => {
     if (busqueda && !d.nombre.toLowerCase().includes(busqueda.toLowerCase()) && !(d.cedula || '').includes(busqueda) && !(d.amie || '').toLowerCase().includes(busqueda.toLowerCase())) return false;
     if (fPlantel && d.institucionId !== fPlantel) return false;
     if (fSituacion && d.situacion !== fSituacion) return false;

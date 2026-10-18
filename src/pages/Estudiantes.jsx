@@ -6,6 +6,7 @@ import {
   crearMatricula, reactivarMatricula, fetchGradosConParalelos, fetchPeriodos, fetchEstudiantesParaCarga, cargarEstudiantesLote, crearUsuario
 } from '../lib/data.js';
 import { generarClave } from '../lib/claves.js';
+import { cmpNombre } from '../lib/ordenar.js';
 import { descargarPlantillaExcel, leerExcel, normalizarFecha, validarCedulaEC, exportarFilasExcel } from '../lib/cargaMasiva.js';
 import ImportadorInteligente from '../components/ImportadorInteligente.jsx';
 import { FormAlumno } from '../components/FormulariosPersona.jsx';
@@ -73,7 +74,7 @@ export default function Estudiantes() {
     })();
   }, [institucion?.id]);
 
-  const filtrados = estudiantes.filter(e => {
+  const filtrados = [...estudiantes].sort(cmpNombre).filter(e => {
     if (busqueda && !e.nombre.toLowerCase().includes(busqueda.toLowerCase()) && !(e.cedula || '').includes(busqueda) && !(e.amie || '').toLowerCase().includes(busqueda.toLowerCase())) return false;
     if (fPlantel && e.institucionId !== fPlantel) return false;
     if (fCurso && `${e.curso} ${e.paralelo}`.trim() !== fCurso) return false;

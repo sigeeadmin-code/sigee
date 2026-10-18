@@ -6,6 +6,7 @@ import { filaParaGuardar, agruparPorColumnas, cedulaCentral } from './importCent
 import { planAsignacion, planCruce, docenteDesdeBase } from './asignarDocentes.js';
 import { palabraClave, coincideBusqueda } from './fichaAsistencia.js';
 import { fetchCalendario } from './calendario.js';
+import { cmpNombre } from './ordenar.js';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://sigee-backend-production.up.railway.app';
 
@@ -172,6 +173,7 @@ export async function fetchDatosGlobales(instituciones = []) {
       activo: !!e.activo, acceso: !!e.profile_id, ...plantel(e.institucion_id)
     };
   });
+  docentes.sort(cmpNombre); estudiantes.sort(cmpNombre);
   return { docentes, estudiantes, usuarios: [], administrativos: [], tareas: [], horario: [], periodoActivo: null, grados: [], paralelos: [], materias: [] };
 }
 
@@ -1056,7 +1058,7 @@ export async function crearUsuario(datos) {
 
 // ── Académico: docentes simples + materias por paralelo + alumnos detalle ──
 export async function fetchDocentesSimple(institucionId) {
-  const rows = await sel('docentes', 'id, nombres, apellidos, cedula, especialidad, area, jornada', q => q.eq('institucion_id', institucionId).eq('activo', true));
+  const rows = await sel('docentes', 'id, nombres, apellidos, cedula, especialidad, area, jornada', q => q.eq('institucion_id', institucionId).eq('activo', true).order('apellidos').order('nombres'));
   return rows.map(d => ({ id: d.id, nombre: `${d.apellidos || ''} ${d.nombres || ''}`.trim(), cedula: d.cedula, especialidad: d.especialidad || '', area: d.area || '', jornada: d.jornada || '' }));
 }
 export async function fetchMateriasParalelo(paraleloId, periodoId) {
@@ -1117,7 +1119,7 @@ export async function fetchEstudiantesParaleloDetalle(paraleloId, periodoId) {
       hermanosCount[id] = set.size;
     });
   }
-  return estudiantes.map(e => {
+  return [...estudiantes].sort(cmpNombre).map(e => {
     const repId = (repIdsPorEst[e.id] || [])[0] || null;
     const rep = repId ? repById[repId] : null;
     const mat = matByEst[e.id];
