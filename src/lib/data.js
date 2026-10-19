@@ -445,7 +445,10 @@ export async function eliminarAula(id) {
 }
 
 export async function fetchHorario(institucionId) {
-  return sel('horario_bloques', '*', q => q.eq('institucion_id', institucionId));
+  // Un plantel grande supera las 1.000 filas que devuelve Supabase por consulta (ej. 1.727 bloques): se lee por páginas
+  // y con orden fijo; si no, los bloques de varios cursos no aparecían en la cuadrícula aunque sí estaban guardados.
+  try { return await selTodo('horario_bloques', '*', q => q.eq('institucion_id', institucionId).order('id')); }
+  catch (e) { console.error('[Supabase] horario_bloques', e.message); return []; }
 }
 /** Solo los bloques de las cargas que el docente realmente dicta — nunca todo el plantel. */
 export async function fetchHorarioDocente(docenteMateriaIds) {
@@ -1628,9 +1631,9 @@ export async function eliminarBloquesHorario(ids) {
 export async function fetchCargasHorario(institucionId, periodoId, paraleloIds) {
   if (!paraleloIds.length) return [];
   const [cargas, materias, docentes] = await Promise.all([
-    sel('docente_materia', '*', q => q.in('paralelo_id', paraleloIds).eq('periodo_id', periodoId)),
-    sel('materias', 'id, nombre', q => q.eq('institucion_id', institucionId)),
-    sel('docentes', 'id, nombres, apellidos', q => q.eq('institucion_id', institucionId))
+    selTodo('docente_materia', '*', q => q.in('paralelo_id', paraleloIds).eq('periodo_id', periodoId).order('id')).catch(() => []),
+    selTodo('materias', 'id, nombre', q => q.eq('institucion_id', institucionId).order('id')).catch(() => []),
+    selTodo('docentes', 'id, nombres, apellidos', q => q.eq('institucion_id', institucionId).order('id')).catch(() => [])
   ]);
   const matById = Object.fromEntries(materias.map(m => [m.id, m]));
   const docById = Object.fromEntries(docentes.map(d => [d.id, d]));
