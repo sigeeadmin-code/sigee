@@ -5,6 +5,8 @@ import { calendarioRouter } from './routes/calendario.js';
 import { asistenciaRouter } from './routes/asistencia.js';
 import { calificacionesRouter } from './routes/calificaciones.js';
 import { correosRouter } from './routes/correos.js';
+import { requireAuth, requireRole } from './lib/auth.js';
+import { crearContador, registrarPeticion, serieHoraria, leerRecursos } from './lib/metricas.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -38,6 +40,17 @@ app.use(['/asistencia', '/calendario', '/calificaciones'], rateLimit({
 
 // Correos: tope aparte y más bajo (cada petición envía un correo real).
 app.use('/correos', rateLimit({ windowMs: 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false, message: { error: 'Demasiados envíos seguidos. Espera un momento.' } }));
+
+// Cuenta el tráfico por hora (sin contar /health ni /metricas) para el gráfico de horas pico del Diagnóstico.
+const contador = crearContador();
+app.use((req, res, next) => {
+  if (req.path === '/health' || req.path === '/metricas') return next();
+  const t0 = Date.now();
+  res.on('finish', () => registrarPeticion(contador, t0, Date.now() - t0, res.statusCode));
+  next();
+});
+
+app.get('/metricas', requireAuth, requireRole('super_admin'), (_req, res) => res.json({ ...leerRecursos(), serie: serieHoraria(contador), contando_desde: new Date(contador.desde).toISOString() }));
 
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'sigee-backend', ts: new Date().toISOString() }));
 

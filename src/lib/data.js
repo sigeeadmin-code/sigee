@@ -1070,6 +1070,23 @@ export async function fetchDiagnostico(institucionId = null) {
   if (error) throw new Error(error.message);
   return data;
 }
+/** Super Admin: disco, conexiones y actividad por hora de la base de datos (Supabase). */
+export async function fetchInfraestructura(dias = 14) {
+  const { data, error } = await supabase.rpc('diagnostico_infraestructura', { p_dias: dias });
+  if (error) throw new Error(error.message);
+  return data;
+}
+export async function guardarLimitesInfra({ dbBytes, storageBytes }) {
+  for (const [clave, valor] of [['supabase_db_bytes', dbBytes], ['supabase_storage_bytes', storageBytes]]) {
+    const { error } = await supabase.rpc('guardar_limite_infra', { p_clave: clave, p_valor: valor });
+    if (error) throw new Error(error.message);
+  }
+}
+/** Memoria, disco y tráfico por hora del servidor de Railway (solo Super Admin; el servidor puede estar dormido). */
+export async function fetchMetricasServidor() {
+  return llamarBackend('GET', '/metricas');
+}
+
 /** Mide cuánto tarda la base de datos y el servidor (Railway) en responder. */
 export async function medirConexiones() {
   const t0 = performance.now();

@@ -4,6 +4,7 @@ import { fetchDiagnostico, medirConexiones, fetchInstitucionesBusqueda } from '.
 import BuscadorInstitucion from '../components/BuscadorInstitucion.jsx';
 import { descargarLibro } from '../lib/exportLibro.js';
 import { calcularPuntaje, estadoPuntaje } from '../lib/diagnostico.js';
+import InfraestructuraPanel from '../components/InfraestructuraPanel.jsx';
 
 const SEV = {
   alta: { label: 'Alta', color: 'var(--red)', fondo: 'var(--redL)', borde: 'var(--redXL)', peso: 12, icon: 'ti ti-alert-octagon' },
@@ -186,6 +187,8 @@ export default function Diagnostico() {
           </div>
         ))}
       </div>
+
+      <InfraestructuraPanel recargar={revisado} />
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
         {[['hallazgos', 'Con hallazgos'], ['alta', 'Alta'], ['media', 'Media'], ['baja', 'Baja'], ['ok', 'Sin problema'], ['todos', 'Todos']].map(([v, l]) => (
