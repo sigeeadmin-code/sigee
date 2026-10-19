@@ -1054,6 +1054,13 @@ export async function restablecerContrasenas(resets) {
   return data?.resultados || [];
 }
 
+/** Super Admin: todos los usuarios (con cuenta) y sus cargas, de un plantel o de todos. → { usuarios: [...], cargas: [...] } */
+export async function exportarUsuariosGlobal(institucionId = null) {
+  const { data, error } = await supabase.rpc('exportar_usuarios_global', { p_institucion: institucionId });
+  if (error) throw new Error(error.message);
+  return data || { usuarios: [], cargas: [] };
+}
+
 export async function crearUsuario(datos) {
   const { data, error } = await supabase.functions.invoke('admin-create-user', { body: datos });
   if (error) throw error;

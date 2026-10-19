@@ -4,6 +4,7 @@ import { fetchPlanteles, fetchUsuarios, crearUsuario, actualizarUsuario, editarU
 import { fichaUnicaQueCoincide } from '../lib/vinculos.js';
 import BuscadorInstitucion from '../components/BuscadorInstitucion.jsx';
 import RestablecerClaveModal from '../components/RestablecerClaveModal.jsx';
+import ExportarUsuariosModal from '../components/ExportarUsuariosModal.jsx';
 
 const NIVEL_SIGEE = ['super_admin', 'supervisor_general', 'contador_general'];
 
@@ -46,6 +47,7 @@ export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([]);
   const [planteles, setPlanteles] = useState([]);
   const [editando, setEditando] = useState(null);       // { u, nombres, apellidos, telefono, rol, guardando, error }
+  const [exportando, setExportando] = useState(false);
   const [restablecer, setRestablecer] = useState(null);   // cuentas a las que se les restablece la contraseña
   const [sel, setSel] = useState(() => new Set());
   const [instBusqueda, setInstBusqueda] = useState([]);
@@ -224,9 +226,12 @@ export default function Usuarios() {
             {esSuperAdmin ? 'Cuentas de acceso de todos los planteles' : 'Cuentas de acceso de tu plantel'}
           </div>
         </div>
-        <button className="btn btn-primary" onClick={abrirCrear}>
-          <span className="ti ti-user-plus" /> Nuevo usuario
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {esSuperAdmin && <button className="btn btn-secondary" onClick={() => setExportando(true)}>⬇️ Exportar usuarios (Excel)</button>}
+          <button className="btn btn-primary" onClick={abrirCrear}>
+            <span className="ti ti-user-plus" /> Nuevo usuario
+          </button>
+        </div>
       </div>
 
       <div className="search-bar">
@@ -304,6 +309,10 @@ export default function Usuarios() {
             </div>
           </div>
         </div>
+      )}
+
+      {exportando && esSuperAdmin && (
+        <ExportarUsuariosModal instituciones={instBusqueda} instCargando={instCargando} miId={profile.id} onClose={() => { setExportando(false); cargar(); }} />
       )}
 
       {restablecer && (
