@@ -41,7 +41,7 @@ export default function InfraestructuraPanel({ recargar }) {
     setCargando(true); setErrInfra(''); setErrSrv('');
     const [a, b] = await Promise.allSettled([fetchInfraestructura(dias), fetchMetricasServidor()]);
     if (a.status === 'fulfilled') setInfra(a.value); else setErrInfra(a.reason?.message || 'No se pudo leer la base de datos.');
-    if (b.status === 'fulfilled') setSrv(b.value); else { setSrv(null); setErrSrv(b.reason?.message || 'El servidor no respondió.'); }
+    if (b.status === 'fulfilled') setSrv(b.value); else { setSrv(null); const m = b.reason?.message || 'El servidor no respondió.'; setErrSrv(/Ruta no encontrada/.test(m) ? 'Railway aún no tiene la versión con métricas: falta desplegar el último commit.' : m); }
     setCargando(false);
   }, [dias]);
   useEffect(() => { cargar(); }, [cargar]);
