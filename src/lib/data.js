@@ -1064,6 +1064,27 @@ export async function exportarUsuariosGlobal(institucionId = null) {
   return data || { usuarios: [], cargas: [] };
 }
 
+/** Super Admin: resumen y controles de calidad de datos (global o de un plantel). */
+export async function fetchDiagnostico(institucionId = null) {
+  const { data, error } = await supabase.rpc('diagnostico_sistema', { p_institucion: institucionId });
+  if (error) throw new Error(error.message);
+  return data;
+}
+/** Mide cuánto tarda la base de datos y el servidor (Railway) en responder. */
+export async function medirConexiones() {
+  const t0 = performance.now();
+  const { error } = await supabase.from('instituciones').select('id', { head: true, count: 'exact' }).limit(1);
+  const base = { ok: !error, ms: Math.round(performance.now() - t0), detalle: error ? error.message : '' };
+  const t1 = performance.now();
+  let servidor;
+  try {
+    const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 12000);
+    const resp = await fetch(`${API_URL}/health`, { signal: ctl.signal }); clearTimeout(to);
+    servidor = { ok: resp.ok, ms: Math.round(performance.now() - t1), detalle: resp.ok ? '' : `HTTP ${resp.status}` };
+  } catch (e) { servidor = { ok: false, ms: Math.round(performance.now() - t1), detalle: e.name === 'AbortError' ? 'No respondió en 12 s (puede estar dormido)' : 'Sin conexión con el servidor' }; }
+  return { base, servidor };
+}
+
 export async function crearUsuario(datos) {
   const { data, error } = await supabase.functions.invoke('admin-create-user', { body: datos });
   if (error) throw error;
