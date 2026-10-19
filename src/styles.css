@@ -186,7 +186,7 @@ table.data tr:last-child td{border-bottom:none}
 .fc{width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:var(--r);font-size:13px;font-family:inherit;outline:none;background:var(--white);color:var(--ink)}
 .fc:disabled{background:var(--page);color:var(--slate)}
 .fc:focus{border-color:var(--brand);box-shadow:var(--shB)}
-.modal-bg{position:fixed;inset:0;background:rgba(6,17,31,.55);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px}
+.modal-bg{position:fixed;inset:0;background:rgba(6,17,31,.55);z-index:500;overscroll-behavior:contain;display:flex;align-items:center;justify-content:center;padding:20px}
 .modal{background:var(--white);border-radius:var(--r3);width:100%;max-width:560px;max-height:90vh;overflow:hidden;box-shadow:var(--sh3);display:flex;flex-direction:column}
 .modal.wide{max-width:720px}
 .modal-h{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
@@ -262,8 +262,8 @@ table.data tr:last-child td{border-bottom:none}
 }
 
 /* ── Oficio de inasistencias: vista previa en pantalla e impresión en hojas A4 ── */
-.oficio-overlay{position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:80;display:flex;align-items:stretch;justify-content:center;padding:2vh 2vw}
-.oficio-panel{background:var(--bg,#f8fafc);border-radius:14px;width:100%;max-width:1280px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.35)}
+.oficio-overlay{position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:500;display:flex;align-items:stretch;justify-content:center;padding:2vh 2vw;overflow-y:auto;overscroll-behavior:contain}
+.oficio-panel{background:var(--bg,#f8fafc);border-radius:14px;width:100%;max-width:1280px;min-height:0;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.35)}
 .oficio-barra{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#fff;border-bottom:1px solid var(--line,#e2e8f0)}
 .oficio-cuerpo{display:flex;flex:1;min-height:0}
 .oficio-form{width:300px;flex:none;padding:14px 16px;overflow-y:auto;background:#fff;border-right:1px solid var(--line,#e2e8f0)}

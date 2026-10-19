@@ -6,7 +6,7 @@ import {
 } from '../lib/importacionInteligente.js';
 import { exportarFilasExcel } from '../lib/cargaMasiva.js';
 
-const overlay = { position: 'fixed', inset: 0, background: 'rgba(15,23,42,.5)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '3vh 12px', overflowY: 'auto' };
+const overlay = { position: 'fixed', inset: 0, background: 'rgba(15,23,42,.5)', zIndex: 500, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '3vh 12px', overflowY: 'auto' };
 const caja = { background: 'var(--card, #fff)', borderRadius: 14, width: '100%', maxWidth: 1040, boxShadow: '0 20px 50px rgba(0,0,0,.28)' };
 const NOMBRES = { docentes: ['docente', 'docentes'], estudiantes: ['estudiante', 'estudiantes'] };
 const plural = (n, tipo) => `${n} ${NOMBRES[tipo][n === 1 ? 0 : 1]}`;

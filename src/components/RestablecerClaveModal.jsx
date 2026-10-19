@@ -3,7 +3,7 @@ import { restablecerContrasenas } from '../lib/data.js';
 import { generarClave } from '../lib/claves.js';
 import { exportarFilasExcel } from '../lib/cargaMasiva.js';
 
-const overlay = { position: 'fixed', inset: 0, background: 'rgba(15,23,42,.5)', zIndex: 80, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '5vh 12px', overflowY: 'auto' };
+const overlay = { position: 'fixed', inset: 0, background: 'rgba(15,23,42,.5)', zIndex: 500, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '5vh 12px', overflowY: 'auto' };
 const caja = { background: 'var(--card, #fff)', borderRadius: 14, width: '100%', boxShadow: '0 20px 50px rgba(0,0,0,.28)' };
 
 /**

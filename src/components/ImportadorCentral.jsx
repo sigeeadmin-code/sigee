@@ -3,7 +3,7 @@ import { leerArchivo } from '../lib/leerHojas.js';
 import { leerMatriz, leerObjetos } from '../lib/importCentral.js';
 import { cedulasExistentesCentral, importarCentral } from '../lib/data.js';
 
-const overlay = { position: 'fixed', inset: 0, background: 'rgba(15,23,42,.5)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '4vh 12px', overflowY: 'auto' };
+const overlay = { position: 'fixed', inset: 0, background: 'rgba(15,23,42,.5)', zIndex: 500, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '4vh 12px', overflowY: 'auto' };
 const caja = { background: 'var(--card, #fff)', borderRadius: 14, width: '100%', maxWidth: 820, boxShadow: '0 20px 50px rgba(0,0,0,.28)' };
 const MAX_ARCHIVO_MB = 25;
 

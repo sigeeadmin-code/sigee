@@ -20,7 +20,7 @@ export default function AvisoVersionNueva() {
   }, []);
   if (!nueva) return null;
   return (
-    <div role="alert" style={{ position: 'fixed', left: 12, right: 12, bottom: 12, zIndex: 100, maxWidth: 520, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12, background: '#1e293b', color: '#fff', boxShadow: '0 10px 30px rgba(0,0,0,.35)', fontSize: 13 }}>
+    <div role="alert" style={{ position: 'fixed', left: 12, right: 12, bottom: 12, zIndex: 600, maxWidth: 520, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12, background: '#1e293b', color: '#fff', boxShadow: '0 10px 30px rgba(0,0,0,.35)', fontSize: 13 }}>
       <span style={{ flex: 1 }}>Hay una <strong>versión nueva</strong> de SIGEE. Actualiza para evitar errores al guardar.</span>
       <button className="btn btn-primary btn-sm" onClick={() => window.location.reload()}>Actualizar ahora</button>
     </div>

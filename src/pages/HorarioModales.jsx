@@ -26,7 +26,7 @@ function parametrosDesde(franjas) {
   };
 }
 
-const overlay = { position: 'fixed', inset: 0, background: 'rgba(15,23,42,.45)', zIndex: 60, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '4vh 12px', overflowY: 'auto' };
+const overlay = { position: 'fixed', inset: 0, background: 'rgba(15,23,42,.45)', zIndex: 500, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '4vh 12px', overflowY: 'auto' };
 const caja = { background: 'var(--card, #fff)', borderRadius: 14, width: '100%', boxShadow: '0 20px 50px rgba(0,0,0,.25)' };
 
 /* ───────────────────────────── Jornada y recreos ───────────────────────────── */

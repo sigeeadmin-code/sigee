@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import BuscadorInstitucion from './BuscadorInstitucion.jsx';
 import { fetchInstitucionesBusqueda, asignarBaseDocentes } from '../lib/data.js';
 
-const overlay = { position: 'fixed', inset: 0, background: 'rgba(15,23,42,.5)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '6vh 12px', overflowY: 'auto' };
+const overlay = { position: 'fixed', inset: 0, background: 'rgba(15,23,42,.5)', zIndex: 500, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '6vh 12px', overflowY: 'auto' };
 const caja = { background: 'var(--card, #fff)', borderRadius: 14, width: '100%', maxWidth: 560, boxShadow: '0 20px 50px rgba(0,0,0,.28)' };
 
 // Asigna un plantel (por nombre o AMIE) a los docentes elegidos de la base y los incorpora al sistema activo.
