@@ -65,3 +65,10 @@ assert.equal(rutaPermitidaParaRolDb(R, 'docente', 'docente'), true);
 assert.equal(rutaPermitidaParaRolDb(R, 'alumno', 'estudiante'), false); assert.equal(rutaPermitidaParaRolDb(R, 'padre', 'padre'), false);
 assert.equal(NAV_BY_ROL.docente.flatMap(c => c.items).find(i => i.to === R).label, 'Alertas de rendimiento');
 console.log('rendimiento (acceso): ok');
+
+// Boletas: administración, supervisión e inspección del plantel (y el docente tutor de su curso)
+assert.deepEqual(rolesConAcceso('/boletas').sort(), ['admin_plantel', 'docente', 'inspector', 'secretario']);
+assert.equal(rutaPermitidaParaRolDb('/boletas', 'admin_plantel', 'supervisor_plantel'), true, 'supervisor de plantel ve boletas');
+assert.equal(rutaPermitidaParaRolDb('/boletas', 'admin_plantel', 'admin_plantel'), true);
+assert.equal(rutaPermitidaParaRolDb('/boletas', 'inspector', 'inspector_general'), true, 'inspector general ve boletas');
+console.log('boletas (acceso): ok');

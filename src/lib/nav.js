@@ -120,6 +120,7 @@ export const NAV_BY_ROL = {
       { to: '/asistencia', label: 'Consultas de asistencia', icon: 'ti ti-calendar-check' },
       { to: '/analisis-asistencia', label: 'Análisis de asistencia', icon: 'ti ti-chart-dots' },
       { to: '/analisis-calificaciones', label: 'Análisis de calificaciones', icon: 'ti ti-chart-histogram' },
+      { to: '/boletas', label: 'Boletas', icon: 'ti ti-report-analytics' },
       { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' },
       { to: '/inasistencias', label: 'Inasistencias / WhatsApp', icon: 'ti ti-message-circle' },
       { to: '/calendario', label: 'Calendario académico', icon: 'ti ti-calendar' }
