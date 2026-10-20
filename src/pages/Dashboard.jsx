@@ -9,6 +9,7 @@ import {
 import { usaEvaluacionNumerica } from '../lib/calificaciones.js';
 import { Link } from 'react-router-dom';
 import HistorialAsistencia from '../components/HistorialAsistencia.jsx';
+import RecordatorioRendimiento from '../components/RecordatorioRendimiento.jsx';
 
 const SOST_LABEL = { Fiscal: 'Fiscal', Particular: 'Particular', Fiscomisional: 'Fiscomisional', Municipal: 'Municipal' };
 
@@ -624,6 +625,7 @@ function DashboardDocente() {
       <div style={{ marginBottom: 4, fontSize: 12, color: 'var(--slate)' }}>Panel docente</div>
       <h2 style={{ margin: '0 0 4px' }}>{profile.nombres} {profile.apellidos}</h2>
       <div style={{ fontSize: 13, color: 'var(--slate)', marginBottom: 18 }}>{institucion?.nombre} · {cargas.length} carga(s) asignada(s)</div>
+      <RecordatorioRendimiento institucionId={institucionId} />
 
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="ch"><h3>Clases de hoy ({hoyNombre})</h3></div>

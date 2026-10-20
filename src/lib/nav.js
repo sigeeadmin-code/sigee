@@ -62,6 +62,7 @@ export const NAV_BY_ROL = {
       { to: '/tareas', label: 'Tareas y avisos', icon: 'ti ti-clipboard-list' },
       { to: '/asistencia', label: 'Asistencia', icon: 'ti ti-calendar-check' },
       { to: '/analisis-asistencia', label: 'Análisis de asistencia', icon: 'ti ti-chart-dots' },
+      { to: '/analisis-calificaciones', label: 'Análisis de calificaciones', icon: 'ti ti-chart-histogram', soloRolDb: ['admin_plantel', 'supervisor_plantel', 'supervisor_general'] },
       { to: '/boletas', label: 'Boletas', icon: 'ti ti-report-analytics' },
       { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' },
       { to: '/inasistencias', label: 'Inasistencias', icon: 'ti ti-message-circle' },
@@ -118,6 +119,7 @@ export const NAV_BY_ROL = {
       { to: '/reportes-asistencia', label: 'Reportes de asistencia', icon: 'ti ti-chart-bar' },
       { to: '/asistencia', label: 'Consultas de asistencia', icon: 'ti ti-calendar-check' },
       { to: '/analisis-asistencia', label: 'Análisis de asistencia', icon: 'ti ti-chart-dots' },
+      { to: '/analisis-calificaciones', label: 'Análisis de calificaciones', icon: 'ti ti-chart-histogram' },
       { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' },
       { to: '/inasistencias', label: 'Inasistencias / WhatsApp', icon: 'ti ti-message-circle' },
       { to: '/calendario', label: 'Calendario académico', icon: 'ti ti-calendar' }
@@ -135,6 +137,7 @@ export const NAV_BY_ROL = {
     { cat: 'Académico', items: [
       { to: '/horario', label: 'Mi horario', icon: 'ti ti-clock' },
       { to: '/calificaciones', label: 'Calificaciones', icon: 'ti ti-report' },
+      { to: '/analisis-calificaciones', label: 'Alertas de rendimiento', icon: 'ti ti-alert-triangle' },
       { to: '/boletas', label: 'Boletas del curso', icon: 'ti ti-report-analytics', requiere: 'tutor' },
       { to: '/asistencia', label: 'Asistencia', icon: 'ti ti-calendar-check' },
       { to: '/mis-estudiantes', label: 'Mis estudiantes', icon: 'ti ti-users', requiere: 'tutor' },

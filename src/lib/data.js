@@ -1064,6 +1064,23 @@ export async function exportarUsuariosGlobal(institucionId = null) {
   return data || { usuarios: [], cargas: [] };
 }
 
+/** Alertas tempranas de bajo rendimiento (promedio 0,01–6,99) por semana y mes. El servidor limita el alcance según el rol:
+ *  docente → solo sus cursos; supervisor/inspector/admin → todo su plantel. trimestre: 'T1'|'T2'|'T3' o null (el más reciente). */
+export async function fetchAnalisisCalificaciones(institucionId, trimestre = null, semanas = 12, meses = 6) {
+  const { data, error } = await supabase.rpc('analisis_calificaciones', { p_institucion: institucionId, p_trimestre: trimestre, p_semanas: semanas, p_meses: meses });
+  if (error) throw new Error(error.message);
+  return data;
+}
+export async function fetchDetalleEstudianteCalificaciones(estudianteId, trimestre = 'T1') {
+  const { data, error } = await supabase.rpc('detalle_estudiante_calificaciones', { p_estudiante: estudianteId, p_trimestre: trimestre });
+  if (error) throw new Error(error.message);
+  return data;
+}
+export async function guardarSeguimientoAlerta({ estudianteId, cargaId, trimestre, estado, nota }) {
+  const { error } = await supabase.rpc('guardar_seguimiento_alerta', { p_estudiante: estudianteId, p_carga: cargaId, p_trimestre: trimestre, p_estado: estado, p_nota: nota || null });
+  if (error) throw new Error(error.message);
+}
+
 /** Super Admin: resumen y controles de calidad de datos (global o de un plantel). */
 export async function fetchDiagnostico(institucionId = null) {
   const { data, error } = await supabase.rpc('diagnostico_sistema', { p_institucion: institucionId });
