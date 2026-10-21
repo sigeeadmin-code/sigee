@@ -18,8 +18,9 @@ const ESTADOS = [
   { v: 'justificado', label: 'Justificado' }
 ];
 
-function hoyISO() { return new Date().toISOString().slice(0, 10); }
-function haceDias(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
+function aISO(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+function hoyISO() { return aISO(new Date()); }
+function haceDias(n) { const d = new Date(); d.setDate(d.getDate() - n); return aISO(d); }
 
 function linkWhatsapp(telefono, nombreAlumno) {
   const tel = (telefono || '').replace(/^0/, '');
@@ -172,6 +173,8 @@ function RegistroDiario() {
   const [alumnos, setAlumnos] = useState([]);
   const [registros, setRegistros] = useState({});
   const [registrosOriginales, setRegistrosOriginales] = useState({});
+  const [obsOriginales, setObsOriginales] = useState({});
+  const [guardadoEn, setGuardadoEn] = useState(null); // hora del último guardado de ESTA materia y fecha
   const [obs, setObs] = useState({});
   const [reciente, setReciente] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -256,6 +259,9 @@ function RegistroDiario() {
     setRegistros(map);
     setRegistrosOriginales(map);
     setObs(om);
+    setObsOriginales(om);
+    const ult = asis.map(a => a.updated_at || a.created_at).filter(Boolean).sort().pop();
+    setGuardadoEn(asis.length ? (ult ? new Date(ult) : true) : null);
     setReciente(rec.filter(r => r.fecha !== fecha)); // el día actual ya se ve arriba, no lo dupliques
   }, [paraleloId, periodoActivo, docenteMateriaId, fecha]);
 
@@ -282,7 +288,17 @@ function RegistroDiario() {
       // enviados (canal, enviado_at), no una cola de pendientes.
       const nuevasAusencias = alumnos.filter(a => registros[a.id] === 'ausente' && registrosOriginales[a.id] !== 'ausente');
 
-      setRegistrosOriginales(registros);
+      // La toma NO se borra al guardar: se vuelve a leer de la base lo que quedó guardado y sigue a la vista,
+      // para poder corregirla con un nuevo guardado. Si no se guarda de nuevo, prevalece el último guardado hecho.
+      try {
+        const guardadas = await fetchAsistencia(docenteMateriaId, fecha);
+        if (guardadas.length) {
+          const m = {}; const o = {};
+          guardadas.forEach(a => { m[a.estudiante_id] = a.estado; o[a.estudiante_id] = a.observacion || ''; });
+          setRegistros(r => ({ ...r, ...m })); setRegistrosOriginales(m); setObs(ob => ({ ...ob, ...o })); setObsOriginales(o);
+        } else { setRegistrosOriginales(registros); setObsOriginales(obs); }
+      } catch { setRegistrosOriginales(registros); setObsOriginales(obs); }
+      setGuardadoEn(new Date());
       setToast({ tipo: 'ok', msg: 'Asistencia guardada.' + (nuevasAusencias.length ? ` ${nuevasAusencias.length} nueva(s) ausencia(s) — revísalas en Inasistencias.` : '') });
     } catch (err) {
       setToast({ tipo: 'err', msg: err.message || 'No se pudo guardar.' });
@@ -290,6 +306,8 @@ function RegistroDiario() {
     setGuardando(false);
   }
 
+  const hayCambios = useMemo(() => alumnos.some(a => (registros[a.id] || '') !== (registrosOriginales[a.id] || '') || ((obs[a.id] || '') !== (obsOriginales[a.id] || '') && registros[a.id])), [alumnos, registros, registrosOriginales, obs, obsOriginales]);
+  const textoHora = guardadoEn instanceof Date ? guardadoEn.toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) : null;
   const conteo = useMemo(() => {
     const c = { presente: 0, atraso: 0, ausente: 0, justificado: 0, sin: 0 };
     alumnos.forEach(a => {
@@ -438,6 +456,15 @@ function RegistroDiario() {
         </>
       ) : (
       <>
+      {docenteMateriaId && alumnos.length > 0 && guardadoEn && (
+        <div className="card" style={{ marginBottom: 10, borderLeft: `4px solid ${hayCambios ? '#d97706' : '#16a34a'}` }}>
+          <div className="cb" style={{ fontSize: 13 }}>
+            {hayCambios
+              ? <><strong>Cambios sin guardar.</strong> Pulsa «Guardar día» para corregir la asistencia; si no guardas, se mantiene lo guardado antes{textoHora ? ` (${textoHora})` : ''}.</>
+              : <><strong>Asistencia guardada{textoHora ? ` a las ${textoHora}` : ''}.</strong> Sigue a la vista: puedes corregirla y volver a guardar; si no guardas de nuevo, se mantiene este guardado.</>}
+          </div>
+        </div>
+      )}
       {!docenteMateriaId ? (
         <div className="empty"><span className="ti ti-calendar-check" /><p>Selecciona una materia/carga para tomar asistencia.</p></div>
       ) : alumnos.length === 0 ? (

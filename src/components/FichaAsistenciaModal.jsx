@@ -40,7 +40,7 @@ function Barras({ items, vacio }) {
 }
 
 // Ficha de un estudiante: historial por días y por materias, oficios emitidos y avisos por WhatsApp.
-export default function FichaAsistenciaModal({ estudiante, onClose }) {
+export default function FichaAsistenciaModal({ estudiante, onClose, puedeOficio = true }) {
   const { profile, institucion } = useSession();
   const institucionId = institucion?.id;
   const [periodo, setPeriodo] = useState('todo');
@@ -146,7 +146,7 @@ export default function FichaAsistenciaModal({ estudiante, onClose }) {
               <input className="fc" type="date" style={{ width: 150 }} value={custom.hasta} onChange={e => setCustom(c => ({ ...c, hasta: e.target.value }))} />
             </>)}
             <span style={{ flex: 1 }} />
-            <button className="btn btn-primary btn-sm" disabled={!an || faltasInj.length === 0} onClick={() => setOficio(alumnoOficio)} title="Genera el oficio con las faltas injustificadas del período">📄 Generar oficio</button>
+            {puedeOficio && <button className="btn btn-primary btn-sm" disabled={!an || faltasInj.length === 0} onClick={() => setOficio(alumnoOficio)} title="Genera el oficio con las faltas injustificadas del período">📄 Generar oficio</button>}
             <button className="btn btn-secondary btn-sm" disabled={!an || faltasInj.length === 0} onClick={() => setWa({ texto: mensajeWhatsApp({ estudiante, representante: ficha.representante, institucion, fechas: faltasInj }), abierto: false })}>💬 Avisar por WhatsApp</button>
           </div>
           {aviso && <div className="card" style={{ margin: '0 0 10px', padding: '8px 12px', fontSize: 13 }}>{aviso}</div>}

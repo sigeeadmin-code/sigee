@@ -8,6 +8,7 @@ import { descargarLibro } from '../lib/exportLibro.js';
 import AnalisisCalificaciones from './AnalisisCalificaciones.jsx';
 import FichasEmitidas from '../components/FichasEmitidas.jsx';
 import FichaDocumentoModal from '../components/FichaDocumentoModal.jsx';
+import FichaAsistenciaModal from '../components/FichaAsistenciaModal.jsx';
 import { Dona, BarrasH } from '../components/GraficosRendimiento.jsx';
 
 const COLOR_CLASE = { excelente: '#15803d', buena: '#1d4ed8', en_riesgo: '#d97706', critica: '#dc2626', sin_datos: '#94a3b8' };
@@ -26,7 +27,7 @@ function Pestanas({ valor, onCambio, items }) {
 }
 
 /** Asistencia de los cursos de los que el docente es TUTOR (aparte de sus propias clases). */
-function AsistenciaCurso({ institucion, paraleloIds, nombreCurso, onFicha }) {
+function AsistenciaCurso({ institucion, paraleloIds, nombreCurso, onFicha, onVer }) {
   const [periodo, setPeriodo] = useState('mes');
   const { desde, hasta } = useMemo(() => rangoPeriodo(periodo), [periodo]);
   const [datos, setDatos] = useState(null); const [error, setError] = useState(''); const [cargando, setCargando] = useState(false);
@@ -99,11 +100,11 @@ function AsistenciaCurso({ institucion, paraleloIds, nombreCurso, onFicha }) {
               <tbody>
                 {vis.map(f => (
                   <tr key={f.id}>
-                    <td style={{ fontWeight: 600 }}>{f.nombre}<div style={{ fontWeight: 400, fontSize: 11.5, color: 'var(--slate)' }}>{f.cedula}</div></td>
+                    <td style={{ fontWeight: 600 }}><span style={{ cursor: 'pointer', color: 'var(--brand, #0891b2)' }} onClick={() => onVer(f)} title="Ver ficha de asistencia">{f.nombre}</span><div style={{ fontWeight: 400, fontSize: 11.5, color: 'var(--slate)' }}>{f.cedula}</div></td>
                     <td style={{ textAlign: 'center' }}>{f.dias}</td><td style={{ textAlign: 'center', fontWeight: f.faltas ? 800 : 400, color: f.faltas ? '#dc2626' : undefined }}>{f.faltas}</td>
                     <td style={{ textAlign: 'center' }}>{f.justificadas}</td><td style={{ textAlign: 'center' }}>{f.atrasos}</td><td style={{ textAlign: 'center' }}>{f.pctAsistencia === null || f.pctAsistencia === undefined ? '—' : `${f.pctAsistencia}%`}</td>
                     <td><ChipClase clase={f.clase} />{f.rachaMax >= RACHA_ALERTA && <div style={{ fontSize: 11, color: '#dc2626' }}>{f.rachaMax} faltas seguidas</div>}</td>
-                    <td><button className="btn btn-primary btn-sm" onClick={() => onFicha(f, { desde, hasta })}>📄 Fichas y oficios</button></td>
+                    <td style={{ whiteSpace: 'nowrap' }}><button className="btn btn-secondary btn-sm" onClick={() => onVer(f)} title="Historial, faltas por día y por materia">👁️ Ver asistencia</button> <button className="btn btn-primary btn-sm" onClick={() => onFicha(f, { desde, hasta })}>📄 Fichas y oficios</button></td>
                   </tr>
                 ))}
                 {!vis.length && <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--slate)', padding: 20 }}>{filas.length ? 'Ningún estudiante coincide.' : 'No hay estudiantes matriculados en tu curso.'}</td></tr>}
@@ -122,6 +123,7 @@ export default function CursoTutor() {
   const [cursos, setCursos] = useState(null); const [error, setError] = useState('');
   const [trim, setTrim] = useState('T1');
   const [ficha, setFicha] = useState(null); const [recarga, setRecarga] = useState(0);
+  const [verDe, setVerDe] = useState(null);
 
   useEffect(() => {
     let activo = true;
@@ -157,10 +159,11 @@ export default function CursoTutor() {
             <span>Trimestre de las notas que irán en la ficha:</span>
             {['T1', 'T2', 'T3'].map(t => <button key={t} className={'btn btn-sm ' + (trim === t ? 'btn-primary' : 'btn-secondary')} onClick={() => setTrim(t)}>{t.slice(1)}</button>)}
           </div>
-          <AsistenciaCurso institucion={institucion} paraleloIds={paraleloIds} nombreCurso={nombreCurso} onFicha={(f, rango) => setFicha({ f, rango })} />
+          <AsistenciaCurso institucion={institucion} paraleloIds={paraleloIds} nombreCurso={nombreCurso} onFicha={(f, rango) => setFicha({ f, rango })} onVer={f => setVerDe({ id: f.id, nombre: f.nombre, cedula: f.cedula, curso: f.curso })} />
         </>
       )}
       {tab === 'fichas' && <FichasEmitidas institucion={institucion} puedeRevisar={false} recargar={recarga} titulo="Fichas y oficios de mi curso" />}
+      {verDe && <FichaAsistenciaModal estudiante={verDe} puedeOficio={false} onClose={() => setVerDe(null)} />}
       {ficha && (
         <FichaDocumentoModal institucion={institucion} trimestre={trim} tipoInicial="ficha_tutor"
           estudiante={{ id: ficha.f.id, apellidos: ficha.f.apellidos, nombres: ficha.f.nombres, cedula: ficha.f.cedula, curso: ficha.f.curso, paralelo: '', jornada: ficha.f.jornada }} tutorNombreDefault={tutorNombre}
