@@ -72,3 +72,23 @@ assert.equal(rutaPermitidaParaRolDb('/boletas', 'admin_plantel', 'supervisor_pla
 assert.equal(rutaPermitidaParaRolDb('/boletas', 'admin_plantel', 'admin_plantel'), true);
 assert.equal(rutaPermitidaParaRolDb('/boletas', 'inspector', 'inspector_general'), true, 'inspector general ve boletas');
 console.log('boletas (acceso): ok');
+
+// Buscador de docentes y jornadas
+import { filtrarDocentes, normalizar, colorJornada } from '../src/lib/rendimiento.js';
+const cj = [
+  { docente_id: 'a', docente: 'ALVARADO SALAZAR ANGEL HERNAN', jornada: 'Matutina', curso: '1ro', curso_orden: 1, paralelo: 'A', materia: 'F', estudiantes: 1, evaluados: 0 },
+  { docente_id: 'a', docente: 'ALVARADO SALAZAR ANGEL HERNAN', jornada: 'Vespertina', curso: '1ro', curso_orden: 1, paralelo: 'B', materia: 'Q', estudiantes: 1, evaluados: 0 },
+  { docente_id: 'b', docente: 'PÉREZ MARÍA', jornada: 'Nocturna', curso: '2do', curso_orden: 2, paralelo: 'A', materia: 'F', estudiantes: 1, evaluados: 0 }
+];
+const rd = resumenPorDocente(cj, []);
+assert.deepEqual(rd.find(d => d.docente_id === 'a').jornadas, ['Matutina', 'Vespertina'], 'un docente puede tener varias jornadas');
+assert.deepEqual(rd.find(d => d.docente_id === 'b').jornadas, ['Nocturna']);
+assert.equal(filtrarDocentes(rd, 'perez').length, 1, 'sin tildes'); assert.equal(filtrarDocentes(rd, 'angel alvarado').length, 1, 'palabras en cualquier orden');
+assert.equal(filtrarDocentes(rd, 'xyz').length, 0); assert.equal(filtrarDocentes(rd, '  ').length, 2);
+assert.equal(normalizar('Ñandú Pérez'), 'nandu perez'); assert.notEqual(colorJornada('Vespertina'), colorJornada('Matutina'));
+console.log('rendimiento (buscador/jornada): ok');
+
+// Curso tutorado: solo docentes (la página verifica además que sea tutor)
+assert.deepEqual(rolesConAcceso('/curso-tutor'), ['docente']);
+assert.equal(NAV_BY_ROL.docente.flatMap(c => c.items).find(i => i.to === '/curso-tutor').requiere, 'tutor');
+console.log('curso tutor (acceso): ok');

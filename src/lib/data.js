@@ -1066,8 +1066,8 @@ export async function exportarUsuariosGlobal(institucionId = null) {
 
 /** Alertas tempranas de bajo rendimiento (promedio 0,01–6,99) por semana y mes. El servidor limita el alcance según el rol:
  *  docente → solo sus cursos; supervisor/inspector/admin → todo su plantel. trimestre: 'T1'|'T2'|'T3' o null (el más reciente). */
-export async function fetchAnalisisCalificaciones(institucionId, trimestre = null, semanas = 12, meses = 6) {
-  const { data, error } = await supabase.rpc('analisis_calificaciones', { p_institucion: institucionId, p_trimestre: trimestre, p_semanas: semanas, p_meses: meses });
+export async function fetchAnalisisCalificaciones(institucionId, trimestre = null, semanas = 12, meses = 6, ambito = 'propio') {
+  const { data, error } = await supabase.rpc('analisis_calificaciones', { p_institucion: institucionId, p_trimestre: trimestre, p_semanas: semanas, p_meses: meses, p_ambito: ambito });
   if (error) throw new Error(error.message);
   return data;
 }
@@ -1079,6 +1079,61 @@ export async function fetchDetalleEstudianteCalificaciones(estudianteId, trimest
 export async function guardarSeguimientoAlerta({ estudianteId, cargaId, trimestre, estado, nota }) {
   const { error } = await supabase.rpc('guardar_seguimiento_alerta', { p_estudiante: estudianteId, p_carga: cargaId, p_trimestre: trimestre, p_estado: estado, p_nota: nota || null });
   if (error) throw new Error(error.message);
+}
+
+/** Primer representante legal registrado de un estudiante (o null). */
+export async function fetchRepresentanteDe(estudianteId) {
+  const { data } = await supabase.from('representantes_estudiantes').select('representantes(nombres, apellidos, cedula, telefono, email)').eq('estudiante_id', estudianteId).limit(1);
+  return data?.[0]?.representantes || null;
+}
+/** Id de docente (ficha) de una cuenta; null si la cuenta no es docente. */
+export async function fetchDocenteIdDePerfil(profileId) {
+  const { data } = await supabase.from('docentes').select('id').eq('profile_id', profileId).maybeSingle();
+  return data?.id || null;
+}
+export async function fetchPeriodoActivoNombre(institucionId) {
+  const { data } = await supabase.from('periodos_lectivos').select('nombre').eq('institucion_id', institucionId).eq('activo', true).limit(1).maybeSingle();
+  return data?.nombre || '';
+}
+
+// ── Fichas y oficios de seguimiento (registro con control de las autoridades) ──
+export async function guardarFichaControl({ id = null, estudianteId, tipo, trimestre = null, numero = null, titulo, contenido, impresa = false }) {
+  const { data, error } = await supabase.rpc('guardar_ficha_control', { p_id: id, p_estudiante: estudianteId, p_tipo: tipo, p_trimestre: trimestre, p_numero: numero, p_titulo: titulo, p_contenido: contenido, p_impresa: impresa });
+  if (error) throw new Error(error.message);
+  return data;
+}
+export async function listarFichasControl(institucionId, estado = null) {
+  const { data, error } = await supabase.rpc('listar_fichas_control', { p_institucion: institucionId, p_estado: estado, p_limite: 500 });
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+export async function obtenerFichaControl(id) {
+  const { data, error } = await supabase.rpc('obtener_ficha_control', { p_id: id });
+  if (error) throw new Error(error.message);
+  return data;
+}
+export async function revisarFichaControl(id, estado, observacion = null) {
+  const { error } = await supabase.rpc('revisar_ficha_control', { p_id: id, p_estado: estado, p_observacion: observacion });
+  if (error) throw new Error(error.message);
+}
+
+/** Asistencia de uno o varios cursos (para el tutor). Misma forma que fetchAnalisisAsistencia, limitada a esos paralelos. */
+export async function fetchAsistenciaParalelos(institucionId, paraleloIds, desde, hasta) {
+  if (!paraleloIds?.length) return { alumnos: [], registros: [], eventos: [] };
+  const matriculas = await paginarTodo(() => supabase.from('matriculas')
+    .select('id, estudiante_id, paralelo_id, grado_id, estudiantes!inner(nombres, apellidos, cedula, institucion_id), grados(nombre), paralelos(nombre, jornada)')
+    .eq('estado', 'activa').in('paralelo_id', paraleloIds).order('id'));
+  const ids = [...new Set(matriculas.map(m => m.estudiante_id))];
+  const trozos = []; for (let i = 0; i < ids.length; i += 80) trozos.push(ids.slice(i, i + 80));
+  const registros = (await Promise.all(trozos.map(t => paginarTodo(() => supabase.from('asistencia').select('id, estudiante_id, fecha, estado').in('estudiante_id', t).gte('fecha', desde).lte('fecha', hasta).order('id'))))).flat();
+  const vinculos = (await Promise.all(trozos.map(t => paginarTodo(() => supabase.from('representantes_estudiantes').select('estudiante_id, representantes(nombres, apellidos, cedula, telefono, email)').in('estudiante_id', t).order('estudiante_id')).catch(() => [])))).flat();
+  const { data: eventos } = await supabase.from('calendario_eventos').select('tipo, fecha_inicio, fecha_fin').eq('institucion_id', institucionId).lte('fecha_inicio', hasta).gte('fecha_fin', desde);
+  const repDe = {}; vinculos.forEach(v => { if (v.representantes && !repDe[v.estudiante_id]) repDe[v.estudiante_id] = v.representantes; });
+  const alumnos = matriculas.map(m => ({
+    id: m.estudiante_id, nombre: `${m.estudiantes?.apellidos || ''} ${m.estudiantes?.nombres || ''}`.trim(), apellidos: m.estudiantes?.apellidos || '', nombres: m.estudiantes?.nombres || '', cedula: m.estudiantes?.cedula || '',
+    curso: `${m.grados?.nombre || ''} ${m.paralelos?.nombre || ''}`.trim(), jornada: m.paralelos?.jornada || '', paraleloId: m.paralelo_id, gradoId: m.grado_id, representante: repDe[m.estudiante_id] || null
+  }));
+  return { alumnos, registros: registros.map(r => ({ estudiante_id: r.estudiante_id, fecha: r.fecha, estado: r.estado })), eventos: eventos || [] };
 }
 
 /** Super Admin: resumen y controles de calidad de datos (global o de un plantel). */
@@ -2443,7 +2498,7 @@ export async function actualizarMiPerfilDocente(campos) {
 }
 // Cursos (paralelos) de los que el docente es tutor y sus estudiantes del período activo.
 export async function fetchCursosComoTutor(docenteId) {
-  const { data: paralelos, error } = await supabase.from('paralelos').select('id, nombre, grado_id, grados(nombre)').eq('tutor_docente_id', docenteId);
+  const { data: paralelos, error } = await supabase.from('paralelos').select('id, nombre, jornada, grado_id, grados(nombre)').eq('tutor_docente_id', docenteId);
   if (error) throw error;
   return paralelos || [];
 }

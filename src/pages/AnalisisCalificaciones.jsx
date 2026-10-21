@@ -4,11 +4,14 @@ import { fetchAnalisisCalificaciones } from '../lib/data.js';
 import { descargarLibro } from '../lib/exportLibro.js';
 import {
   BANDAS, enAlerta, esCritica, fmtNota, alertasDeVentana, promedioDeVentana, resumenPorDocente, resumenPorCurso, resumenPorMateria,
-  etiquetaSemana, etiquetaMes
+  etiquetaSemana, etiquetaMes, filtrarDocentes, colorJornada
 } from '../lib/rendimiento.js';
 import GraficoLineas from '../components/GraficoLineas.jsx';
 import { ChipNota, Dona, BarrasH, Sparkline } from '../components/GraficosRendimiento.jsx';
 import EstudianteRendimientoModal, { ChipSeguimiento, ESTADOS_SEG } from '../components/EstudianteRendimientoModal.jsx';
+import FichaDocumentoModal from '../components/FichaDocumentoModal.jsx';
+import FichasEmitidas from '../components/FichasEmitidas.jsx';
+import { TIPOS_FICHA } from '../lib/fichasRendimiento.js';
 
 const ROJO = '#dc2626', AMBAR = '#d97706', VERDE = '#15803d', AZUL = '#1d4ed8';
 const colorPct = p => (p >= 40 ? ROJO : p >= 20 ? AMBAR : VERDE);
@@ -35,8 +38,12 @@ const Seccion = ({ titulo, sub, children, derecha }) => (
   </div>
 );
 
-export default function AnalisisCalificaciones() {
-  const { institucion } = useSession();
+const AUTORIDADES = ['super_admin', 'supervisor_general', 'admin_plantel', 'supervisor_plantel', 'inspector_general'];
+
+export default function AnalisisCalificaciones({ ambito = 'propio' }) {
+  const { institucion, profile } = useSession();
+  const esTutor = ambito === 'tutor';
+  const puedeRevisar = AUTORIDADES.includes(profile?.rolDb);
   const institucionId = institucion?.id;
   const [trim, setTrim] = useState(null);
   const [datos, setDatos] = useState(null);
@@ -48,14 +55,16 @@ export default function AnalisisCalificaciones() {
   const [segFiltro, setSegFiltro] = useState(''); const [busqueda, setBusqueda] = useState('');
   const [limite, setLimite] = useState(60);
   const [ficha, setFicha] = useState(null);
+  const [jornada, setJornada] = useState(''); const [qDocente, setQDocente] = useState('');
+  const [fichaDoc, setFichaDoc] = useState(null); const [recargaFichas, setRecargaFichas] = useState(0);
 
   const cargar = useCallback(async (t) => {
     if (!institucionId) return;
     setCargando(true); setError('');
-    try { const d = await fetchAnalisisCalificaciones(institucionId, t ?? null); setDatos(d); setTrim(d.trimestre); }
+    try { const d = await fetchAnalisisCalificaciones(institucionId, t ?? null, 12, 6, ambito); setDatos(d); setTrim(d.trimestre); }
     catch (e) { setError(e.message || 'No se pudo cargar el análisis.'); setDatos(null); }
     setCargando(false);
-  }, [institucionId]);
+  }, [institucionId, ambito]);
   useEffect(() => { cargar(null); }, [cargar]);
 
   const soloDocente = !!datos?.solo_docente;
@@ -65,9 +74,10 @@ export default function AnalisisCalificaciones() {
 
   const cargas = datos?.cargas || [];
   const cursosOpc = useMemo(() => [...new Set(cargas.map(c => `${c.curso} ${c.paralelo}`))], [cargas]);
+  const jornadasOpc = useMemo(() => [...new Set(cargas.map(c => c.jornada).filter(Boolean))].sort(), [cargas]);
   const materiasOpc = useMemo(() => [...new Set(cargas.map(c => c.materia))].sort((a, b) => a.localeCompare(b, 'es')), [cargas]);
   const docentesOpc = useMemo(() => [...new Map(cargas.map(c => [c.docente_id, c.docente])).entries()].sort((a, b) => a[1].localeCompare(b[1], 'es')), [cargas]);
-  const cargasF = useMemo(() => cargas.filter(c => (!curso || `${c.curso} ${c.paralelo}` === curso) && (!materia || c.materia === materia) && (!docente || c.docente_id === docente)), [cargas, curso, materia, docente]);
+  const cargasF = useMemo(() => cargas.filter(c => (!curso || `${c.curso} ${c.paralelo}` === curso) && (!materia || c.materia === materia) && (!docente || c.docente_id === docente) && (!jornada || c.jornada === jornada)), [cargas, curso, materia, docente, jornada]);
   const idsF = useMemo(() => new Set(cargasF.map(c => c.carga_id)), [cargasF]);
   const alertasF = useMemo(() => (datos?.alertas || []).filter(a => idsF.has(a.carga_id)), [datos, idsF]);
 
@@ -89,6 +99,7 @@ export default function AnalisisCalificaciones() {
   const porCurso = useMemo(() => resumenPorCurso(cargasF), [cargasF]);
   const porMateria = useMemo(() => resumenPorMateria(cargasF), [cargasF]);
   const porDocente = useMemo(() => resumenPorDocente(cargasF, alertasF), [cargasF, alertasF]);
+  const porDocenteVis = useMemo(() => filtrarDocentes(porDocente, qDocente), [porDocente, qDocente]);
 
   // Tabla de alertas según la ventana elegida
   const visibles = useMemo(() => {
@@ -97,7 +108,7 @@ export default function AnalisisCalificaciones() {
       .filter(a => (!segFiltro || (segFiltro === 'sin' ? !a.seg_estado : a.seg_estado === segFiltro)) && (!q || `${a.apellidos} ${a.nombres} ${a.cedula || ''} ${a.materia} ${a.docente}`.toLowerCase().includes(q)))
       .sort((x, y) => (promedioDeVentana(x, modo, clave) ?? 99) - (promedioDeVentana(y, modo, clave) ?? 99));
   }, [alertasF, modo, clave, segFiltro, busqueda]);
-  useEffect(() => { setLimite(60); }, [modo, clave, curso, materia, docente, segFiltro, busqueda]);
+  useEffect(() => { setLimite(60); }, [modo, clave, curso, materia, docente, jornada, segFiltro, busqueda]);
 
   const serieVentana = modo === 'mes' ? meses : semanas;
   const etiq = serieVentana.map(w => (modo === 'mes' ? etiquetaMes(w.desde) : etiquetaSemana(w.desde)));
@@ -112,6 +123,8 @@ export default function AnalisisCalificaciones() {
   function alGuardarSeguimiento(estId, { cargaId, estado, nota }) {
     setDatos(d => ({ ...d, alertas: d.alertas.map(a => (a.estudiante_id === estId && a.carga_id === cargaId ? { ...a, seg_estado: estado, seg_nota: nota } : a)) }));
   }
+
+  function abrirDocumento(a) { setFichaDoc({ id: a.estudiante_id, apellidos: a.apellidos, nombres: a.nombres, cedula: a.cedula, curso: a.curso, paralelo: a.paralelo, jornada: a.jornada }); }
 
   function exportar() {
     const ventana = modo === 'semana' ? `semana ${etiquetaSemana(clave)}` : modo === 'mes' ? `mes ${etiquetaMes(clave)}` : 'acumulado';
@@ -139,8 +152,8 @@ export default function AnalisisCalificaciones() {
     <div style={{ display: 'grid', gap: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         <div>
-          <h2 style={{ margin: '0 0 4px' }}>{soloDocente ? 'Mis alertas de rendimiento' : 'Análisis de calificaciones'}</h2>
-          <div style={{ fontSize: 13, color: 'var(--slate)' }}>{soloDocente ? 'Estudiantes de tus cursos con promedio bajo 7. ' : 'Alerta temprana de bajo rendimiento de todos los docentes del plantel. '}Se considera alerta un promedio de <strong>0,01 a 6,99</strong>.</div>
+          <h2 style={{ margin: '0 0 4px' }}>{esTutor ? 'Calificaciones de mi curso (tutoría)' : soloDocente ? 'Mis alertas de rendimiento' : 'Análisis de calificaciones'}</h2>
+          <div style={{ fontSize: 13, color: 'var(--slate)' }}>{esTutor ? 'Todas las asignaturas del curso del que eres tutor, de todos sus docentes. ' : soloDocente ? 'Estudiantes de tus cursos con promedio bajo 7. ' : 'Alerta temprana de bajo rendimiento de todos los docentes del plantel. '}Se considera alerta un promedio de <strong>0,01 a 6,99</strong>.</div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {['T1', 'T2', 'T3'].map(t => <button key={t} className={'btn btn-sm ' + (trim === t ? 'btn-primary' : 'btn-secondary')} onClick={() => cargar(t)} disabled={cargando}>Trimestre {t.slice(1)}</button>)}
@@ -155,6 +168,7 @@ export default function AnalisisCalificaciones() {
       {datos && <>
         {!soloDocente && (
           <div className="card" style={{ margin: 0, padding: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }}>
+            {jornadasOpc.length > 1 && <select className="fc" value={jornada} onChange={e => setJornada(e.target.value)} aria-label="Jornada"><option value="">Todas las jornadas</option>{jornadasOpc.map(j => <option key={j}>{j}</option>)}</select>}
             <select className="fc" value={curso} onChange={e => setCurso(e.target.value)} aria-label="Curso"><option value="">Todos los cursos</option>{cursosOpc.map(c => <option key={c}>{c}</option>)}</select>
             <select className="fc" value={materia} onChange={e => setMateria(e.target.value)} aria-label="Asignatura o módulo"><option value="">Todas las asignaturas / módulos</option>{materiasOpc.map(m => <option key={m}>{m}</option>)}</select>
             <select className="fc" value={docente} onChange={e => setDocente(e.target.value)} aria-label="Docente"><option value="">Todos los docentes</option>{docentesOpc.map(([id, n]) => <option key={id} value={id}>{n}</option>)}</select>
@@ -211,14 +225,20 @@ export default function AnalisisCalificaciones() {
         </div>
 
         {!soloDocente && (
-          <Seccion titulo="Resumen por docente" sub="La suma de los reportes de cada docente. Un docente sin notas no puede generar alertas: conviene recordárselo.">
+          <Seccion titulo={esTutor ? 'Docentes de mi curso' : 'Resumen por docente'} sub="La suma de los reportes de cada docente, con su jornada. Un docente sin notas no puede generar alertas: conviene recordárselo."
+            derecha={<div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <input className="fc" style={{ width: 230 }} placeholder="🔍 Buscar docente…" value={qDocente} onChange={e => setQDocente(e.target.value)} aria-label="Buscar docente" />
+              {qDocente && <button className="btn btn-ghost btn-sm" onClick={() => setQDocente('')}>Limpiar</button>}
+              <span style={{ fontSize: 12, color: 'var(--slate)' }}>{porDocenteVis.length} de {porDocente.length}</span>
+            </div>}>
             <div style={{ overflowX: 'auto' }}>
               <table className="data" style={{ width: '100%' }}>
-                <thead><tr><th>Docente</th><th style={{ textAlign: 'center' }}>Asignaturas</th><th style={{ textAlign: 'center' }}>Evaluados</th><th style={{ textAlign: 'center' }}>Promedio</th><th style={{ textAlign: 'center' }}>En alerta</th><th style={{ textAlign: 'center' }}>Críticas</th><th>Último registro</th></tr></thead>
+                <thead><tr><th>Docente</th><th>Jornada</th><th style={{ textAlign: 'center' }}>Asignaturas</th><th style={{ textAlign: 'center' }}>Evaluados</th><th style={{ textAlign: 'center' }}>Promedio</th><th style={{ textAlign: 'center' }}>En alerta</th><th style={{ textAlign: 'center' }}>Críticas</th><th>Último registro</th></tr></thead>
                 <tbody>
-                  {porDocente.map(d => { const dias = diasDesde(d.ultima); return (
+                  {porDocenteVis.map(d => { const dias = diasDesde(d.ultima); return (
                     <tr key={d.docente_id} onClick={() => setDocente(docente === d.docente_id ? '' : d.docente_id)} style={{ cursor: 'pointer', background: docente === d.docente_id ? 'var(--brandXL, #ecfeff)' : undefined }} title="Clic para filtrar por este docente">
                       <td style={{ fontWeight: 600 }}>{d.docente}</td>
+                      <td>{d.jornadas.length ? d.jornadas.map(j => <span key={j} style={{ display: 'inline-block', marginRight: 4, padding: '0 8px', borderRadius: 999, fontSize: 11.5, fontWeight: 700, background: colorJornada(j) + '1a', color: colorJornada(j), border: `1px solid ${colorJornada(j)}44` }}>{j}</span>) : '—'}</td>
                       <td style={{ textAlign: 'center' }}>{d.cargas}{d.sin_notas > 0 && <span title={`${d.sin_notas} sin notas registradas`} style={{ marginLeft: 6, color: AMBAR, fontSize: 11.5 }}>({d.sin_notas} sin notas)</span>}</td>
                       <td style={{ textAlign: 'center' }}>{d.evaluados}</td>
                       <td style={{ textAlign: 'center' }}>{d.promedio == null ? '—' : <ChipNota valor={d.promedio} />}</td>
@@ -226,7 +246,7 @@ export default function AnalisisCalificaciones() {
                       <td style={{ textAlign: 'center' }}>{d.criticas ? <strong style={{ color: ROJO }}>{d.criticas}</strong> : '0'}</td>
                       <td style={{ fontSize: 12.5, color: dias != null && dias > 14 ? AMBAR : 'var(--slate)' }}>{dias == null ? 'Nunca' : dias === 0 ? 'Hoy' : `hace ${dias} día${dias === 1 ? '' : 's'}`}</td>
                     </tr>); })}
-                  {!porDocente.length && <tr><td colSpan={7} style={{ color: 'var(--slate)', textAlign: 'center', padding: 16 }}>No hay asignaturas con docente en este plantel.</td></tr>}
+                  {!porDocenteVis.length && <tr><td colSpan={8} style={{ color: 'var(--slate)', textAlign: 'center', padding: 16 }}>{porDocente.length ? 'Ningún docente coincide con la búsqueda.' : 'No hay asignaturas con docente en este plantel.'}</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -245,13 +265,13 @@ export default function AnalisisCalificaciones() {
                 {visibles.slice(0, limite).map(a => (
                   <tr key={a.estudiante_id + a.carga_id}>
                     <td style={{ fontWeight: 600 }}>{a.apellidos} {a.nombres}{esCritica(a.parcial) && <span title="Alerta crítica: promedio de 4,00 o menos" style={{ marginLeft: 6 }}>🔴</span>}</td>
-                    <td style={{ fontSize: 12.5 }}>{a.curso} {a.paralelo}</td>
+                    <td style={{ fontSize: 12.5 }}>{a.curso} {a.paralelo}{a.jornada && jornadasOpc.length > 1 ? <div style={{ fontSize: 11, color: colorJornada(a.jornada), fontWeight: 700 }}>{a.jornada}</div> : null}</td>
                     <td style={{ fontSize: 12.5 }}>{a.materia}</td>
                     {!soloDocente && <td style={{ fontSize: 12.5 }}>{a.docente}</td>}
                     <td style={{ textAlign: 'center' }}><ChipNota valor={promedioDeVentana(a, modo, clave)} />{modo !== 'acumulado' && <div style={{ fontSize: 10.5, color: 'var(--slate)' }}>acum. {fmtNota(a.parcial)}</div>}</td>
                     <td style={{ textAlign: 'center' }}><Sparkline puntos={a.semanas} /></td>
                     <td><ChipSeguimiento estado={a.seg_estado} />{a.seg_nota && <div style={{ fontSize: 11, color: 'var(--slate)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.seg_nota}>{a.seg_nota}</div>}</td>
-                    <td><button className="btn btn-secondary btn-sm" onClick={() => setFicha({ ...a, seguimientos: seguimientosDe(a.estudiante_id) })}>Ver ficha</button></td>
+                    <td><button className="btn btn-secondary btn-sm" onClick={() => setFicha({ ...a, seguimientos: seguimientosDe(a.estudiante_id) })}>Ver ficha</button>{' '}<button className="btn btn-primary btn-sm" title="Oficio al representante, plan de refuerzo, acta o ficha del tutor" onClick={() => abrirDocumento(a)}>📄 Oficio / ficha</button></td>
                   </tr>
                 ))}
                 {!visibles.length && <tr><td colSpan={soloDocente ? 7 : 8} style={{ textAlign: 'center', color: 'var(--slate)', padding: 24 }}>🎉 No hay estudiantes en alerta para {ventanaTxt}.</td></tr>}
@@ -262,7 +282,11 @@ export default function AnalisisCalificaciones() {
         </Seccion>
       </>}
 
-      {ficha && <EstudianteRendimientoModal fila={ficha} trimestre={trim || 'T1'} onClose={() => setFicha(null)} onSeguimiento={g => { alGuardarSeguimiento(ficha.estudiante_id, g); setFicha(f => (f ? { ...f, seguimientos: { ...f.seguimientos, [g.cargaId]: { estado: g.estado, nota: g.nota } } } : f)); }} />}
+      {datos && <FichasEmitidas institucion={institucion} puedeRevisar={puedeRevisar} recargar={recargaFichas} titulo={esTutor ? 'Fichas y oficios de mi curso' : soloDocente ? 'Mis oficios y fichas emitidos' : 'Oficios y fichas de seguimiento emitidos'} />}
+
+      {fichaDoc && <FichaDocumentoModal estudiante={fichaDoc} institucion={institucion} tutorNombreDefault={esTutor ? `${profile?.apellidos || ''} ${profile?.nombres || ''}`.trim() : ''} trimestre={trim || 'T1'} tipos={esTutor || !soloDocente ? Object.keys(TIPOS_FICHA) : Object.keys(TIPOS_FICHA).filter(k => k !== 'ficha_tutor')}
+        onClose={() => setFichaDoc(null)} onGuardado={() => setRecargaFichas(n => n + 1)} />}
+      {ficha && <EstudianteRendimientoModal fila={ficha} onFicha={() => { abrirDocumento(ficha); setFicha(null); }} trimestre={trim || 'T1'} onClose={() => setFicha(null)} onSeguimiento={g => { alGuardarSeguimiento(ficha.estudiante_id, g); setFicha(f => (f ? { ...f, seguimientos: { ...f.seguimientos, [g.cargaId]: { estado: g.estado, nota: g.nota } } } : f)); }} />}
     </div>
   );
 }

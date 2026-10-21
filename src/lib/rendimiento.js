@@ -41,8 +41,8 @@ export function promedioDeVentana(a, modo, clave) {
 export function resumenPorDocente(cargas, alertas) {
   const mapa = new Map();
   for (const c of cargas || []) {
-    const d = mapa.get(c.docente_id) || { docente_id: c.docente_id, docente: c.docente || '—', cargas: 0, sin_notas: 0, estudiantes: 0, evaluados: 0, suma: 0, alertas: 0, criticas: 0, ultima: null };
-    d.cargas += 1; d.estudiantes += Number(c.estudiantes || 0);
+    const d = mapa.get(c.docente_id) || { docente_id: c.docente_id, docente: c.docente || '—', jornadas: new Set(), cargas: 0, sin_notas: 0, estudiantes: 0, evaluados: 0, suma: 0, alertas: 0, criticas: 0, ultima: null };
+    d.cargas += 1; d.estudiantes += Number(c.estudiantes || 0); if (c.jornada) d.jornadas.add(c.jornada);
     const ev = Number(c.evaluados || 0); d.evaluados += ev;
     if (!ev) d.sin_notas += 1;
     if (num(c.promedio) !== null) d.suma += Number(c.promedio) * ev;
@@ -53,7 +53,7 @@ export function resumenPorDocente(cargas, alertas) {
     const d = mapa.get(a.docente_id); if (!d) continue;
     if (enAlerta(a.parcial)) { d.alertas += 1; if (esCritica(a.parcial)) d.criticas += 1; }
   }
-  return [...mapa.values()].map(d => ({ ...d, promedio: d.evaluados ? Math.round((d.suma / d.evaluados) * 100) / 100 : null, pct_alerta: d.evaluados ? Math.round((d.alertas / d.evaluados) * 1000) / 10 : 0 }))
+  return [...mapa.values()].map(d => ({ ...d, jornadas: [...d.jornadas].sort(), promedio: d.evaluados ? Math.round((d.suma / d.evaluados) * 100) / 100 : null, pct_alerta: d.evaluados ? Math.round((d.alertas / d.evaluados) * 1000) / 10 : 0 }))
     .sort((a, b) => b.alertas - a.alertas || b.criticas - a.criticas || a.docente.localeCompare(b.docente, 'es'));
 }
 
@@ -105,3 +105,14 @@ export function parcialDesdeActividades(acts) {
   const trunc2 = x => Math.trunc(x * 100 + 1e-9) / 100;
   return { formativo: f === null ? null : trunc2(f), sumativo: s === null ? null : trunc2(s), parcial: trunc2(((f ?? 0) * 0.7 + (s ?? 0) * 0.3) / den) };
 }
+
+/** Texto sin tildes ni mayúsculas, para buscar "Pérez" escribiendo "perez". */
+export const normalizar = t => String(t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+/** Busca por docente: todas las palabras escritas deben estar en el nombre (en cualquier orden). */
+export function filtrarDocentes(lista, consulta) {
+  const palabras = normalizar(consulta).split(/\s+/).filter(Boolean);
+  if (!palabras.length) return lista;
+  return lista.filter(d => { const n = normalizar(d.docente); return palabras.every(p => n.includes(p)); });
+}
+export const JORNADA_COLOR = { matutina: '#0369a1', vespertina: '#c2410c', nocturna: '#6d28d9', intensiva: '#047857' };
+export const colorJornada = j => JORNADA_COLOR[normalizar(j)] || '#475569';

@@ -139,6 +139,7 @@ export const NAV_BY_ROL = {
       { to: '/horario', label: 'Mi horario', icon: 'ti ti-clock' },
       { to: '/calificaciones', label: 'Calificaciones', icon: 'ti ti-report' },
       { to: '/analisis-calificaciones', label: 'Alertas de rendimiento', icon: 'ti ti-alert-triangle' },
+      { to: '/curso-tutor', label: 'Mi curso como tutor', icon: 'ti ti-user-star', requiere: 'tutor' },
       { to: '/boletas', label: 'Boletas del curso', icon: 'ti ti-report-analytics', requiere: 'tutor' },
       { to: '/asistencia', label: 'Asistencia', icon: 'ti ti-calendar-check' },
       { to: '/mis-estudiantes', label: 'Mis estudiantes', icon: 'ti ti-users', requiere: 'tutor' },

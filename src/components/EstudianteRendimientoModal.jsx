@@ -40,7 +40,7 @@ function Seguimiento({ estudianteId, cargaId, trimestre, inicial, onGuardado }) 
   );
 }
 
-export default function EstudianteRendimientoModal({ fila, trimestre, onClose, onSeguimiento }) {
+export default function EstudianteRendimientoModal({ fila, trimestre, onClose, onSeguimiento, onFicha }) {
   const [datos, setDatos] = useState(null); const [error, setError] = useState('');
   useEffect(() => {
     let activo = true;
@@ -60,7 +60,10 @@ export default function EstudianteRendimientoModal({ fila, trimestre, onClose, o
             <div style={{ fontSize: 18, fontWeight: 800 }}>{fila.apellidos} {fila.nombres}</div>
             <div style={{ fontSize: 12.5, color: 'var(--slate)' }}>{fila.cedula || 'Sin cédula'} · {fila.curso} {fila.paralelo} · Trimestre {trimestre.replace('T', '')}</div>
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={onClose} style={{ alignSelf: 'flex-start' }}>✕ Cerrar</button>
+          <div style={{ display: 'flex', gap: 8, alignSelf: 'flex-start', flexWrap: 'wrap' }}>
+            {onFicha && <button className="btn btn-primary btn-sm" onClick={onFicha}>📄 Oficio / ficha de seguimiento</button>}
+            <button className="btn btn-ghost btn-sm" onClick={onClose}>✕ Cerrar</button>
+          </div>
         </div>
         <div style={{ padding: 20, display: 'grid', gap: 14 }}>
           {error && <div style={{ color: 'var(--red)' }}>{error}</div>}
