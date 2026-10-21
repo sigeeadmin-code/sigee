@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
-import { fetchFichaAsistencia, fetchCalendario, registrarAviso, registrarOficiosEmitidos, marcarOficioEntregado, enviarOficioPorCorreo } from '../lib/data.js';
+import { fetchFichaAsistencia, fetchCalendario, justificarFalta, fetchVentanaFalta, registrarAviso, registrarOficiosEmitidos, marcarOficioEntregado, enviarOficioPorCorreo } from '../lib/data.js';
 import { resumenAnioLectivo, contarDiasLectivos } from '../lib/calendarioResumen.js';
 import OficioFaltasModal from './OficioFaltasModal.jsx';
 import { analizarFicha, mensajeWhatsApp, urlWhatsApp, telefonoEcuador, fechaCorta } from '../lib/fichaAsistencia.js';
@@ -40,7 +40,7 @@ function Barras({ items, vacio }) {
 }
 
 // Ficha de un estudiante: historial por días y por materias, oficios emitidos y avisos por WhatsApp.
-export default function FichaAsistenciaModal({ estudiante, onClose, puedeOficio = true }) {
+export default function FichaAsistenciaModal({ estudiante, onClose, puedeOficio = true, puedeJustificar = false, onCambio }) {
   const { profile, institucion } = useSession();
   const institucionId = institucion?.id;
   const [periodo, setPeriodo] = useState('todo');
@@ -55,6 +55,12 @@ export default function FichaAsistenciaModal({ estudiante, onClose, puedeOficio 
   const [aviso, setAviso] = useState('');
   const [trabajando, setTrabajando] = useState(false);
   const [eventos, setEventos] = useState([]);
+  // Justificar faltas: selección de días, motivo y plazo reglamentario de cada falta
+  const [ventanas, setVentanas] = useState({});
+  const [sel, setSel] = useState(new Set());
+  const [motivoJ, setMotivoJ] = useState('');
+  const [panelJ, setPanelJ] = useState(false);
+  const rolJustifica = ['docente', 'inspector_general', 'admin_plantel', 'super_admin'].includes(profile.rolDb);
 
   const { desde, hasta } = useMemo(() => (periodo === 'custom' ? custom : rangoPeriodo(periodo)), [periodo, custom]);
   const umbrales = useMemo(() => {
@@ -73,6 +79,36 @@ export default function FichaAsistenciaModal({ estudiante, onClose, puedeOficio 
   useEffect(() => { if (institucionId) fetchCalendario(institucionId).then(setEventos).catch(() => setEventos([])); }, [institucionId]);
 
   const an = useMemo(() => (ficha ? analizarFicha(ficha.registros, umbrales) : null), [ficha, umbrales]);
+  useEffect(() => {
+    if (!puedeJustificar || !rolJustifica || !an) return;
+    const fechas = an.dias.filter(d => d.estado === 'falta').map(d => d.fecha).slice(0, 60);
+    let activo = true;
+    Promise.all(fechas.map(async f => [f, await fetchVentanaFalta(estudiante.id, f)])).then(r => { if (activo) setVentanas(Object.fromEntries(r)); });
+    return () => { activo = false; };
+  }, [an, puedeJustificar, rolJustifica, estudiante.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const puedeEsta = f => {
+    const v = ventanas[f]; if (!v) return false;
+    if (['admin_plantel', 'super_admin'].includes(profile.rolDb)) return true;
+    if (profile.rolDb === 'docente') return v.fase === 'tutor' && v.tutor_profile_id === profile.id;
+    if (profile.rolDb === 'inspector_general') return v.fase === 'inspector';
+    return false;
+  };
+  const justificables = an ? an.dias.filter(d => d.estado === 'falta' && puedeEsta(d.fecha)).map(d => d.fecha) : [];
+  const alternar = f => setSel(s0 => { const n = new Set(s0); if (n.has(f)) n.delete(f); else n.add(f); return n; });
+  const todasSel = justificables.length > 0 && justificables.every(f => sel.has(f));
+  async function justificarSeleccion() {
+    if (!motivoJ.trim()) { setAviso('Escribe el motivo de la justificación.'); return; }
+    setTrabajando(true);
+    const fechas = [...sel].filter(f => justificables.includes(f)).sort();
+    const fallos = []; let hechas = 0;
+    for (const f of fechas) {
+      try { await justificarFalta(estudiante.id, f, 'aprobada', motivoJ.trim(), null); hechas++; }
+      catch (e) { fallos.push(`${fechaCorta(f)}: ${e.message || e}`); }
+    }
+    setAviso(`${hechas} falta${hechas === 1 ? '' : 's'} justificada${hechas === 1 ? '' : 's'}${hechas ? '. Se avisó a los docentes que las registraron.' : '.'}${fallos.length ? ' No se pudo: ' + fallos.join(' · ') : ''}`);
+    setSel(new Set()); setMotivoJ(''); setPanelJ(false); setTrabajando(false);
+    await cargar(); if (onCambio) onCambio();
+  }
   const faltasInj = an ? an.resumen.fechasFaltas.filter(f => f.tipo === 'injustificada').map(f => f.fecha) : [];
   // Referencia: días lectivos del período mirado (en 'Todo', desde el inicio de clases) frente a las faltas del estudiante
   const lectivos = useMemo(() => {
@@ -203,12 +239,34 @@ export default function FichaAsistenciaModal({ estudiante, onClose, puedeOficio 
               {tab === 'dias' && (
                 <div className="card"><div className="cb" style={{ overflowX: 'auto' }}>
                   <label style={{ fontSize: 12.5, display: 'flex', gap: 6, marginBottom: 8 }}><input type="checkbox" checked={soloNovedad} onChange={e => setSoloNovedad(e.target.checked)} /> Solo días con falta, justificación o atraso</label>
+                  {puedeJustificar && rolJustifica && (
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', margin: '0 0 8px', padding: '8px 10px', background: 'var(--bg-soft, #f1f5f9)', borderRadius: 8, fontSize: 12.5 }}>
+                      {justificables.length > 0 ? (<>
+                        <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontWeight: 700 }}><input type="checkbox" checked={todasSel} onChange={e => setSel(e.target.checked ? new Set(justificables) : new Set())} /> Justificar todas las faltas ({justificables.length})</label>
+                        <button className="btn btn-primary btn-sm" disabled={sel.size === 0 || trabajando} onClick={() => setPanelJ(true)}>✅ Justificar seleccionadas ({sel.size})</button>
+                      </>) : <span style={{ color: 'var(--slate)' }}>No hay faltas que puedas justificar ahora (las ya justificadas o fuera de tu plazo no se pueden elegir).</span>}
+                    </div>
+                  )}
+                  {panelJ && (
+                    <div className="card" style={{ margin: '0 0 10px', borderLeft: '4px solid #16a34a' }}><div className="cb">
+                      <div style={{ fontWeight: 700, marginBottom: 6 }}>Justificar {sel.size} falta{sel.size === 1 ? '' : 's'}: {[...sel].sort().map(fechaCorta).join(', ')}</div>
+                      <textarea className="fc" rows={2} placeholder="Motivo de la justificación (cita médica, calamidad, etc.)" value={motivoJ} onChange={e => setMotivoJ(e.target.value)} />
+                      <div style={{ fontSize: 11.5, color: 'var(--slate)', margin: '6px 0' }}>Cada falta pasa a «justificado» y se avisa al docente que la registró, con su asignatura y hora.</div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button className="btn btn-success btn-sm" disabled={trabajando || !motivoJ.trim()} onClick={justificarSeleccion}>{trabajando ? 'Justificando…' : 'Confirmar justificación'}</button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => setPanelJ(false)}>Cancelar</button>
+                      </div>
+                    </div></div>
+                  )}
                   <table className="tbl" style={{ width: '100%' }}>
-                    <thead><tr><th>Fecha</th><th>Día</th><th>Estado</th><th>Detalle por materia</th></tr></thead>
+                    <thead><tr>{puedeJustificar && rolJustifica && <th style={{ width: 34 }} />}<th>Fecha</th><th>Día</th><th>Estado</th><th>Detalle por materia</th></tr></thead>
                     <tbody>
                       {diasMostrados.length === 0 && <tr><td colSpan={4} style={{ textAlign: 'center', padding: 20, color: 'var(--slate)' }}>{an.dias.length ? 'Sin días con novedad en este período.' : 'Sin asistencia registrada en este período.'}</td></tr>}
                       {diasMostrados.map(d => (
                         <tr key={d.fecha}>
+                          {puedeJustificar && rolJustifica && <td>{d.estado === 'falta' && (puedeEsta(d.fecha)
+                            ? <input type="checkbox" checked={sel.has(d.fecha)} onChange={() => alternar(d.fecha)} aria-label={`Justificar ${fechaCorta(d.fecha)}`} />
+                            : <span title={ventanas[d.fecha] ? (ventanas[d.fecha].fase === 'tutor' ? 'Le corresponde al docente tutor' : `Venció el plazo del tutor (${fechaCorta(ventanas[d.fecha].limite_tutor)}): lo justifica el inspector general`) : 'Revisando plazo…'}>🔒</span>)}</td>}
                           <td className="mono">{fechaCorta(d.fecha)}</td><td>{d.dia}</td>
                           <td><Pildora colores={COLOR_DIA[d.estado]} texto={COLOR_DIA[d.estado][2]} /></td>
                           <td style={{ fontSize: 12.5 }}>

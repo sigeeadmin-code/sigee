@@ -235,7 +235,7 @@ export default function AnalisisAsistencia() {
       )}
 
       {oficio && <OficioFaltasModal alumnos={oficio} institucion={institucion} periodo={{ desde, hasta }} onClose={() => setOficio(null)} onRegistrar={items => registrarOficiosEmitidos(institucionId, items, profile.id)} />}
-      {fichaDe && <FichaAsistenciaModal estudiante={fichaDe} onClose={() => setFichaDe(null)} />}
+      {fichaDe && <FichaAsistenciaModal estudiante={fichaDe} puedeJustificar onClose={() => setFichaDe(null)} />}
     </div>
   );
 }

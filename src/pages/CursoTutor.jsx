@@ -27,7 +27,7 @@ function Pestanas({ valor, onCambio, items }) {
 }
 
 /** Asistencia de los cursos de los que el docente es TUTOR (aparte de sus propias clases). */
-function AsistenciaCurso({ institucion, paraleloIds, nombreCurso, onFicha, onVer }) {
+function AsistenciaCurso({ institucion, paraleloIds, nombreCurso, onFicha, onVer, recarga }) {
   const [periodo, setPeriodo] = useState('mes');
   const { desde, hasta } = useMemo(() => rangoPeriodo(periodo), [periodo]);
   const [datos, setDatos] = useState(null); const [error, setError] = useState(''); const [cargando, setCargando] = useState(false);
@@ -37,7 +37,7 @@ function AsistenciaCurso({ institucion, paraleloIds, nombreCurso, onFicha, onVer
     setCargando(true); setError('');
     try { setDatos(await fetchAsistenciaParalelos(institucion.id, paraleloIds, desde, hasta)); } catch (e) { setError(e.message || 'No se pudo cargar la asistencia del curso.'); setDatos(null); }
     setCargando(false);
-  }, [institucion.id, paraleloIds, desde, hasta]);
+  }, [institucion.id, paraleloIds, desde, hasta, recarga]);
   useEffect(() => { cargar(); }, [cargar]);
 
   const filas = useMemo(() => (datos ? analizarEstudiantes(datos.alumnos, datos.registros, UMBRALES_DEFECTO) : []), [datos]);
@@ -159,11 +159,11 @@ export default function CursoTutor() {
             <span>Trimestre de las notas que irán en la ficha:</span>
             {['T1', 'T2', 'T3'].map(t => <button key={t} className={'btn btn-sm ' + (trim === t ? 'btn-primary' : 'btn-secondary')} onClick={() => setTrim(t)}>{t.slice(1)}</button>)}
           </div>
-          <AsistenciaCurso institucion={institucion} paraleloIds={paraleloIds} nombreCurso={nombreCurso} onFicha={(f, rango) => setFicha({ f, rango })} onVer={f => setVerDe({ id: f.id, nombre: f.nombre, cedula: f.cedula, curso: f.curso })} />
+          <AsistenciaCurso recarga={recarga} institucion={institucion} paraleloIds={paraleloIds} nombreCurso={nombreCurso} onFicha={(f, rango) => setFicha({ f, rango })} onVer={f => setVerDe({ id: f.id, nombre: f.nombre, cedula: f.cedula, curso: f.curso })} />
         </>
       )}
       {tab === 'fichas' && <FichasEmitidas institucion={institucion} puedeRevisar={false} recargar={recarga} titulo="Fichas y oficios de mi curso" />}
-      {verDe && <FichaAsistenciaModal estudiante={verDe} puedeOficio={false} onClose={() => setVerDe(null)} />}
+      {verDe && <FichaAsistenciaModal estudiante={verDe} puedeOficio={false} puedeJustificar onCambio={() => setRecarga(n => n + 1)} onClose={() => setVerDe(null)} />}
       {ficha && (
         <FichaDocumentoModal institucion={institucion} trimestre={trim} tipoInicial="ficha_tutor"
           estudiante={{ id: ficha.f.id, apellidos: ficha.f.apellidos, nombres: ficha.f.nombres, cedula: ficha.f.cedula, curso: ficha.f.curso, paralelo: '', jornada: ficha.f.jornada }} tutorNombreDefault={tutorNombre}

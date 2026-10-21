@@ -512,6 +512,12 @@ export async function fetchAusentesHoyCarga(docenteMateriaId) {
   if (error) return [];
   return (data || []).map(x => x.estudiante_id);
 }
+/** Quién puede justificar una falta hoy: tutor (dentro de su plazo) o inspector (vencido el plazo o racha larga). */
+export async function fetchVentanaFalta(estudianteId, fecha) {
+  const { data, error } = await supabase.rpc('asistencia_ventana', { p_estudiante: estudianteId, p_fecha: fecha });
+  if (error) return null;
+  return Array.isArray(data) ? data[0] || null : data;
+}
 /** Avisos de faltas justificadas para el docente que las registró (su asignatura y hora). */
 export async function fetchAvisosJustificacion(limite = 30) {
   const { data, error } = await supabase.from('avisos_justificacion').select('id, fecha, materia, franja, motivo, fase, leido_at, created_at, estudiantes(nombres, apellidos)').order('created_at', { ascending: false }).limit(limite);
