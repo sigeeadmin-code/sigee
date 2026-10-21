@@ -129,11 +129,11 @@ calificacionesRouter.post('/', requireAuth, async (req, res) => {
   }
 
   // Regla: el día de la falta el estudiante no puede recibir calificación en esa asignatura.
-  // Si hoy (hora de Ecuador) tiene falta (o falta ya justificada) en esta carga, no se aceptan notas nuevas ni cambiadas para él.
+  // Si hoy (hora de Ecuador) tiene falta sin justificar en esta carga, no se aceptan notas nuevas ni cambiadas para él.
   {
     const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guayaquil' }).format(new Date());
     const { data: faltas, error: fErr } = await supabase.from('asistencia').select('estudiante_id')
-      .eq('docente_materia_id', docente_materia_id).eq('fecha', hoy).in('estado', ['ausente', 'justificado']).in('estudiante_id', idsEstudiantes);
+      .eq('docente_materia_id', docente_materia_id).eq('fecha', hoy).eq('estado', 'ausente').in('estudiante_id', idsEstudiantes);
     if (fErr) return res.status(500).json({ error: 'No se pudo validar la asistencia del día: ' + fErr.message });
     const ausentesHoy = new Set((faltas || []).map(f => f.estudiante_id));
     if (ausentesHoy.size) {

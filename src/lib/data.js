@@ -505,10 +505,10 @@ export async function justificarFalta(estudianteId, fecha, decision, motivo, jus
 }
 /** Fecha de hoy en Ecuador (AAAA-MM-DD), sin depender de la zona horaria del equipo. */
 export function hoyEcuador() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guayaquil' }).format(new Date()); }
-/** Estudiantes con falta (o falta justificada) HOY en una carga: ese día no pueden recibir calificación en esa asignatura. */
+/** Estudiantes con falta HOY en una carga: ese día no pueden recibir calificación en esa asignatura. */
 export async function fetchAusentesHoyCarga(docenteMateriaId) {
   if (!docenteMateriaId) return [];
-  const { data, error } = await supabase.from('asistencia').select('estudiante_id').eq('docente_materia_id', docenteMateriaId).eq('fecha', hoyEcuador()).in('estado', ['ausente', 'justificado']);
+  const { data, error } = await supabase.from('asistencia').select('estudiante_id').eq('docente_materia_id', docenteMateriaId).eq('fecha', hoyEcuador()).eq('estado', 'ausente');
   if (error) return [];
   return (data || []).map(x => x.estudiante_id);
 }
