@@ -3,8 +3,7 @@ import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchGradosConParalelos, fetchCargasDocente, fetchTodasCargas, fetchEstudiantesParalelo,
   fetchAportesCarga, fetchConfigEvaluacion, fetchNotasParalelo, guardarNotasTrimestre, guardarSupletorios, guardarConfigCarga, fetchCargaTieneNotas,
-  fetchCedulasEstudiantes, fetchNombreDocente, fetchCatalogoNivel
-} from '../lib/data.js';
+  fetchCedulasEstudiantes, fetchNombreDocente, fetchCatalogoNivel, fetchAusentesHoyCarga } from '../lib/data.js';
 import {
   TRIMESTRES, configPorDefecto, validarConfig, calcTrimestre, aplicarMejora, escalaDAAPA, calcAnual, aDos, usaEvaluacionNumerica
 } from '../lib/calificaciones.js';
@@ -139,11 +138,13 @@ function CuadroCalificaciones() {
         mejora_refuerzo: m.mejora_refuerzo == null ? '' : String(Number(m.mejora_refuerzo))
       };
     });
+    setAusentesHoy(new Set(await fetchAusentesHoyCarga(cargaId)));
     setAlumnos(al); setGrid(g); setSucios({}); setCargandoNotas(false);
   }, [cargaId, paraleloId, trim, periodoActivo?.id, cfg]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { if (vista === 'registro') cargarNotas(); }, [cargarNotas, vista]);
 
+  const [ausentesHoy, setAusentesHoy] = useState(new Set());
   const hayCambios = Object.keys(sucios).length > 0;
   const confirmarDescarte = () => !hayCambios || window.confirm('Tienes notas sin guardar. ¿Descartarlas?');
 
@@ -273,7 +274,7 @@ function CuadroCalificaciones() {
       )}
 
       {vista === 'registro'
-        ? <RegistroNotas {...{ cfg, alumnos, grid, calculos, editable, cargandoNotas, sucios, setCelda, setMejora }} />
+        ? <RegistroNotas {...{ cfg, alumnos, grid, calculos, editable, cargandoNotas, sucios, setCelda, setMejora, ausentesHoy }} />
         : <CuadroParalelo paraleloId={paraleloId} cargas={cargasParalelo} periodoActivo={periodoActivo} puedeEditar={puedeEditar}
             institucion={institucion} grado={gradoSel} cursoNombre={gradoSel?.nombre || ''} paraleloNombre={paralelosVisibles.find(p => p.id === paraleloId)?.nombre || ''}
             tutorId={paralelosVisibles.find(p => p.id === paraleloId)?.tutor_docente_id || null} />}
@@ -281,7 +282,7 @@ function CuadroCalificaciones() {
   );
 }
 
-function RegistroNotas({ cfg, alumnos, grid, calculos, editable, cargandoNotas, sucios, setCelda, setMejora }) {
+function RegistroNotas({ cfg, alumnos, grid, calculos, editable, cargandoNotas, sucios, setCelda, setMejora, ausentesHoy = new Set() }) {
   if (cargandoNotas) return <div className="card"><div className="cb"><p className="muted">Cargando notas…</p></div></div>;
   if (!alumnos.length) return <div className="card"><div className="cb"><p className="muted">No hay estudiantes matriculados (activos) en este paralelo.</p></div></div>;
 
@@ -319,10 +320,10 @@ function RegistroNotas({ cfg, alumnos, grid, calculos, editable, cargandoNotas, 
             const esc = escalaDAAPA(c.final);
             return (
               <tr key={a.id}>
-                <td style={stick}>{a.nombre}{sucios[a.id] && <span title="Cambios sin guardar" style={{ color: '#d97706', marginLeft: 6 }}>●</span>}</td>
+                <td style={stick}>{a.nombre}{ausentesHoy.has(a.id) && <span className="badge b-err" style={{ marginLeft: 6 }} title="Tuvo falta hoy en esta asignatura: no puede recibir calificación el día de la falta">Faltó hoy</span>}{sucios[a.id] && <span title="Cambios sin guardar" style={{ color: '#d97706', marginLeft: 6 }}>●</span>}</td>
                 {grupos.flatMap(g => r[g.tipo][g.idx].map((v, k) => (
                   <td key={g.tipo + g.idx + '-' + k} style={{ padding: 3, textAlign: 'center' }}>
-                    <input inputMode="decimal" style={inp(celdaValida(v))} value={v} disabled={!editable}
+                    <input inputMode="decimal" style={inp(celdaValida(v))} value={v} disabled={!editable || ausentesHoy.has(a.id)}
                       onChange={e => setCelda(a.id, g.tipo, g.idx, k, e.target.value)} />
                   </td>
                 )))}
@@ -332,7 +333,7 @@ function RegistroNotas({ cfg, alumnos, grid, calculos, editable, cargandoNotas, 
                 <td style={{ textAlign: 'center' }}>{fmt(c.sumativo30)}</td>
                 {['mejora_directa', 'refuerzo', 'mejora_refuerzo'].map(k => (
                   <td key={k} style={{ padding: 3, textAlign: 'center' }}>
-                    <input inputMode="decimal" style={inp(celdaValida(r.mejora[k]))} value={r.mejora[k]} disabled={!editable}
+                    <input inputMode="decimal" style={inp(celdaValida(r.mejora[k]))} value={r.mejora[k]} disabled={!editable || ausentesHoy.has(a.id)}
                       onChange={e => setMejora(a.id, k, e.target.value)} />
                   </td>
                 ))}

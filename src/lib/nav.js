@@ -142,6 +142,7 @@ export const NAV_BY_ROL = {
       { to: '/curso-tutor', label: 'Mi curso como tutor', icon: 'ti ti-user-star', requiere: 'tutor' },
       { to: '/boletas', label: 'Boletas del curso', icon: 'ti ti-report-analytics', requiere: 'tutor' },
       { to: '/asistencia', label: 'Asistencia', icon: 'ti ti-calendar-check' },
+      { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check', requiere: 'tutor' },
       { to: '/mis-estudiantes', label: 'Mis estudiantes', icon: 'ti ti-users', requiere: 'tutor' },
       { to: '/tareas', label: 'Tareas y avisos', icon: 'ti ti-clipboard-list' }
     ]},

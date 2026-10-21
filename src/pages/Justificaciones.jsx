@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
-import { fetchJustificaciones, crearJustificacion, revisarJustificacion, marcarAsistenciaJustificada, fetchHijosDeRepresentante, fetchEstudianteIdPorProfile } from '../lib/data.js';
+import { fetchJustificaciones, crearJustificacion, fetchHijosDeRepresentante, fetchEstudianteIdPorProfile, fetchJustificacionesParaResolver, justificarFalta, fetchDocenteIdDePerfil, fetchCursosComoTutor, fetchAsistenciaParalelos } from '../lib/data.js';
 
-const ROLES_REVISAN = ['admin_plantel', 'secretario', 'inspector_general', 'super_admin'];
+const ROLES_REVISAN = ['admin_plantel', 'secretario', 'inspector_general', 'super_admin', 'supervisor_plantel', 'docente'];
+const fmt = d => (d ? String(d).slice(0, 10).split('-').reverse().join('/') : '');
 
 export default function Justificaciones() {
   const { profile, institucion, data } = useSession();
@@ -14,7 +15,16 @@ export default function Justificaciones() {
 
   useEffect(() => {
     (async () => {
-      if (profile.rolDb === 'padre') {
+      if (profile.rolDb === 'docente') {
+        // El docente tutor solo ve y justifica a los estudiantes de su curso
+        try {
+          const did = await fetchDocenteIdDePerfil(profile.id);
+          const cursos = did ? await fetchCursosComoTutor(did) : [];
+          const hoy = new Date().toISOString().slice(0, 10);
+          const d = cursos.length ? await fetchAsistenciaParalelos(institucionId, cursos.map(c => c.id), hoy, hoy) : { alumnos: [] };
+          setEstudiantesPropios((d.alumnos || []).map(a => ({ id: a.id, nombre: a.nombre || `${a.apellidos || ''} ${a.nombres || ''}`.trim() })));
+        } catch { setEstudiantesPropios([]); }
+      } else if (profile.rolDb === 'padre') {
         setEstudiantesPropios(await fetchHijosDeRepresentante(profile.id));
       } else if (profile.rolDb === 'estudiante') {
         const id = await fetchEstudianteIdPorProfile(profile.id);
@@ -22,7 +32,7 @@ export default function Justificaciones() {
         setEstudiantesPropios(propio ? [{ id: propio.id, nombre: propio.nombre }] : []);
       }
     })();
-  }, [profile.rolDb, profile.id, data]);
+  }, [profile.rolDb, profile.id, data, institucionId]);
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,9 +44,9 @@ export default function Justificaciones() {
   const cargar = useCallback(async () => {
     if (!institucionId) return;
     setLoading(true);
-    setItems(await fetchJustificaciones(institucionId));
+    setItems(puedeRevisar ? await fetchJustificacionesParaResolver() : await fetchJustificaciones(institucionId));
     setLoading(false);
-  }, [institucionId]);
+  }, [institucionId, puedeRevisar]);
 
   useEffect(() => { cargar(); }, [cargar]);
   useEffect(() => {
@@ -49,6 +59,7 @@ export default function Justificaciones() {
   const nombreEst = id => { const e = estudiantes.find(x => x.id === id); return e ? e.nombre : '—'; };
   const idsPropios = new Set((estudiantesPropios || []).map(e => e.id));
   const itemsVisibles = puedeRevisar ? items : items.filter(j => idsPropios.has(j.estudiante_id));
+  const directo = ['docente', 'inspector_general'].includes(profile.rolDb); // tutor e inspector justifican directamente (con el plazo que controla la base)
 
   async function resolver(j, estado) {
     let motivoRechazo = null;
@@ -57,11 +68,9 @@ export default function Justificaciones() {
       if (!motivoRechazo) return;
     }
     try {
-      await revisarJustificacion(j.id, estado, profile.id);
-      if (estado === 'aprobada') {
-        await marcarAsistenciaJustificada(j.estudiante_id, j.fecha);
-      }
-      setToast({ tipo: 'ok', msg: estado === 'aprobada' ? 'Justificación aprobada.' : 'Justificación rechazada.' });
+      // La base valida quién puede (tutor dentro de su plazo, luego inspector), justifica la asistencia y avisa a los docentes
+      await justificarFalta(j.estudiante_id, j.fecha, estado, motivoRechazo, j.id);
+      setToast({ tipo: 'ok', msg: estado === 'aprobada' ? 'Falta justificada. Se avisó al docente que la registró.' : 'Justificación rechazada.' });
       await cargar();
     } catch (err) {
       setToast({ tipo: 'err', msg: err.message || 'No se pudo actualizar.' });
@@ -78,10 +87,11 @@ export default function Justificaciones() {
     if (!form.estudiante_id || !form.fecha || !form.motivo.trim()) return;
     setSaving(true);
     try {
-      await crearJustificacion(institucionId, { estudiante_id: form.estudiante_id, fecha: form.fecha, motivo: form.motivo.trim() }, profile.id);
+      if (directo) await justificarFalta(form.estudiante_id, form.fecha, 'aprobada', form.motivo.trim(), null);
+      else await crearJustificacion(institucionId, { estudiante_id: form.estudiante_id, fecha: form.fecha, motivo: form.motivo.trim() }, profile.id);
       setModalOpen(false);
       await cargar();
-      setToast({ tipo: 'ok', msg: 'Justificación registrada.' });
+      setToast({ tipo: 'ok', msg: directo ? 'Falta justificada. Se avisó al docente que la registró.' : 'Justificación registrada.' });
     } catch (err) {
       setToast({ tipo: 'err', msg: err.message || 'No se pudo registrar.' });
     }
@@ -95,9 +105,9 @@ export default function Justificaciones() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
         <div>
           <h2 style={{ margin: '0 0 4px' }}>Justificaciones de inasistencia</h2>
-          <div style={{ fontSize: 13, color: 'var(--slate)' }}>{pendientes} pendiente(s) · Al aprobar, el pase pasa a estado justificado</div>
+          <div style={{ fontSize: 13, color: 'var(--slate)' }}>{pendientes} pendiente(s) · Al justificar, la falta pasa a «justificado» y se avisa al docente que la registró (su hora y asignatura).</div>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={abrirCrear}><span className="ti ti-plus" /> Nueva justificación</button>
+        {(profile.rolDb !== 'supervisor_plantel') && <button className="btn btn-primary btn-sm" onClick={abrirCrear}><span className="ti ti-plus" /> {directo ? 'Justificar una falta' : 'Nueva justificación'}</button>}
       </div>
 
       {itemsVisibles.length === 0 ? (
@@ -118,12 +128,12 @@ export default function Justificaciones() {
                     </span>
                   </td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {j.estado === 'pendiente' && puedeRevisar ? (
+                    {j.estado === 'pendiente' && puedeRevisar && j.puede_resolver ? (
                       <>
                         <button className="btn btn-success btn-sm" onClick={() => resolver(j, 'aprobada')}>Aprobar</button>{' '}
                         <button className="btn btn-danger btn-sm" onClick={() => resolver(j, 'rechazada')}>Rechazar</button>
                       </>
-                    ) : '—'}
+                    ) : (j.estado === 'pendiente' && j.responsable ? <span style={{ fontSize: 11.5, color: 'var(--slate)' }}>{j.responsable === 'tutor' ? `Le corresponde al docente tutor${j.limite_tutor ? ` (hasta el ${fmt(j.limite_tutor)})` : ''}` : 'Le corresponde al inspector general'}</span> : '—')}
                   </td>
                 </tr>
               ))}

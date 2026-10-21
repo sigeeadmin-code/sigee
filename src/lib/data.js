@@ -491,6 +491,37 @@ export async function crearJustificacion(institucionId, just, creadoPor) {
   const { error } = await supabase.from('justificaciones').insert({ institucion_id: institucionId, created_by: creadoPor, ...just });
   if (error) throw error;
 }
+/** Justificaciones que ve el usuario según su rol, con quién le corresponde resolverlas y el plazo del tutor. */
+export async function fetchJustificacionesParaResolver() {
+  const { data, error } = await supabase.rpc('justificaciones_para_resolver');
+  if (error) throw error;
+  return data || [];
+}
+/** Justifica (o rechaza) una falta: la base valida el rol y el plazo, marca la asistencia y avisa a los docentes. */
+export async function justificarFalta(estudianteId, fecha, decision, motivo, justificacionId) {
+  const { data, error } = await supabase.rpc('asistencia_justificar', { p_estudiante: estudianteId, p_fecha: fecha, p_decision: decision, p_motivo: motivo || null, p_justificacion: justificacionId || null });
+  if (error) throw error;
+  return data;
+}
+/** Fecha de hoy en Ecuador (AAAA-MM-DD), sin depender de la zona horaria del equipo. */
+export function hoyEcuador() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guayaquil' }).format(new Date()); }
+/** Estudiantes con falta (o falta justificada) HOY en una carga: ese día no pueden recibir calificación en esa asignatura. */
+export async function fetchAusentesHoyCarga(docenteMateriaId) {
+  if (!docenteMateriaId) return [];
+  const { data, error } = await supabase.from('asistencia').select('estudiante_id').eq('docente_materia_id', docenteMateriaId).eq('fecha', hoyEcuador()).in('estado', ['ausente', 'justificado']);
+  if (error) return [];
+  return (data || []).map(x => x.estudiante_id);
+}
+/** Avisos de faltas justificadas para el docente que las registró (su asignatura y hora). */
+export async function fetchAvisosJustificacion(limite = 30) {
+  const { data, error } = await supabase.from('avisos_justificacion').select('id, fecha, materia, franja, motivo, fase, leido_at, created_at, estudiantes(nombres, apellidos)').order('created_at', { ascending: false }).limit(limite);
+  if (error) throw error;
+  return data || [];
+}
+export async function marcarAvisoJustificacionLeido(id) {
+  const { error } = await supabase.from('avisos_justificacion').update({ leido_at: new Date().toISOString() }).eq('id', id);
+  if (error) throw error;
+}
 export async function revisarJustificacion(id, estado, revisadoPor) {
   const { error } = await supabase.from('justificaciones')
     .update({ estado, revisado_por: revisadoPor, revisado_at: new Date().toISOString() }).eq('id', id);

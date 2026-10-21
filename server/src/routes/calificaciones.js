@@ -128,6 +128,34 @@ calificacionesRouter.post('/', requireAuth, async (req, res) => {
     } else idsBorrarCalif.push(r.estudiante_id);
   }
 
+  // Regla: el día de la falta el estudiante no puede recibir calificación en esa asignatura.
+  // Si hoy (hora de Ecuador) tiene falta (o falta ya justificada) en esta carga, no se aceptan notas nuevas ni cambiadas para él.
+  {
+    const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guayaquil' }).format(new Date());
+    const { data: faltas, error: fErr } = await supabase.from('asistencia').select('estudiante_id')
+      .eq('docente_materia_id', docente_materia_id).eq('fecha', hoy).in('estado', ['ausente', 'justificado']).in('estudiante_id', idsEstudiantes);
+    if (fErr) return res.status(500).json({ error: 'No se pudo validar la asistencia del día: ' + fErr.message });
+    const ausentesHoy = new Set((faltas || []).map(f => f.estudiante_id));
+    if (ausentesHoy.size) {
+      const { data: previas, error: pErr } = await supabase.from('calificaciones_aportes')
+        .select('estudiante_id, tipo, grupo, actividad, valor')
+        .eq('docente_materia_id', docente_materia_id).eq('periodo_evaluativo', periodo_evaluativo).in('estudiante_id', [...ausentesHoy]);
+      if (pErr) return res.status(500).json({ error: pErr.message });
+      const antes = new Map((previas || []).map(x => [`${x.estudiante_id}|${x.tipo}|${x.grupo}|${x.actividad}`, Number(x.valor)]));
+      const bloqueados = new Set();
+      for (const f of filasAportes) {
+        if (!ausentesHoy.has(f.estudiante_id)) continue;
+        const k = `${f.estudiante_id}|${f.tipo}|${f.grupo}|${f.actividad}`;
+        if (!antes.has(k) || antes.get(k) !== f.valor) bloqueados.add(f.estudiante_id);
+      }
+      if (bloqueados.size) {
+        const { data: ests } = await supabase.from('estudiantes').select('id, nombres, apellidos').in('id', [...bloqueados]);
+        const nombres = (ests || []).map(e => `${e.apellidos} ${e.nombres}`.trim()).join('; ');
+        return res.status(422).json({ error: `No se puede registrar calificación hoy a quien tuvo falta en esta asignatura: ${nombres}. Su nota se registra en un día en que asista a clase.` });
+      }
+    }
+  }
+
   // 1) Aportes: upsert de lo enviado + borrar celdas que quedaron vacías
   if (filasAportes.length) {
     const { error } = await supabase.from('calificaciones_aportes')

@@ -1,3 +1,4 @@
+import AvisosJustificacion from '../components/AvisosJustificacion.jsx';
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '../lib/SessionContext.jsx';
@@ -185,9 +186,14 @@ function RegistroDiario() {
   useEffect(() => {
     let activo = true;
     if (!institucionId || !fecha) return;
-    mensajeAsistencia(institucionId, fecha, periodoActivo, paraleloId || null).then(g => { if (activo) setGate(g); });
+    mensajeAsistencia(institucionId, fecha, periodoActivo, paraleloId || null).then(g => {
+      if (!activo) return;
+      // El docente solo toma o corrige la asistencia el mismo día de clase (la base de datos también lo exige)
+      if (esDocente && fecha !== hoyISO()) setGate({ ok: false, solo: true, msg: 'El docente solo registra o modifica la asistencia el mismo día de clase. Lo guardado se puede consultar, no cambiar.' });
+      else setGate(g);
+    });
     return () => { activo = false; };
-  }, [institucionId, fecha, periodoActivo, paraleloId]);
+  }, [institucionId, fecha, periodoActivo, paraleloId, esDocente]);
 
   useEffect(() => {
     if (!toast) return;
@@ -357,6 +363,7 @@ function RegistroDiario() {
 
   return (
     <div>
+      {esDocente && <AvisosJustificacion />}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
         <div>
           <h2 style={{ margin: '0 0 4px' }}>Asistencia diaria</h2>
@@ -373,7 +380,7 @@ function RegistroDiario() {
 
       <div className={'card'} style={{ marginBottom: 14, borderColor: gate.ok ? 'var(--green)' : 'var(--red)' }}>
         <div className="cb" style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span className={'badge ' + (gate.ok ? 'b-ok' : 'b-err')}>{gate.ok ? 'Día lectivo' : 'No lectivo'}</span>
+          <span className={'badge ' + (gate.ok ? 'b-ok' : 'b-err')}>{gate.ok ? 'Día lectivo' : gate.solo ? 'Solo consulta' : 'No lectivo'}</span>
           {gate.msg}
         </div>
       </div>
