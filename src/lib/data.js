@@ -1546,6 +1546,22 @@ export async function fetchTareasDocente(docenteId) {
   entregas.forEach(e => (entregasPorTarea[e.tarea_id] ||= []).push(e));
   return tareas.map(t => ({ ...t, entregas: entregasPorTarea[t.id] || [] }));
 }
+// Tareas de todo el plantel (vista de administración): con docente, materia, curso y entregas.
+export async function fetchTareasPlantel(institucionId) {
+  const tareas = await sel(
+    'tareas',
+    '*, materias(nombre), paralelos(nombre, grado_id, grados(nombre)), docentes(nombres, apellidos)',
+    q => (institucionId ? q.eq('institucion_id', institucionId) : q).order('fecha_limite', { ascending: false }).limit(300)
+  );
+  const entregas = [];
+  for (let i = 0; i < tareas.length; i += 40) {
+    const ids = tareas.slice(i, i + 40).map(t => t.id);
+    entregas.push(...await sel('tarea_entregas', '*, estudiantes(nombres, apellidos)', q => q.in('tarea_id', ids)));
+  }
+  const porTarea = {};
+  entregas.forEach(e => (porTarea[e.tarea_id] ||= []).push(e));
+  return tareas.map(t => ({ ...t, entregas: porTarea[t.id] || [] }));
+}
 export async function crearTarea(institucionId, payload, creadoPor) {
   const { data, error } = await supabase.from('tareas')
     .insert({ institucion_id: institucionId, ...payload, created_by: creadoPor })
