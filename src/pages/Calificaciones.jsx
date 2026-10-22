@@ -5,7 +5,7 @@ import {
   fetchAportesCarga, fetchConfigEvaluacion, fetchNotasParalelo, guardarNotasTrimestre, guardarSupletorios, guardarConfigCarga, fetchCargaTieneNotas,
   fetchCedulasEstudiantes, fetchNombreDocente, fetchCatalogoNivel, fetchAusentesHoyCarga } from '../lib/data.js';
 import {
-  TRIMESTRES, configPorDefecto, validarConfig, calcTrimestre, aplicarMejora, escalaDAAPA, calcAnual, aDos, usaEvaluacionNumerica
+  TRIMESTRES, configPorDefecto, validarConfig, calcTrimestre, aplicarMejora, escalaDAAPA, calcAnual, aDos, usaEvaluacionNumerica, promGrupo
 } from '../lib/calificaciones.js';
 import { documentoBoletas } from '../lib/boletaHTML.js';
 import { nivelCanonico, NIVEL_LABEL, ordenarPorCatalogo } from '../lib/niveles.js';
@@ -293,23 +293,43 @@ function RegistroNotas({ cfg, alumnos, grid, calculos, editable, cargandoNotas, 
   ];
   const th = { whiteSpace: 'nowrap', textAlign: 'center', padding: '8px 4px', fontSize: 10 };
   const stick = { position: 'sticky', left: 0, background: 'var(--card, #fff)', zIndex: 1, minWidth: 190 };
+  const COLORES = ['#3b5bdb', '#7048e8', '#0c8599', '#2f9e44', '#e8590c', '#c2255c', '#5f3dc4', '#1971c2', '#099268', '#d9480f'];
+  const color = g => COLORES[grupos.indexOf(g) % COLORES.length];
+  const formativos = grupos.filter(g => g.tipo !== 'sum');
+  const sumativos = grupos.filter(g => g.tipo === 'sum');
+  const thRes = (bg, fg) => ({ ...th, background: bg, color: fg, minWidth: 64 });
+  const cabGrupo = g => <th key={g.tipo + g.idx} colSpan={g.n + 1} style={{ ...th, background: color(g), color: '#fff', textTransform: 'uppercase' }} title={`${g.etq} · peso ${g.peso}`}>{g.nombre}<br /><span style={{ fontWeight: 400 }}>{g.peso}%</span></th>;
+  const subCab = g => [...Array.from({ length: g.n }, (_, a) => <th key={g.tipo + g.idx + '-' + a} style={th}>{a + 1}</th>), <th key={g.tipo + g.idx + '-p'} style={{ ...th, fontWeight: 800 }}>Prom.</th>];
+  const celdasGrupo = (a, r, g) => [
+    ...r[g.tipo][g.idx].map((v, k) => (
+      <td key={g.tipo + g.idx + '-' + k} style={{ padding: 3, textAlign: 'center' }}>
+        <input inputMode="decimal" style={inp(celdaValida(v))} value={v} disabled={!editable || ausentesHoy.has(a.id)}
+          onChange={e => setCelda(a.id, g.tipo, g.idx, k, e.target.value)} />
+      </td>
+    )),
+    <td key={g.tipo + g.idx + '-p'} style={{ textAlign: 'center', fontWeight: 700, background: 'var(--surface2, #f4f5f7)' }}>{fmt(promGrupo(r[g.tipo][g.idx]))}</td>
+  ];
   const inp = ok => ({ width: 44, textAlign: 'center', padding: '4px 2px', fontSize: 12, border: '1px solid ' + (ok ? 'var(--line)' : 'var(--red)'), borderRadius: 6 });
 
   return (
     <div className="card"><div className="cb" style={{ padding: 0, overflowX: 'auto' }}>
-      <table className="data" style={{ minWidth: 900 }}>
+      <table className="data" style={{ minWidth: 1400 }}>
         <thead>
           <tr>
             <th style={stick} rowSpan={2}>Estudiante</th>
-            {grupos.map(g => <th key={g.tipo + g.idx} colSpan={g.n} style={th} title={`${g.etq} · peso ${g.peso}`}>{g.nombre}<br /><span style={{ fontWeight: 400 }}>{g.etq} · {g.peso}</span></th>)}
-            <th colSpan={4} style={th}>Trimestre</th>
+            {formativos.map(g => cabGrupo(g))}
+            <th style={thRes('#eef2ff', '#3730a3')} rowSpan={2}>Prom.<br />Formativo</th>
+            <th style={thRes('#eef2ff', '#3730a3')} rowSpan={2}>70%</th>
+            {sumativos.map(g => cabGrupo(g))}
+            <th style={thRes('#fdf2f8', '#9d174d')} rowSpan={2}>Prom.<br />Sumativo</th>
+            <th style={thRes('#fdf2f8', '#9d174d')} rowSpan={2}>30%</th>
             <th colSpan={3} style={th}>Mejora (opcional)</th>
-            <th style={th} rowSpan={2}>Final</th>
-            <th style={th} rowSpan={2}>Escala</th>
+            <th style={th} rowSpan={2}>Nota<br />Trimestre</th>
+            <th style={th} rowSpan={2}>Equiv.</th>
           </tr>
           <tr>
-            {grupos.flatMap(g => Array.from({ length: g.n }, (_, a) => <th key={g.tipo + g.idx + '-' + a} style={th}>{a + 1}</th>))}
-            <th style={th}>Form.</th><th style={th}>70%</th><th style={th}>Sum.</th><th style={th}>30%</th>
+            {formativos.flatMap(g => subCab(g))}
+            {sumativos.flatMap(g => subCab(g))}
             <th style={th}>Directa</th><th style={th}>Refuerzo</th><th style={th}>Mejora</th>
           </tr>
         </thead>
@@ -321,16 +341,12 @@ function RegistroNotas({ cfg, alumnos, grid, calculos, editable, cargandoNotas, 
             return (
               <tr key={a.id}>
                 <td style={stick}>{a.nombre}{ausentesHoy.has(a.id) && <span className="badge b-err" style={{ marginLeft: 6 }} title="Tuvo falta hoy en esta asignatura: no puede recibir calificación el día de la falta">Faltó hoy</span>}{sucios[a.id] && <span title="Cambios sin guardar" style={{ color: '#d97706', marginLeft: 6 }}>●</span>}</td>
-                {grupos.flatMap(g => r[g.tipo][g.idx].map((v, k) => (
-                  <td key={g.tipo + g.idx + '-' + k} style={{ padding: 3, textAlign: 'center' }}>
-                    <input inputMode="decimal" style={inp(celdaValida(v))} value={v} disabled={!editable || ausentesHoy.has(a.id)}
-                      onChange={e => setCelda(a.id, g.tipo, g.idx, k, e.target.value)} />
-                  </td>
-                )))}
-                <td style={{ textAlign: 'center' }}>{fmt(c.formativo)}</td>
-                <td style={{ textAlign: 'center' }}>{fmt(c.formativo70)}</td>
-                <td style={{ textAlign: 'center' }}>{fmt(c.sumativo)}</td>
-                <td style={{ textAlign: 'center' }}>{fmt(c.sumativo30)}</td>
+                {formativos.flatMap(g => celdasGrupo(a, r, g))}
+                <td style={{ textAlign: 'center', fontWeight: 800, background: '#eef2ff', color: '#3730a3' }}>{fmt(c.formativo)}</td>
+                <td style={{ textAlign: 'center', fontWeight: 700 }}>{fmt(c.formativo70)}</td>
+                {sumativos.flatMap(g => celdasGrupo(a, r, g))}
+                <td style={{ textAlign: 'center', fontWeight: 800, background: '#fdf2f8', color: '#9d174d' }}>{fmt(c.sumativo)}</td>
+                <td style={{ textAlign: 'center', fontWeight: 700 }}>{fmt(c.sumativo30)}</td>
                 {['mejora_directa', 'refuerzo', 'mejora_refuerzo'].map(k => (
                   <td key={k} style={{ padding: 3, textAlign: 'center' }}>
                     <input inputMode="decimal" style={inp(celdaValida(r.mejora[k]))} value={r.mejora[k]} disabled={!editable || ausentesHoy.has(a.id)}
