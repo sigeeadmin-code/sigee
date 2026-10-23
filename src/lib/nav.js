@@ -38,6 +38,7 @@ export const NAV_BY_ROL = {
       { to: '/roles-permisos', label: 'Roles y Permisos', icon: 'ti ti-shield-lock' },
       { to: '/modulos-plantel', label: 'Módulos por plantel', icon: 'ti ti-toggle-right' },
       { to: '/diagnostico', label: 'Diagnóstico del sistema', icon: 'ti ti-activity-heartbeat' },
+      { to: '/soporte-tic', label: 'Soporte TIC', icon: 'ti ti-headset' },
       { to: '/configuracion', label: 'Configuración', icon: 'ti ti-settings' }
     ]}
   ],

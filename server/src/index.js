@@ -7,6 +7,8 @@ import { calificacionesRouter } from './routes/calificaciones.js';
 import { correosRouter } from './routes/correos.js';
 import { requireAuth, requireRole } from './lib/auth.js';
 import { crearContador, registrarPeticion, serieHoraria, leerRecursos } from './lib/metricas.js';
+import { crearVigilante } from './lib/seguridad.js';
+import { supabase as supabaseAdmin } from './lib/supabase.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,6 +17,11 @@ const PORT = process.env.PORT || 3000;
 // express-rate-limit vería siempre la misma IP (la del proxy) y limitaría
 // a TODOS los usuarios juntos como si fueran uno solo.
 app.set('trust proxy', 1);
+
+// Soporte TIC: IP bloqueadas por el Super Admin y registro de peticiones rechazadas / rutas inexistentes (sondeos).
+const vigilante = crearVigilante({ supabase: supabaseAdmin });
+app.use(vigilante.bloqueo);
+app.use(vigilante.vigilancia);
 
 // En producción, restringe esto al dominio real del frontend en Cloudflare
 // vía la variable de entorno FRONTEND_ORIGIN (coma-separado si son varios).

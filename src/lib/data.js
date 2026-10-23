@@ -8,7 +8,7 @@ import { palabraClave, coincideBusqueda } from './fichaAsistencia.js';
 import { fetchCalendario } from './calendario.js';
 import { cmpNombre } from './ordenar.js';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://sigee-backend-production.up.railway.app';
+export const API_URL = import.meta.env.VITE_API_URL || 'https://sigee-backend-production.up.railway.app';
 
 
 async function sel(table, cols, build) {
@@ -2602,4 +2602,26 @@ export function docenteCoincideConMateria(docente, nombreMateria) {
   const m = new Set(toks(nombreMateria));
   if (!m.size) return false;
   return [...toks(docente.especialidad), ...toks(docente.area)].some(w => m.has(w));
+}
+
+
+// ── Soporte TIC (solo Super Admin) ──────────────────────────────────────────
+async function rpcTic(nombre, args) {
+  const { data, error } = await supabase.rpc(nombre, args);
+  if (error) throw new Error(error.message);
+  return data;
+}
+export const fetchTicTiempoReal = () => rpcTic('tic_tiempo_real', {});
+export const fetchTicHistorial = ({ q = null, desde = null, hasta = null, inst = null, user = null, limite = 300 } = {}) => rpcTic('tic_historial', { p_q: q, p_desde: desde, p_hasta: hasta, p_inst: inst, p_user: user, p_limite: limite });
+export const fetchTicResumenUsuarios = ({ q = null, desde = null, hasta = null, inst = null, limite = 200 } = {}) => rpcTic('tic_resumen_usuarios', { p_q: q, p_desde: desde, p_hasta: hasta, p_inst: inst, p_limite: limite });
+export const fetchTicUso = (dias = 14, inst = null) => rpcTic('tic_uso_estadisticas', { p_dias: dias, p_inst: inst });
+export const fetchTicLatenciaUsuarios = (dias = 3, inst = null) => rpcTic('tic_latencia_usuarios', { p_dias: dias, p_inst: inst });
+export const fetchTicEventos = ({ estado = null, sev = null, dias = 7, ip = null, incluirLogin = false, limite = 300 } = {}) => rpcTic('tic_eventos', { p_estado: estado, p_sev: sev, p_dias: dias, p_ip: ip, p_incluir_login: incluirLogin, p_limite: limite });
+export const marcarTicEvento = (id, estado, nota = null) => rpcTic('tic_marcar_evento', { p_id: id, p_estado: estado, p_nota: nota });
+export const bloquearTicIp = (ip, motivo, horas = null) => rpcTic('tic_bloquear_ip', { p_ip: ip, p_motivo: motivo, p_horas: horas });
+export const desbloquearTicIp = ip => rpcTic('tic_desbloquear_ip', { p_ip: ip });
+export async function fetchTicIpsBloqueadas() {
+  const { data, error } = await supabase.from('tic_ips_bloqueadas').select('*').eq('activo', true).order('creado_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []).filter(b => !b.hasta || new Date(b.hasta) > new Date());
 }

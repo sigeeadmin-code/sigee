@@ -10,6 +10,7 @@ import Planteles from './pages/Planteles.jsx';
 import Academico from './pages/Academico.jsx';
 import RolesPermisos from './pages/RolesPermisos.jsx';
 import Diagnostico from './pages/Diagnostico.jsx';
+import SoporteTIC from './pages/SoporteTIC.jsx';
 import Docentes from './pages/Docentes.jsx';
 import Estudiantes from './pages/Estudiantes.jsx';
 import Usuarios from './pages/Usuarios.jsx';
@@ -87,6 +88,7 @@ function Gate() {
         <Route path="/instituciones" element={<Protegida path="/instituciones"><Planteles /></Protegida>} />
         <Route path="/roles-permisos" element={<Protegida path="/roles-permisos"><RolesPermisos /></Protegida>} />
         <Route path="/diagnostico" element={<Protegida path="/diagnostico"><Diagnostico /></Protegida>} />
+        <Route path="/soporte-tic" element={<Protegida path="/soporte-tic"><SoporteTIC /></Protegida>} />
         <Route path="/docentes" element={<Protegida path="/docentes"><Docentes /></Protegida>} />
         <Route path="/academico" element={<Protegida path="/academico"><Academico /></Protegida>} />
         <Route path="/estudiantes" element={<Protegida path="/estudiantes"><Estudiantes /></Protegida>} />

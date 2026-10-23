@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { supabase, ROLE_GROUP } from './supabase.js';
-import { fetchInstituciones, fetchInstitucionData, fetchDatosGlobales, fetchPermisosPlantel, fetchCursosComoTutor } from './data.js';
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
+import { supabase, ROLE_GROUP, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase.js';
+import { crearMonitorTic } from './ticMonitor.js';
+import { API_URL, fetchInstituciones, fetchInstitucionData, fetchDatosGlobales, fetchPermisosPlantel, fetchCursosComoTutor } from './data.js';
 const SessionCtx = createContext(null);
 export const useSession = () => useContext(SessionCtx);
 export function SessionProvider({ children }) {
@@ -67,10 +68,22 @@ export function SessionProvider({ children }) {
   const login = useCallback(async (email, password) => {
     setError('');
     const { error: authErr } = await supabase.auth.signInWithPassword({ email, password });
-    if (authErr) { setError('Correo o contraseña incorrectos.'); throw authErr; }
+    if (authErr) {
+      // Soporte TIC: deja constancia del intento fallido (IP y correo). Nunca debe impedir mostrar el error.
+      try { supabase.rpc('tic_login_fallido', { p_email: email }).then(() => {}, () => {}); } catch { /* sin registro */ }
+      setError('Correo o contraseña incorrectos.'); throw authErr;
+    }
   }, []);
   // scope 'local': cerrar sesión aquí NO invalida las sesiones de la misma cuenta abiertas en otras pestañas o dispositivos
-  const logout = useCallback(async () => { await supabase.auth.signOut({ scope: 'local' }); }, []);
+  const monitorTic = useRef(null);
+  const logout = useCallback(async () => { try { await monitorTic.current?.cerrar('logout'); } catch { /* no bloquea el cierre */ } await supabase.auth.signOut({ scope: 'local' }); }, []);
+  // Soporte TIC: latido de conexión mientras haya una sesión abierta (entrada, tiempo conectado y latencia).
+  useEffect(() => {
+    if (!profile?.id) return undefined;
+    const m = crearMonitorTic({ supabase, apiUrl: API_URL, urlRest: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY });
+    monitorTic.current = m; m.iniciar();
+    return () => { m.cerrar('cambio_sesion'); if (monitorTic.current === m) monitorTic.current = null; };
+  }, [profile?.id]);
   // Vuelve a traer docentes/estudiantes/usuarios/etc. desde Supabase sin recargar toda la sesión.
   // Se debe llamar después de crear/editar/borrar registros, para que si el usuario navega a
   // otra pantalla y regresa, no vea una versión vieja en caché de los datos.
