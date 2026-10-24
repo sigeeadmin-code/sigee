@@ -11,6 +11,7 @@ import { documentoBoletas } from '../lib/boletaHTML.js';
 import { nivelCanonico, NIVEL_LABEL, ordenarPorCatalogo } from '../lib/niveles.js';
 import MisCalificaciones from './MisCalificaciones.jsx';
 import Placeholder from './Placeholder.jsx';
+import { siguienteCelda } from '../lib/navegacionNotas.js';
 import ConfigEvaluacionModal from '../components/ConfigEvaluacionModal.jsx';
 
 const ROLES_EDITAN = ['super_admin', 'admin_plantel', 'secretario', 'docente'];
@@ -300,6 +301,19 @@ function CuadroCalificaciones() {
 }
 
 function RegistroNotas({ cfg, alumnos, grid, calculos, editable, cargandoNotas, sucios, setCelda, setMejora, ausentesHoy = new Set() }) {
+  const contRef = useRef(null);
+  // Enter baja al estudiante siguiente de la misma columna (y al terminar la lista pasa a la columna siguiente); Mayús+Enter sube.
+  const alTeclear = e => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const cont = contRef.current; if (!cont) return;
+    const els = Array.from(cont.querySelectorAll('input[data-r]'));
+    const celdas = els.map(el => ({ r: Number(el.dataset.r), c: Number(el.dataset.c), ok: !el.disabled }));
+    const dest = siguienteCelda(celdas, { r: Number(e.target.dataset.r), c: Number(e.target.dataset.c) }, e.shiftKey);
+    if (!dest) return;
+    const el = els.find(x => Number(x.dataset.r) === dest.r && Number(x.dataset.c) === dest.c);
+    if (el) { el.focus(); try { el.select(); } catch { /* sin selección */ } }
+  };
   if (cargandoNotas) return <div className="card"><div className="cb"><p className="muted">Cargando notas…</p></div></div>;
   if (!alumnos.length) return <div className="card"><div className="cb"><p className="muted">No hay estudiantes matriculados (activos) en este paralelo.</p></div></div>;
 
@@ -314,13 +328,18 @@ function RegistroNotas({ cfg, alumnos, grid, calculos, editable, cargandoNotas, 
   const color = g => COLORES[grupos.indexOf(g) % COLORES.length];
   const formativos = grupos.filter(g => g.tipo !== 'sum');
   const sumativos = grupos.filter(g => g.tipo === 'sum');
+  // Número de columna de cada casillero (para moverse con Enter): primero los formativos, luego los sumativos y al final la mejora.
+  const colIni = {}; let colAcum = 0;
+  [...formativos, ...sumativos].forEach(g => { colIni[g.tipo + g.idx] = colAcum; colAcum += g.n; });
+  const colMejora = colAcum;
   const thRes = (bg, fg) => ({ ...th, background: bg, color: fg, minWidth: 64 });
   const cabGrupo = g => <th key={g.tipo + g.idx} colSpan={g.n + 1} style={{ ...th, background: color(g), color: '#fff', textTransform: 'uppercase' }} title={`${g.etq} · peso ${g.peso}`}>{g.nombre}<br /><span style={{ fontWeight: 400 }}>{g.peso}%</span></th>;
   const subCab = g => [...Array.from({ length: g.n }, (_, a) => <th key={g.tipo + g.idx + '-' + a} style={th}>{a + 1}</th>), <th key={g.tipo + g.idx + '-p'} style={{ ...th, fontWeight: 800 }}>Prom.</th>];
-  const celdasGrupo = (a, r, g) => [
+  const celdasGrupo = (a, r, g, ri) => [
     ...(r[g.tipo]?.[g.idx] || []).map((v, k) => (
       <td key={g.tipo + g.idx + '-' + k} style={{ padding: 3, textAlign: 'center' }}>
-        <input inputMode="decimal" style={inp(celdaValida(v))} value={v} disabled={!editable || ausentesHoy.has(a.id)}
+        <input inputMode="decimal" enterKeyHint="next" data-r={ri} data-c={colIni[g.tipo + g.idx] + k} onKeyDown={alTeclear}
+          style={inp(celdaValida(v))} value={v} disabled={!editable || ausentesHoy.has(a.id)}
           onChange={e => setCelda(a.id, g.tipo, g.idx, k, e.target.value)} />
       </td>
     )),
@@ -329,7 +348,7 @@ function RegistroNotas({ cfg, alumnos, grid, calculos, editable, cargandoNotas, 
   const inp = ok => ({ width: 44, textAlign: 'center', padding: '4px 2px', fontSize: 12, border: '1px solid ' + (ok ? 'var(--line)' : 'var(--red)'), borderRadius: 6 });
 
   return (
-    <div className="card"><div className="cb" style={{ padding: 0, overflowX: 'auto' }}>
+    <div className="card"><div className="cb" ref={contRef} style={{ padding: 0, overflowX: 'auto' }}>
       <table className="data" style={{ minWidth: 1400 }}>
         <thead>
           <tr>
@@ -351,22 +370,22 @@ function RegistroNotas({ cfg, alumnos, grid, calculos, editable, cargandoNotas, 
           </tr>
         </thead>
         <tbody>
-          {alumnos.map(a => {
+          {alumnos.map((a, ri) => {
             const r = grid[a.id]; const c = calculos[a.id];
             if (!r || !c) return null;
             const esc = escalaDAAPA(c.final);
             return (
               <tr key={a.id}>
                 <td style={stick}>{a.nombre}{ausentesHoy.has(a.id) && <span className="badge b-err" style={{ marginLeft: 6 }} title="Tuvo falta hoy en esta asignatura: no puede recibir calificación el día de la falta">Faltó hoy</span>}{sucios[a.id] && <span title="Cambios sin guardar" style={{ color: '#d97706', marginLeft: 6 }}>●</span>}</td>
-                {formativos.flatMap(g => celdasGrupo(a, r, g))}
+                {formativos.flatMap(g => celdasGrupo(a, r, g, ri))}
                 <td style={{ textAlign: 'center', fontWeight: 800, background: '#eef2ff', color: '#3730a3' }}>{fmt(c.formativo)}</td>
                 <td style={{ textAlign: 'center', fontWeight: 700 }}>{fmt(c.formativo70)}</td>
-                {sumativos.flatMap(g => celdasGrupo(a, r, g))}
+                {sumativos.flatMap(g => celdasGrupo(a, r, g, ri))}
                 <td style={{ textAlign: 'center', fontWeight: 800, background: '#fdf2f8', color: '#9d174d' }}>{fmt(c.sumativo)}</td>
                 <td style={{ textAlign: 'center', fontWeight: 700 }}>{fmt(c.sumativo30)}</td>
-                {['mejora_directa', 'refuerzo', 'mejora_refuerzo'].map(k => (
+                {['mejora_directa', 'refuerzo', 'mejora_refuerzo'].map((k, j) => (
                   <td key={k} style={{ padding: 3, textAlign: 'center' }}>
-                    <input inputMode="decimal" style={inp(celdaValida(r.mejora[k]))} value={r.mejora[k]} disabled={!editable || ausentesHoy.has(a.id)}
+                    <input inputMode="decimal" enterKeyHint="next" data-r={ri} data-c={colMejora + j} onKeyDown={alTeclear} style={inp(celdaValida(r.mejora[k]))} value={r.mejora[k]} disabled={!editable || ausentesHoy.has(a.id)}
                       onChange={e => setMejora(a.id, k, e.target.value)} />
                   </td>
                 ))}
