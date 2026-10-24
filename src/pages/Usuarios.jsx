@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
-import { fetchPlanteles, fetchUsuarios, crearUsuario, actualizarUsuario, editarUsuario, fetchInstitucionesBusqueda, fetchFichasSinCuenta } from '../lib/data.js';
+import { fetchPlanteles, fetchUsuarios, crearUsuario, cambiarEstadoCuenta, editarUsuario, fetchInstitucionesBusqueda, fetchFichasSinCuenta } from '../lib/data.js';
 import { fichaUnicaQueCoincide } from '../lib/vinculos.js';
 import BuscadorInstitucion from '../components/BuscadorInstitucion.jsx';
 import RestablecerClaveModal from '../components/RestablecerClaveModal.jsx';
@@ -157,7 +157,7 @@ export default function Usuarios() {
 
   async function toggleActivo(u) {
     try {
-      await actualizarUsuario(u.id, { activo: !u.activo });
+      await cambiarEstadoCuenta(u.id, !u.activo);
       setToast({ tipo: 'ok', msg: `${u.nombres} ${u.apellidos} ahora está ${!u.activo ? 'activo' : 'inactivo'}.` });
       await cargar();
       refrescarDatos();

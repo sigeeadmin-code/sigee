@@ -1080,6 +1080,12 @@ export async function actualizarUsuario(id, cambios) {
   const { error } = await supabase.from('profiles').update(cambios).eq('id', id);
   if (error) throw error;
 }
+// Activar/desactivar una cuenta por la función segura del servidor: valida el plantel y el rol, no deja desactivar al último
+// administrador ni la propia cuenta, y deja constancia en la auditoría.
+export async function cambiarEstadoCuenta(id, activo, motivo) {
+  const { error } = await supabase.rpc('personal_cambiar_estado_cuenta', { p_user: id, p_activo: !!activo, p_motivo: motivo || null });
+  if (error) throw new Error(error.message);
+}
 /**
  * Restablece la contraseña (y opcionalmente corrige el correo) de una o varias cuentas. Solo Super Admin y Administrador de Plantel.
  * resets: [{ user_id, password, email? }] → [{ user_id, ok, error? }]
