@@ -24,7 +24,9 @@ export function SessionProvider({ children }) {
       } catch { setEsTutor(false); }
     } else setEsTutor(false);
   }, []);
-  const loadForUser = useCallback(async (authUser) => {
+  const usuarioCargado = useRef(null);   // id del usuario cuyos datos ya están en pantalla
+  const cargandoId = useRef(null);
+  const cargarUsuario = useCallback(async (authUser) => {
     const { data: prof, error: profErr } = await supabase
       .from('profiles').select('*').eq('id', authUser.id).single();
     if (profErr || !prof) { setError('No se encontró el perfil del usuario.'); setLoading(false); return; }
@@ -50,8 +52,15 @@ export function SessionProvider({ children }) {
       setData({ docentes: [], estudiantes: [], usuarios: [], administrativos: [], tareas: [] });
     }
     await cargarPermisos({ ...prof, rol }, prof.institucion_id);
-    setLoading(false);
+    usuarioCargado.current = authUser.id;
   }, [cargarPermisos]);
+  const loadForUser = useCallback(async (authUser) => {
+    if (cargandoId.current === authUser.id) return;       // ya hay una carga de este usuario en curso (arranque + evento de sesión)
+    cargandoId.current = authUser.id;
+    try { await cargarUsuario(authUser); }
+    catch (e) { setError('No se pudo cargar tu información. Revisa tu conexión y recarga la página.'); }   // nunca dejar la pantalla en "Cargando…" para siempre
+    finally { cargandoId.current = null; setLoading(false); }
+  }, [cargarUsuario]);
   useEffect(() => {
     let mounted = true;
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -59,9 +68,14 @@ export function SessionProvider({ children }) {
       if (session?.user) loadForUser(session.user);
       else setLoading(false);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) { setLoading(true); loadForUser(session.user); }
-      else { setProfile(null); setData(null); setLoading(false); }
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user) {
+        // Supabase vuelve a avisar "sesión iniciada" cada vez que la pestaña recupera el foco y al renovar el token (cada hora).
+        // Si es el MISMO usuario ya cargado, no se recarga nada ni se muestra "Cargando…": hacerlo destruía la pantalla abierta
+        // (notas sin guardar, curso elegido) y era lo que dejaba el módulo en blanco o lo reiniciaba.
+        if (usuarioCargado.current === session.user.id && event !== 'USER_UPDATED') return;
+        setLoading(true); loadForUser(session.user);
+      } else { usuarioCargado.current = null; setProfile(null); setData(null); setLoading(false); }
     });
     return () => { mounted = false; sub.subscription.unsubscribe(); };
   }, [loadForUser]);

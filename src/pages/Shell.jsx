@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useSession } from '../lib/SessionContext.jsx';
 import { NAV_BY_ROL, itemVisibleParaRolDb } from '../lib/nav.js';
 import { ROLE_LABELS } from '../lib/supabase.js';
+import ErrorBoundary from '../components/ErrorBoundary.jsx';
 export default function Shell() {
   const { profile, institucion, logout, permisos, esTutor } = useSession();
   const MENU_MINIMO = [
@@ -84,7 +85,7 @@ export default function Shell() {
           <div className="ava" style={{ width: 32, height: 32 }}>{initials}</div>
         </header>
         <div className="content">
-          <Outlet />
+          <ErrorBoundary reinicio={location.pathname}><Outlet /></ErrorBoundary>
         </div>
       </main>
     </div>

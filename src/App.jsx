@@ -1,8 +1,9 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { SessionProvider, useSession } from './lib/SessionContext.jsx';
 import { rolesConAcceso, rutaPermitidaParaRolDb } from './lib/nav.js';
 import AvisoVersionNueva from './components/AvisoVersionNueva.jsx';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 import Login from './pages/Login.jsx';
 import Shell from './pages/Shell.jsx';
 import Dashboard from './pages/Dashboard.jsx';
@@ -79,9 +80,11 @@ function BaseDocentesRuta() {
 
 function Gate() {
   const { loading, profile } = useSession();
+  const { pathname } = useLocation();
   if (loading) return <div className="splash">Cargando SIGEE…</div>;
   if (!profile) return <Login />;
   return (
+    <ErrorBoundary reinicio={pathname}>
     <Routes>
       <Route element={<Shell />}>
         <Route path="/" element={<Dashboard />} />
@@ -130,6 +133,7 @@ function Gate() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
+    </ErrorBoundary>
   );
 }
 export default function App() {

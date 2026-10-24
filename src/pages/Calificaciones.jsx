@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchGradosConParalelos, fetchCargasDocente, fetchTodasCargas, fetchEstudiantesParalelo,
@@ -57,6 +57,8 @@ function CuadroCalificaciones() {
   const [cargaId, setCargaId] = useState('');
   const [trim, setTrim] = useState('T1');
   const [cfg, setCfg] = useState(configPorDefecto());
+  const [cfgGrid, setCfgGrid] = useState(null);   // configuración con la que se armó la cuadrícula mostrada (siempre coherente con `grid`)
+  const reqNotas = useRef(0);                      // número de la última petición de notas: las respuestas atrasadas se descartan
   const [catalogo, setCatalogo] = useState(null);   // plan de materias por nivel (Académico → Materias → Catálogo por nivel)
   const [alumnos, setAlumnos] = useState([]);
   const [grid, setGrid] = useState({});
@@ -114,18 +116,32 @@ function CuadroCalificaciones() {
   // Configuración de evaluación del paralelo (o la general de la institución, o la de MAQUETA)
   useEffect(() => {
     if (!institucionId || !paraleloId) return;
-    fetchConfigEvaluacion(institucionId, paraleloId, cargaId || null).then(c => setCfg(c && validarConfig(c).length === 0 ? c : configPorDefecto()));
+    let vigente = true;   // si el docente cambia de materia antes de que llegue la respuesta, se ignora la vieja
+    fetchConfigEvaluacion(institucionId, paraleloId, cargaId || null)
+      .then(c => { if (vigente) setCfg(c && validarConfig(c).length === 0 ? c : configPorDefecto()); })
+      .catch(() => { /* sin conexión: se conserva la configuración que ya está en pantalla */ });
+    return () => { vigente = false; };
   }, [institucionId, paraleloId, cargaId]);
 
   // Notas guardadas de la carga + trimestre
   const cargarNotas = useCallback(async () => {
-    if (!cargaId || !paraleloId || !periodoActivo) { setAlumnos([]); setGrid({}); return; }
+    const miReq = ++reqNotas.current;
+    if (!cargaId || !paraleloId || !periodoActivo) { setAlumnos([]); setGrid({}); setCfgGrid(null); return; }
+    const cfgUsada = cfg;
     setCargandoNotas(true);
-    const [al, { aportes, mejoras }] = await Promise.all([
-      fetchEstudiantesParalelo(paraleloId, periodoActivo.id), fetchAportesCarga(cargaId, trim)
-    ]);
+    let al, aportes, mejoras, ausentes;
+    try {
+      [al, { aportes, mejoras }] = await Promise.all([
+        fetchEstudiantesParalelo(paraleloId, periodoActivo.id), fetchAportesCarga(cargaId, trim)
+      ]);
+      ausentes = await fetchAusentesHoyCarga(cargaId);
+    } catch (e) {
+      if (miReq === reqNotas.current) { setCargandoNotas(false); setToast({ ok: false, t: 'No se pudieron cargar las notas. Revisa tu conexión e inténtalo de nuevo.' }); }
+      return;
+    }
+    if (miReq !== reqNotas.current) return;   // llegó una respuesta más nueva (cambió la materia, el trimestre o la configuración): esta ya no sirve
     const g = {};
-    al.forEach(a => { g[a.id] = gridVacio(cfg); });
+    al.forEach(a => { g[a.id] = gridVacio(cfgUsada); });
     aportes.forEach(r => {
       const reg = g[r.estudiante_id];
       if (reg && reg[r.tipo]?.[r.grupo] && r.actividad < reg[r.tipo][r.grupo].length) reg[r.tipo][r.grupo][r.actividad] = String(Number(r.valor));
@@ -138,8 +154,8 @@ function CuadroCalificaciones() {
         mejora_refuerzo: m.mejora_refuerzo == null ? '' : String(Number(m.mejora_refuerzo))
       };
     });
-    setAusentesHoy(new Set(await fetchAusentesHoyCarga(cargaId)));
-    setAlumnos(al); setGrid(g); setSucios({}); setCargandoNotas(false);
+    setAusentesHoy(new Set(ausentes));
+    setAlumnos(al); setGrid(g); setCfgGrid(cfgUsada); setSucios({}); setCargandoNotas(false);
   }, [cargaId, paraleloId, trim, periodoActivo?.id, cfg]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { if (vista === 'registro') cargarNotas(); }, [cargarNotas, vista]);
@@ -162,21 +178,22 @@ function CuadroCalificaciones() {
     setSucios(s => ({ ...s, [estId]: true }));
   };
 
+  const cfgVista = cfgGrid || cfg;   // la que corresponde a las filas que se están mostrando
   const calculos = useMemo(() => {
     const out = {};
     alumnos.forEach(a => {
       const r = grid[a.id];
       if (!r) return;
-      const num = tipo => r[tipo].map(arr => arr.map(aNum));
-      const c = calcTrimestre({ ind: num('ind'), grp: num('grp'), sum: num('sum') }, cfg);
+      const num = tipo => (r[tipo] || []).map(arr => arr.map(aNum));
+      const c = calcTrimestre({ ind: num('ind'), grp: num('grp'), sum: num('sum') }, cfgVista);
       const mj = Object.fromEntries(Object.entries(r.mejora).map(([k, v]) => [k, aNum(v)]));
       out[a.id] = { ...c, final: c.completo ? aplicarMejora(c.nota, mj) : null };
     });
     return out;
-  }, [alumnos, grid, cfg]);
+  }, [alumnos, grid, cfgVista]);
 
   const hayInvalidas = useMemo(() => Object.values(grid).some(r =>
-    ['ind', 'grp', 'sum'].some(t => r[t].some(arr => arr.some(v => !celdaValida(v)))) ||
+    ['ind', 'grp', 'sum'].some(t => (r[t] || []).some(arr => arr.some(v => !celdaValida(v)))) ||
     Object.values(r.mejora).some(v => !celdaValida(v))), [grid]);
 
   const abrirCasilleros = async () => {
@@ -274,7 +291,7 @@ function CuadroCalificaciones() {
       )}
 
       {vista === 'registro'
-        ? <RegistroNotas {...{ cfg, alumnos, grid, calculos, editable, cargandoNotas, sucios, setCelda, setMejora, ausentesHoy }} />
+        ? <RegistroNotas {...{ cfg: cfgVista, alumnos, grid, calculos, editable, cargandoNotas, sucios, setCelda, setMejora, ausentesHoy }} />
         : <CuadroParalelo paraleloId={paraleloId} cargas={cargasParalelo} periodoActivo={periodoActivo} puedeEditar={puedeEditar}
             institucion={institucion} grado={gradoSel} cursoNombre={gradoSel?.nombre || ''} paraleloNombre={paralelosVisibles.find(p => p.id === paraleloId)?.nombre || ''}
             tutorId={paralelosVisibles.find(p => p.id === paraleloId)?.tutor_docente_id || null} />}
@@ -301,13 +318,13 @@ function RegistroNotas({ cfg, alumnos, grid, calculos, editable, cargandoNotas, 
   const cabGrupo = g => <th key={g.tipo + g.idx} colSpan={g.n + 1} style={{ ...th, background: color(g), color: '#fff', textTransform: 'uppercase' }} title={`${g.etq} · peso ${g.peso}`}>{g.nombre}<br /><span style={{ fontWeight: 400 }}>{g.peso}%</span></th>;
   const subCab = g => [...Array.from({ length: g.n }, (_, a) => <th key={g.tipo + g.idx + '-' + a} style={th}>{a + 1}</th>), <th key={g.tipo + g.idx + '-p'} style={{ ...th, fontWeight: 800 }}>Prom.</th>];
   const celdasGrupo = (a, r, g) => [
-    ...r[g.tipo][g.idx].map((v, k) => (
+    ...(r[g.tipo]?.[g.idx] || []).map((v, k) => (
       <td key={g.tipo + g.idx + '-' + k} style={{ padding: 3, textAlign: 'center' }}>
         <input inputMode="decimal" style={inp(celdaValida(v))} value={v} disabled={!editable || ausentesHoy.has(a.id)}
           onChange={e => setCelda(a.id, g.tipo, g.idx, k, e.target.value)} />
       </td>
     )),
-    <td key={g.tipo + g.idx + '-p'} style={{ textAlign: 'center', fontWeight: 700, background: 'var(--surface2, #f4f5f7)' }}>{fmt(promGrupo(r[g.tipo][g.idx]))}</td>
+    <td key={g.tipo + g.idx + '-p'} style={{ textAlign: 'center', fontWeight: 700, background: 'var(--surface2, #f4f5f7)' }}>{fmt(promGrupo(r[g.tipo]?.[g.idx] || []))}</td>
   ];
   const inp = ok => ({ width: 44, textAlign: 'center', padding: '4px 2px', fontSize: 12, border: '1px solid ' + (ok ? 'var(--line)' : 'var(--red)'), borderRadius: 6 });
 
