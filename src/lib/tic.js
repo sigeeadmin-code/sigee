@@ -89,3 +89,38 @@ export function crearLimitador(ventanaMs, ahora = () => Date.now(), maxClaves = 
     return true;
   };
 }
+
+/* ── Conexiones y límites del plan (Soporte TIC → Conexiones) ── */
+// Límite de conexiones simultáneas de tiempo real del plan Pro de Supabase (500). Se puede cambiar desde la pantalla
+// si el plan cambia; el valor oficial vigente está en Supabase → Settings → Billing / Realtime limits.
+export const LIMITE_REALTIME_PLAN_PRO = 500;
+export const UMBRAL_ATENCION = 70;   // % del límite: empieza a preocupar
+export const UMBRAL_CRITICO = 85;    // % del límite: hay que actuar (ampliar el plan o apagar el tiempo real)
+
+export const porcentajeLimite = (valor, limite) => (limite > 0 ? Math.round((Number(valor || 0) / limite) * 1000) / 10 : 0);
+
+// Semáforo: normal (< 70 %), atención (70–84,9 %), crítico (≥ 85 %).
+export function semaforoConexiones(valor, limite) {
+  const pct = porcentajeLimite(valor, limite);
+  if (pct >= UMBRAL_CRITICO) return { id: 'critico', pct, color: 'var(--red)', texto: 'Crítico: cerca del límite del plan' };
+  if (pct >= UMBRAL_ATENCION) return { id: 'atencion', pct, color: 'var(--amberD)', texto: 'Atención: se acerca al límite del plan' };
+  return { id: 'normal', pct, color: 'var(--green, #0f9d8a)', texto: 'Normal: lejos del límite del plan' };
+}
+
+// Resume la lista de días que devuelve tic_conexiones_diarias: pico máximo del rango, el de hoy, el promedio de los días con actividad.
+export function resumenConexiones(dias) {
+  const lista = Array.isArray(dias) ? dias : [];
+  let max = { valor: 0, dia: null, hora: null };
+  lista.forEach(d => { const v = Number(d.pico) || 0; if (v > max.valor) max = { valor: v, dia: d.dia, hora: d.hora_pico || null }; });
+  const hoy = lista.length ? lista[lista.length - 1] : null;
+  const activos = lista.filter(d => Number(d.pico) > 0);
+  const promedio = activos.length ? Math.round((activos.reduce((a, d) => a + Number(d.pico), 0) / activos.length) * 10) / 10 : 0;
+  const maxBd = lista.reduce((m, d) => Math.max(m, Number(d.pico_bd) || 0), 0);
+  return { max, hoy: hoy ? { valor: Number(hoy.pico) || 0, hora: hoy.hora_pico || null, dia: hoy.dia } : { valor: 0, hora: null, dia: null }, promedio, diasActivos: activos.length, maxBd };
+}
+
+// Límite elegido por el administrador (guardado en su navegador). Acepta solo enteros razonables; si no, usa el del plan Pro.
+export function limiteValido(v, porDefecto = LIMITE_REALTIME_PLAN_PRO) {
+  const n = Math.floor(Number(v));
+  return Number.isFinite(n) && n >= 10 && n <= 1000000 ? n : porDefecto;
+}

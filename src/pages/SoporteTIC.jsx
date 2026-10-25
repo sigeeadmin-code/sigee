@@ -2,13 +2,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchTicTiempoReal, fetchTicHistorial, fetchTicResumenUsuarios, fetchTicUso, fetchTicLatenciaUsuarios,
-  fetchTicEventos, marcarTicEvento, bloquearTicIp, desbloquearTicIp, fetchTicIpsBloqueadas
+  fetchTicEventos, marcarTicEvento, bloquearTicIp, desbloquearTicIp, fetchTicIpsBloqueadas, fetchTicConexiones
 } from '../lib/data.js';
 import { descargarLibro } from '../lib/exportLibro.js';
 import GraficoLineas from '../components/GraficoLineas.jsx';
 import {
   clasificarLatencia, usuarioConProblema, formatoDuracion, navegadorCorto, etiquetaEvento, esEventoExterno,
-  ESTADOS_RED, DIAS_SEMANA, horaPico, intensidadCalor
+  ESTADOS_RED, DIAS_SEMANA, horaPico, intensidadCalor,
+  LIMITE_REALTIME_PLAN_PRO, UMBRAL_ATENCION, UMBRAL_CRITICO, semaforoConexiones, resumenConexiones, limiteValido, porcentajeLimite
 } from '../lib/tic.js';
 
 const TZ = 'America/Guayaquil';
@@ -358,13 +359,96 @@ function Red({ instituciones }) {
 }
 
 // ───────────────────────── Página ─────────────────────────
+// ───────────────────────── Conexiones y límites ─────────────────────────
+// Vigila a diario cuántas conexiones simultáneas hay frente a los límites del plan (tiempo real de Supabase y base de datos).
+const LS_LIMITE = 'sigee:tic:limite_rt';
+const leerLimite = () => { try { return limiteValido(window.localStorage.getItem(LS_LIMITE)); } catch { return LIMITE_REALTIME_PLAN_PRO; } };
+const fDiaCorto = d => new Date(d + 'T12:00:00').toLocaleDateString('es-EC', { weekday: 'short', day: '2-digit', month: 'short' });
+export function Conexiones() {
+  const [dias, setDias] = useState(30); const [limite, setLimite] = useState(leerLimite); const [borrador, setBorrador] = useState(() => String(leerLimite()));
+  const [d, setD] = useState(null); const [err, setErr] = useState(''); const [t, setT] = useState(null);
+  const cargar = useCallback(async () => { try { setD(await fetchTicConexiones(dias, limite)); setErr(''); setT(new Date()); } catch (e) { setErr(e.message); } }, [dias, limite]);
+  useEffect(() => { cargar(); }, [cargar]);
+  useEffect(() => { const id = setInterval(cargar, 60000); return () => clearInterval(id); }, [cargar]);
+  const lista = useMemo(() => d?.dias || [], [d]);
+  const res = useMemo(() => resumenConexiones(lista), [lista]);
+  const lim = Number(d?.limite_realtime) || limite; const limBd = Number(d?.limite_bd) || 60;
+  const ahora = Number(d?.ahora) || 0;
+  const sem = semaforoConexiones(Math.max(ahora, res.max.valor), lim);
+  const semHoy = semaforoConexiones(Math.max(ahora, res.hoy.valor), lim);
+  const semBd = semaforoConexiones(Math.max(Number(d?.ahora_bd) || 0, res.maxBd), limBd);
+  const guardarLimite = () => { const n = limiteValido(borrador); setLimite(n); setBorrador(String(n)); try { window.localStorage.setItem(LS_LIMITE, String(n)); } catch { /* solo no se recuerda */ } };
+  const et = lista.map(x => fDiaCorto(x.dia));
+  const serie = [
+    { id: 'rt', label: 'Tiempo real (% del límite)', color: '#6366f1', puntos: lista.map(x => ({ valor: x.pico, pct: Math.min(100, porcentajeLimite(x.pico, lim)), texto: `${fmt(x.pico)} conexiones · ${porcentajeLimite(x.pico, lim)} % de ${fmt(lim)}${x.hora_pico && x.pico ? ` (a las ${x.hora_pico})` : ''}` })) },
+    { id: 'bd', label: 'Base de datos (% del límite)', color: '#f59e0b', puntos: lista.map(x => ({ valor: x.pico_bd, pct: Math.min(100, porcentajeLimite(x.pico_bd, limBd)), texto: x.pico_bd == null ? 'sin datos' : `${fmt(x.pico_bd)} conexiones · ${porcentajeLimite(x.pico_bd, limBd)} % de ${fmt(limBd)}` })) }
+  ];
+  const descargar = () => {
+    const hoy = new Date().toISOString().slice(0, 10);
+    descargarLibro(`conexiones_diarias_${hoy}.xlsx`, [{ nombre: 'Conexiones diarias', cols: ['Día', 'Pico simultáneo', 'Hora del pico', '% del límite', 'Ingresos', 'Usuarios distintos', 'Pico BD'],
+      filas: [...lista].reverse().map(x => ({ 'Día': x.dia, 'Pico simultáneo': x.pico, 'Hora del pico': x.hora_pico && x.pico ? x.hora_pico : '', '% del límite': porcentajeLimite(x.pico, lim), Ingresos: x.sesiones, 'Usuarios distintos': x.usuarios, 'Pico BD': x.pico_bd ?? '' })) }]);
+  };
+  const colorBanner = sem.id === 'critico' ? 'var(--red)' : sem.id === 'atencion' ? 'var(--amberD)' : 'var(--teal, #0f9d8a)';
+  return (
+    <div>
+      <Err e={err} />
+      <div className="card" style={{ padding: 12, marginBottom: 12, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
+        <div><label className="fl">Período</label><select className="fc" value={dias} onChange={e => setDias(Number(e.target.value))}>{[7, 14, 30, 60, 90, 180].map(x => <option key={x} value={x}>Últimos {x} días</option>)}</select></div>
+        <div><label className="fl">Límite de tiempo real del plan</label>
+          <div style={{ display: 'flex', gap: 6 }}><input className="fc" style={{ width: 110 }} inputMode="numeric" value={borrador} onChange={e => setBorrador(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') guardarLimite(); }} /><button className="btn btn-secondary btn-sm" onClick={guardarLimite}>Aplicar</button></div></div>
+        <div style={{ flex: 1 }} />
+        <div style={{ fontSize: 12, color: 'var(--slate)' }}>{t ? `Actualizado ${t.toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })} · se refresca cada minuto` : 'Cargando…'}</div>
+        <button className="btn btn-secondary btn-sm" onClick={cargar}>↻ Actualizar</button>
+        <button className="btn btn-secondary btn-sm" onClick={descargar} disabled={!lista.length}><span className="ti ti-download" /> Excel</button>
+      </div>
+      <div className="card" style={{ padding: '10px 14px', marginBottom: 12, borderLeft: `4px solid ${colorBanner}`, fontSize: 13 }}>
+        <strong style={{ color: colorBanner }}>{sem.texto}.</strong> El pico más alto de los últimos {dias} días fue de <strong>{fmt(res.max.valor)}</strong> conexiones ({porcentajeLimite(res.max.valor, lim)} % de {fmt(lim)}){res.max.dia ? <> el {fDiaCorto(res.max.dia)}{res.max.hora ? ` a las ${res.max.hora}` : ''}</> : null}.
+        {sem.id !== 'normal' && <span> Revisa las opciones al final de esta pantalla.</span>}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10, marginBottom: 14 }}>
+        <Kpi icono="ti ti-users" titulo="Conectados ahora" valor={fmt(ahora)} nota={`${porcentajeLimite(ahora, lim)} % del límite`} color={semaforoConexiones(ahora, lim).color} />
+        <Kpi icono="ti ti-calendar-event" titulo="Pico de hoy" valor={fmt(res.hoy.valor)} nota={res.hoy.hora && res.hoy.valor ? `a las ${res.hoy.hora} · ${porcentajeLimite(res.hoy.valor, lim)} % del límite` : 'sin actividad'} color={semHoy.color} />
+        <Kpi icono="ti ti-trending-up" titulo={`Pico máximo (${dias} días)`} valor={fmt(res.max.valor)} nota={res.max.dia ? `${fDiaCorto(res.max.dia)}${res.max.hora ? ' · ' + res.max.hora : ''}` : 'sin actividad'} color={sem.color} />
+        <Kpi icono="ti ti-chart-arrows" titulo="Promedio de picos diarios" valor={fmt(res.promedio)} nota={`${fmt(res.diasActivos)} día(s) con actividad`} />
+        <Kpi icono="ti ti-plug-connected" titulo="Límite de tiempo real" valor={fmt(lim)} nota={`Disponible: ${fmt(Math.max(0, lim - res.max.valor))} sobre el pico máximo`} />
+        <Kpi icono="ti ti-database" titulo="Conexiones a la BD (pico)" valor={`${fmt(res.maxBd)}/${fmt(limBd)}`} nota={`${porcentajeLimite(res.maxBd, limBd)} % del máximo de la base`} color={semBd.color} />
+      </div>
+      <div className="card" style={{ padding: 14, marginBottom: 14 }}>
+        <div style={{ fontWeight: 700, marginBottom: 2 }}>Pico diario de conexiones frente al límite</div>
+        <div style={{ fontSize: 12, color: 'var(--slate)', marginBottom: 6 }}>Cada punto es el máximo de conexiones simultáneas de ese día, como porcentaje del límite. La línea roja es el {UMBRAL_CRITICO} %.</div>
+        {lista.length > 1 ? <GraficoLineas titulo="Pico diario de conexiones" series={serie} etiquetas={et} cadaX={Math.max(1, Math.ceil(lista.length / 8))} fmtY={g => `${g} %`} umbral={UMBRAL_CRITICO} umbralTexto={`${UMBRAL_CRITICO} % = crítico`} /> : <Vacio>Aún no hay suficientes días para dibujar el gráfico.</Vacio>}
+      </div>
+      <div className="card" style={{ padding: 0, marginBottom: 14, overflow: 'hidden' }}>
+        <div style={{ fontWeight: 700, padding: '12px 14px 6px' }}>Detalle por día</div>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="data" style={{ minWidth: 640 }}>
+            <thead><tr><th>Día</th><th style={{ textAlign: 'right' }}>Pico simultáneo</th><th>Hora del pico</th><th style={{ textAlign: 'right' }}>% del límite</th><th style={{ textAlign: 'right' }}>Ingresos</th><th style={{ textAlign: 'right' }}>Usuarios</th><th style={{ textAlign: 'right' }}>Pico BD</th></tr></thead>
+            <tbody>{lista.length ? [...lista].reverse().map(x => { const s = semaforoConexiones(x.pico, lim); return (
+              <tr key={x.dia}><td>{fDiaCorto(x.dia)}</td><td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(x.pico)}</td><td>{x.pico && x.hora_pico ? x.hora_pico : '—'}</td>
+                <td style={{ textAlign: 'right', color: s.color, fontWeight: 600 }}>{porcentajeLimite(x.pico, lim)} %</td><td style={{ textAlign: 'right' }}>{fmt(x.sesiones)}</td><td style={{ textAlign: 'right' }}>{fmt(x.usuarios)}</td><td style={{ textAlign: 'right' }}>{x.pico_bd == null ? '—' : fmt(x.pico_bd)}</td></tr>); })
+              : <tr><td colSpan={7}><Vacio>Sin datos todavía.</Vacio></td></tr>}</tbody>
+          </table>
+        </div>
+      </div>
+      <div className="card" style={{ padding: 14, fontSize: 12.5, color: 'var(--slate)', lineHeight: 1.55 }}>
+        <div style={{ fontWeight: 700, color: 'var(--ink)', marginBottom: 4 }}>Cómo leer esta pantalla</div>
+        <div>• <strong>Pico simultáneo</strong>: máximo de sesiones abiertas a la vez en el día (hora de Ecuador). Es una estimación de las conexiones de tiempo real: cada sesión abierta puede tener una. Dos pestañas de un mismo navegador cuentan como una sesión, así que el número real puede ser algo mayor. El dato oficial exacto está en Supabase → Reports → Realtime → Connected Clients.</div>
+        <div>• <strong>Semáforo</strong>: verde por debajo del {UMBRAL_ATENCION} % del límite, ámbar entre {UMBRAL_ATENCION} % y {UMBRAL_CRITICO} %, rojo desde el {UMBRAL_CRITICO} %.</div>
+        <div>• <strong>Límite</strong>: el plan Pro de Supabase permite 500 conexiones de tiempo real a la vez; Pro sin tope de gasto, Team y Enterprise, 10 000. Si el plan cambia, escribe el nuevo valor arriba y pulsa Aplicar (se recuerda en este navegador).</div>
+        <div>• <strong>Si llega al {UMBRAL_ATENCION} % o más</strong>: (1) pide a Supabase ampliar el límite o cambia el plan; (2) apaga los avisos en vivo con la variable <code>VITE_REALTIME=off</code> en Vercel: SIGEE sigue funcionando igual, solo sin avisos automáticos.</div>
+        <div>• <strong>Base de datos</strong>: el límite de {fmt(limBd)} conexiones es de la base (otro límite, independiente del tiempo real). Se mide cada 5 minutos, por eso el pico es aproximado.</div>
+      </div>
+    </div>
+  );
+}
+
 export default function SoporteTIC() {
   const { profile, instituciones } = useSession();
   const [tab, setTab] = useState('tiempo');
   const esSuper = profile?.rolDb === 'super_admin';
   const insts = useMemo(() => [...(instituciones || [])].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es')), [instituciones]);
   if (!esSuper) return <div><h2>Soporte TIC</h2><div className="card"><p className="muted">Esta pantalla es solo para el Super Administrador.</p></div></div>;
-  const TABS = [['tiempo', 'Tiempo real', 'ti ti-activity'], ['accesos', 'Accesos', 'ti ti-login'], ['seguridad', 'Seguridad', 'ti ti-shield-lock'], ['uso', 'Uso y hora pico', 'ti ti-chart-bar'], ['red', 'Red y latencia', 'ti ti-wifi']];
+  const TABS = [['tiempo', 'Tiempo real', 'ti ti-activity'], ['accesos', 'Accesos', 'ti ti-login'], ['seguridad', 'Seguridad', 'ti ti-shield-lock'], ['uso', 'Uso y hora pico', 'ti ti-chart-bar'], ['red', 'Red y latencia', 'ti ti-wifi'], ['conexiones', 'Conexiones y límites', 'ti ti-plug-connected']];
   return (
     <div>
       <div style={{ marginBottom: 12 }}>
@@ -377,6 +461,7 @@ export default function SoporteTIC() {
       {tab === 'seguridad' && <Seguridad />}
       {tab === 'uso' && <Uso instituciones={insts} />}
       {tab === 'red' && <Red instituciones={insts} />}
+      {tab === 'conexiones' && <Conexiones />}
     </div>
   );
 }

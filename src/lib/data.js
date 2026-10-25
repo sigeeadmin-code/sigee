@@ -2633,6 +2633,7 @@ export const fetchTicTiempoReal = () => rpcTic('tic_tiempo_real', {});
 export const fetchTicHistorial = ({ q = null, desde = null, hasta = null, inst = null, user = null, limite = 300 } = {}) => rpcTic('tic_historial', { p_q: q, p_desde: desde, p_hasta: hasta, p_inst: inst, p_user: user, p_limite: limite });
 export const fetchTicResumenUsuarios = ({ q = null, desde = null, hasta = null, inst = null, limite = 200 } = {}) => rpcTic('tic_resumen_usuarios', { p_q: q, p_desde: desde, p_hasta: hasta, p_inst: inst, p_limite: limite });
 export const fetchTicUso = (dias = 14, inst = null) => rpcTic('tic_uso_estadisticas', { p_dias: dias, p_inst: inst });
+export const fetchTicConexiones = (dias = 30, limite = 500) => rpcTic('tic_conexiones_diarias', { p_dias: dias, p_limite_rt: limite });
 export const fetchTicLatenciaUsuarios = (dias = 3, inst = null) => rpcTic('tic_latencia_usuarios', { p_dias: dias, p_inst: inst });
 export const fetchTicEventos = ({ estado = null, sev = null, dias = 7, ip = null, incluirLogin = false, limite = 300 } = {}) => rpcTic('tic_eventos', { p_estado: estado, p_sev: sev, p_dias: dias, p_ip: ip, p_incluir_login: incluirLogin, p_limite: limite });
 export const marcarTicEvento = (id, estado, nota = null) => rpcTic('tic_marcar_evento', { p_id: id, p_estado: estado, p_nota: nota });

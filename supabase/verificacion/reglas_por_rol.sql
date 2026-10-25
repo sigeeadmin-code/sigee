@@ -44,7 +44,7 @@ begin
   insert into res(prueba,paso,detalle)
   select 'anónimo sin acceso a '||p.proname, not has_function_privilege('anon', p.oid, 'execute'), ''
   from pg_proc p where p.pronamespace = 'public'::regnamespace
-   and p.proname in ('aplicar_horario','guardar_catalogo_nivel','mover_bloque_horario','docente_eliminar','personal_cambiar_estado_cuenta','editar_usuario','vincular_cuenta_docente','asignar_docente_a_mi_plantel','es_familia','ids_estudiantes_familia');
+   and p.proname in ('aplicar_horario','guardar_catalogo_nivel','mover_bloque_horario','docente_eliminar','personal_cambiar_estado_cuenta','editar_usuario','vincular_cuenta_docente','asignar_docente_a_mi_plantel','es_familia','ids_estudiantes_familia','tic_conexiones_diarias');
 
   -- 4) La guarda de docentes y las reglas de familia existen
   insert into res(prueba,paso,detalle) values ('existe la guarda trg_docentes_proteger', exists(select 1 from pg_trigger where tgname='trg_docentes_proteger' and not tgisinternal), '');
