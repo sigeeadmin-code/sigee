@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { supabase, ROLE_GROUP, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase.js';
 import { crearMonitorTic } from './ticMonitor.js';
-import { API_URL, fetchInstituciones, fetchInstitucionData, fetchDatosGlobales, fetchPermisosPlantel, fetchCursosComoTutor } from './data.js';
+import { API_URL, fetchInstituciones, fetchInstitucionData, fetchDatosGlobales, fetchPermisosPlantel, fetchCursosComoTutor, limpiarCacheConsultas } from './data.js';
+import { borrarTodosLosBorradores } from './borradorNotas.js';
 const SessionCtx = createContext(null);
 export const useSession = () => useContext(SessionCtx);
 export function SessionProvider({ children }) {
@@ -90,7 +91,11 @@ export function SessionProvider({ children }) {
   }, []);
   // scope 'local': cerrar sesión aquí NO invalida las sesiones de la misma cuenta abiertas en otras pestañas o dispositivos
   const monitorTic = useRef(null);
-  const logout = useCallback(async () => { try { await monitorTic.current?.cerrar('logout'); } catch { /* no bloquea el cierre */ } await supabase.auth.signOut({ scope: 'local' }); }, []);
+  const logout = useCallback(async () => {
+    try { await monitorTic.current?.cerrar('logout'); } catch { /* no bloquea el cierre */ }
+    try { borrarTodosLosBorradores(); limpiarCacheConsultas(); } catch { /* es solo limpieza */ }   // equipo compartido: no deja notas ni datos del usuario anterior
+    await supabase.auth.signOut({ scope: 'local' });
+  }, []);
   // Soporte TIC: latido de conexión mientras haya una sesión abierta (entrada, tiempo conectado y latencia).
   useEffect(() => {
     if (!profile?.id) return undefined;

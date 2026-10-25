@@ -1,5 +1,10 @@
 import { supabase, ROLE_GROUP, ROLE_LABELS } from './supabase.js';
 import { crearClienteBackend } from './backend.js';
+import { crearCache } from './cacheConsultas.js';
+
+// Caché corto de consultas de solo lectura (ver cacheConsultas.js). Se vacía al cerrar sesión y al guardar configuración.
+export const cacheConsultas = crearCache({ ttlMs: 60000 });
+export const limpiarCacheConsultas = () => cacheConsultas.limpiar();
 import { combinarCatalogo, clave } from './niveles.js';
 import { filtroOr } from './centralesBase.js';
 import { filaParaGuardar, agruparPorColumnas, cedulaCentral } from './importCentral.js';
@@ -1026,13 +1031,18 @@ export async function fetchTodasCargas(institucionId) {
     };
   });
 }
-export async function fetchEstudiantesParalelo(paraleloId, periodoId) {
+async function fetchEstudiantesParaleloDirecto(paraleloId, periodoId) {
   const matriculas = await sel('matriculas', '*', q => q.eq('paralelo_id', paraleloId).eq('periodo_id', periodoId).eq('estado', 'activa'));
   const ids = matriculas.map(m => m.estudiante_id);
   if (!ids.length) return [];
   const estRows = await sel('estudiantes', 'id, nombres, apellidos', q => q.in('id', ids));
   return estRows.map(e => ({ id: e.id, nombre: `${e.apellidos || ''} ${e.nombres || ''}`.trim() }))
     .sort((a, b) => a.nombre.localeCompare(b.nombre));
+}
+// La lista cambia desde muchos lugares (matrículas, importaciones, promociones): NO se guarda en caché, solo se juntan las
+// peticiones iguales que llegan al mismo tiempo (ttl 0), así siempre se ve la lista real.
+export function fetchEstudiantesParalelo(paraleloId, periodoId) {
+  return cacheConsultas.obtener(`est:${paraleloId}:${periodoId}`, () => fetchEstudiantesParaleloDirecto(paraleloId, periodoId), 0);
 }
 
 export async function fetchCalificaciones(docenteMateriaId, periodoEvaluativo) {
@@ -1700,7 +1710,7 @@ export async function fetchAportesCarga(docenteMateriaId, periodoEvaluativo) {
   return { aportes, mejoras };
 }
 export async function fetchConfigEvaluacion(institucionId, paraleloId, docenteMateriaId = null) {
-  const rows = await sel('config_evaluacion', 'paralelo_id, docente_materia_id, config', q => q.eq('institucion_id', institucionId));
+  const rows = await cacheConsultas.obtener(`cfg:${institucionId}`, () => sel('config_evaluacion', 'paralelo_id, docente_materia_id, config', q => q.eq('institucion_id', institucionId)));
   const deCarga = docenteMateriaId && rows.find(r => r.docente_materia_id === docenteMateriaId);
   const deParalelo = rows.find(r => !r.docente_materia_id && r.paralelo_id === paraleloId);
   const general = rows.find(r => !r.docente_materia_id && r.paralelo_id === null);
@@ -1725,7 +1735,8 @@ export async function guardarSupletorios(docenteMateriaId, registros) {
 }
 
 export async function guardarCasilleros(docenteMateriaId, casilleros) {
-  return llamarBackend('PUT', '/calificaciones/config-carga', { docente_materia_id: docenteMateriaId, casilleros });
+  try { return await llamarBackend('PUT', '/calificaciones/config-carga', { docente_materia_id: docenteMateriaId, casilleros }); }
+  finally { cacheConsultas.invalidar('cfg:'); }
 }
 
 // ¿La materia ya tiene notas guardadas? Si las tiene, el modal bloquea agregar/quitar rubros y cambiar pesos.
@@ -1737,7 +1748,8 @@ export async function fetchCargaTieneNotas(docenteMateriaId) {
   return ((a.count || 0) + (c.count || 0)) > 0;
 }
 export async function guardarConfigCarga(docenteMateriaId, config) {
-  return llamarBackend('PUT', '/calificaciones/config-carga', { docente_materia_id: docenteMateriaId, config });
+  try { return await llamarBackend('PUT', '/calificaciones/config-carga', { docente_materia_id: docenteMateriaId, config }); }
+  finally { cacheConsultas.invalidar('cfg:'); }
 }
 
 /* ── Boletas: datos extra (solo lectura) ── */

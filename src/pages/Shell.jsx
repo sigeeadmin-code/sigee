@@ -2,7 +2,8 @@ import React, { useEffect } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useSession } from '../lib/SessionContext.jsx';
 import { NAV_BY_ROL, itemVisibleParaRolDb } from '../lib/nav.js';
-import { ROLE_LABELS } from '../lib/supabase.js';
+import { ROLE_LABELS, supabase } from '../lib/supabase.js';
+import { crearAvisosEnVivo } from '../lib/avisosEnVivo.js';
 import ErrorBoundary from '../components/ErrorBoundary.jsx';
 export default function Shell() {
   const { profile, institucion, logout, permisos, esTutor } = useSession();
@@ -18,6 +19,21 @@ export default function Shell() {
   const isGlobal = profile.rol === 'super_admin';
   const [navOpen, setNavOpen] = React.useState(false);
   const location = useLocation();
+
+  // Avisos en vivo: notificaciones y justificaciones nuevas de este plantel aparecen solas (sin recargar). Es un extra opcional:
+  // si falla o se apaga con VITE_REALTIME=off, SIGEE funciona igual. Las pantallas interesadas escuchan el evento 'sigee:avisos'.
+  const [aviso, setAviso] = React.useState(null);
+  const institucionIdVivo = institucion?.id;
+  useEffect(() => {
+    if (import.meta.env.VITE_REALTIME === 'off' || !institucionIdVivo || !profile?.id) return undefined;
+    const vivo = crearAvisosEnVivo(supabase, {
+      institucionId: institucionIdVivo, perfilId: profile.id,
+      alAviso: a => { try { window.dispatchEvent(new CustomEvent('sigee:avisos', { detail: a })); } catch { /* sin efecto */ } if (a.texto) setAviso({ texto: a.texto }); }
+    });
+    vivo.iniciar();
+    return () => vivo.detener();
+  }, [institucionIdVivo, profile?.id]);
+  useEffect(() => { if (!aviso) return undefined; const t = setTimeout(() => setAviso(null), 6000); return () => clearTimeout(t); }, [aviso]);
 
   // Cierra el menú móvil automáticamente al navegar a otra pantalla.
   useEffect(() => { setNavOpen(false); }, [location.pathname]);
@@ -88,6 +104,11 @@ export default function Shell() {
           <ErrorBoundary reinicio={location.pathname}><Outlet /></ErrorBoundary>
         </div>
       </main>
+      {aviso && (
+        <div role="status" onClick={() => setAviso(null)} style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 60, background: '#0f172a', color: '#fff', padding: '10px 14px', borderRadius: 10, fontSize: 13, maxWidth: 320, boxShadow: '0 6px 20px rgba(0,0,0,.25)', cursor: 'pointer' }}>
+          <span className="ti ti-bell" style={{ marginRight: 8 }} />{aviso.texto}
+        </div>
+      )}
     </div>
   );
 }

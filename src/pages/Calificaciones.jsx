@@ -12,6 +12,7 @@ import { nivelCanonico, NIVEL_LABEL, ordenarPorCatalogo } from '../lib/niveles.j
 import MisCalificaciones from './MisCalificaciones.jsx';
 import Placeholder from './Placeholder.jsx';
 import { siguienteCelda } from '../lib/navegacionNotas.js';
+import { claveBorrador, armarBorrador, aplicarBorrador, borradorVigente, leerBorrador, guardarBorradorLS, borrarBorrador } from '../lib/borradorNotas.js';
 import ConfigEvaluacionModal from '../components/ConfigEvaluacionModal.jsx';
 
 const ROLES_EDITAN = ['super_admin', 'admin_plantel', 'secretario', 'docente'];
@@ -59,7 +60,10 @@ function CuadroCalificaciones() {
   const [trim, setTrim] = useState('T1');
   const [cfg, setCfg] = useState(configPorDefecto());
   const [cfgGrid, setCfgGrid] = useState(null);   // configuración con la que se armó la cuadrícula mostrada (siempre coherente con `grid`)
-  const reqNotas = useRef(0);                      // número de la última petición de notas: las respuestas atrasadas se descartan
+  const reqNotas = useRef(0);
+  const baseRef = useRef({});                      // filas tal como llegaron del servidor (para el borrador local)
+  const gridDe = useRef('');                       // curso/trimestre al que pertenece la cuadrícula mostrada
+  const [recuperado, setRecuperado] = useState(null);   // { n } si se recuperaron notas sin guardar de la sesión anterior                      // número de la última petición de notas: las respuestas atrasadas se descartan
   const [catalogo, setCatalogo] = useState(null);   // plan de materias por nivel (Académico → Materias → Catálogo por nivel)
   const [alumnos, setAlumnos] = useState([]);
   const [grid, setGrid] = useState({});
@@ -156,14 +160,38 @@ function CuadroCalificaciones() {
       };
     });
     setAusentesHoy(new Set(ausentes));
-    setAlumnos(al); setGrid(g); setCfgGrid(cfgUsada); setSucios({}); setCargandoNotas(false);
+    // Borrador local: si la sesión anterior se cortó con notas sin guardar, se recuperan (solo si nadie guardó notas nuevas mientras tanto).
+    baseRef.current = g; gridDe.current = `${cargaId}|${trim}`;
+    let gFinal = g, suciosIni = {}, rec = null;
+    try {
+      const clave = claveBorrador(profile.id, cargaId, trim);
+      const b = leerBorrador(clave);
+      if (b && !borradorVigente(b)) borrarBorrador(clave);
+      else if (b) { const r = aplicarBorrador({ grid: g, cfg: cfgUsada, borrador: b }); if (r.aplicados > 0) { gFinal = r.grid; suciosIni = r.sucios; rec = { n: r.aplicados }; } }
+    } catch { /* el borrador es un extra: si falla, se carga normal */ }
+    setRecuperado(rec);
+    setAlumnos(al); setGrid(gFinal); setCfgGrid(cfgUsada); setSucios(suciosIni); setCargandoNotas(false);
   }, [cargaId, paraleloId, trim, periodoActivo?.id, cfg]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { if (vista === 'registro') cargarNotas(); }, [cargarNotas, vista]);
 
   const [ausentesHoy, setAusentesHoy] = useState(new Set());
   const hayCambios = Object.keys(sucios).length > 0;
-  const confirmarDescarte = () => !hayCambios || window.confirm('Tienes notas sin guardar. ¿Descartarlas?');
+  const claveActual = () => claveBorrador(profile.id, cargaId, trim);
+  const confirmarDescarte = () => {
+    if (!hayCambios) return true;
+    if (!window.confirm('Tienes notas sin guardar. ¿Descartarlas?')) return false;
+    borrarBorrador(claveActual());   // si las descarta, tampoco deben reaparecer después
+    return true;
+  };
+  useEffect(() => {
+    if (!hayCambios || !cargaId || !cfgGrid || gridDe.current !== `${cargaId}|${trim}`) return;   // solo si la cuadrícula es de este curso y trimestre
+    const t = setTimeout(() => {
+      const b = armarBorrador({ grid, base: baseRef.current, sucios, cfg: cfgGrid });
+      if (b) guardarBorradorLS(claveBorrador(profile.id, cargaId, trim), b);
+    }, 800);
+    return () => clearTimeout(t);
+  }, [grid, sucios, hayCambios, cargaId, trim, cfgGrid, profile.id]);
 
   const setCelda = (estId, tipo, g, a, valor) => {
     const limpio = valor.replace(',', '.');
@@ -219,7 +247,7 @@ function CuadroCalificaciones() {
     try {
       const r = await guardarNotasTrimestre(cargaId, trim, registros);
       setToast({ ok: true, t: `Guardado: ${r.estudiantes} estudiante(s). ${r.notas_definitivas} nota(s) definitiva(s), ${r.notas_pendientes} pendiente(s) de sumativa.` });
-      setSucios({});
+      setSucios({}); setRecuperado(null); borrarBorrador(claveActual());
     } catch (e) { setToast({ ok: false, t: e.message }); }
     setGuardando(false);
   };
@@ -289,6 +317,13 @@ function CuadroCalificaciones() {
 
       {vista === 'registro' && panelCas && (
         <ConfigEvaluacionModal cfgInicial={cfg} bloqueada={bloqueadaCfg} guardando={guardandoCas} onGuardar={guardarCas} onClose={() => setPanelCas(false)} />
+      )}
+
+      {vista === 'registro' && recuperado && (
+        <div className="card" style={{ marginBottom: 10, borderLeft: '4px solid var(--warn, #d97706)' }}><div className="cb" style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13 }}>Recuperamos las notas sin guardar de <strong>{recuperado.n}</strong> estudiante(s) de tu sesión anterior. Revísalas y presiona <strong>Guardar trimestre</strong>.</span>
+          <button className="btn btn-secondary btn-sm" onClick={() => { borrarBorrador(claveActual()); setRecuperado(null); cargarNotas(); }}>Descartar y volver a lo guardado</button>
+        </div></div>
       )}
 
       {vista === 'registro'

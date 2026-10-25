@@ -49,6 +49,16 @@ export default function Justificaciones() {
   }, [institucionId, puedeRevisar]);
 
   useEffect(() => { cargar(); }, [cargar]);
+  // Aviso en vivo: cuando llega o cambia una justificación del plantel, la lista se refresca sola (sin parpadeo).
+  useEffect(() => {
+    const alAviso = async e => {
+      const t = e && e.detail && e.detail.tabla;
+      if (t !== 'justificaciones' && t !== '*') return;
+      try { setItems(puedeRevisar ? await fetchJustificacionesParaResolver() : await fetchJustificaciones(institucionId)); } catch { /* se queda lo que ya se veía */ }
+    };
+    window.addEventListener('sigee:avisos', alAviso);
+    return () => window.removeEventListener('sigee:avisos', alAviso);
+  }, [institucionId, puedeRevisar]);
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 3000);
