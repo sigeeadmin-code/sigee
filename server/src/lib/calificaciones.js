@@ -172,3 +172,15 @@ export function claseNivelEvaluacion(grado) {
   return NIVELES_EVALUACION_NUMERICA.includes(n) ? n : null;
 }
 export const usaEvaluacionNumerica = grado => claseNivelEvaluacion(grado) !== null;
+
+// Valida una nota recibida del cliente: SOLO un número de 0 a 10 con hasta 2 decimales (número, o texto como "8.5").
+// Rechaza espacios (antes un espacio se guardaba como 0), letras, hexadecimal, notación científica, booleanos, listas y 3 o más
+// decimales (la base los redondearía en silencio, p. ej. 8,999 pasaría a 9,00 y rompería la regla de truncar).
+export function valorValido(v) {
+  if (typeof v === 'number') {
+    if (!Number.isFinite(v) || v < 0 || v > 10) return false;
+    return Math.abs(v * 100 - Math.round(v * 100)) < 1e-6;
+  }
+  if (typeof v === 'string') return /^\d{1,2}(\.\d{1,2})?$/.test(v) && Number(v) <= 10;
+  return false;
+}

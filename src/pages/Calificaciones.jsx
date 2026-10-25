@@ -12,6 +12,7 @@ import { nivelCanonico, NIVEL_LABEL, ordenarPorCatalogo } from '../lib/niveles.j
 import MisCalificaciones from './MisCalificaciones.jsx';
 import Placeholder from './Placeholder.jsx';
 import { siguienteCelda } from '../lib/navegacionNotas.js';
+import { sanitizarNota, esNotaValida, conCelda, conMejora } from '../lib/notaEntrada.js';
 import { claveBorrador, armarBorrador, aplicarBorrador, borradorVigente, leerBorrador, guardarBorradorLS, borrarBorrador } from '../lib/borradorNotas.js';
 import ConfigEvaluacionModal from '../components/ConfigEvaluacionModal.jsx';
 
@@ -30,7 +31,7 @@ function gridVacio(cfg) {
     mejora: { mejora_directa: '', refuerzo: '', mejora_refuerzo: '' }
   };
 }
-const celdaValida = v => v === '' || (Number.isFinite(Number(v)) && Number(v) >= 0 && Number(v) <= 10);
+const celdaValida = esNotaValida;   // solo números de 0 a 10, hasta 2 decimales (ver lib/notaEntrada.js)
 const aNum = v => (v === '' || v === null || v === undefined ? null : Number(v));
 
 export default function Calificaciones() {
@@ -194,16 +195,11 @@ function CuadroCalificaciones() {
   }, [grid, sucios, hayCambios, cargaId, trim, cfgGrid, profile.id]);
 
   const setCelda = (estId, tipo, g, a, valor) => {
-    const limpio = valor.replace(',', '.');
-    setGrid(prev => {
-      const copia = { ...prev, [estId]: { ...prev[estId], [tipo]: prev[estId][tipo].map(arr => [...arr]) } };
-      copia[estId][tipo][g][a] = limpio;
-      return copia;
-    });
+    setGrid(prev => conCelda(prev, estId, tipo, g, a, valor));   // solo números: letras y símbolos no entran (lib/notaEntrada.js)
     setSucios(s => ({ ...s, [estId]: true }));
   };
   const setMejora = (estId, campo, valor) => {
-    setGrid(prev => ({ ...prev, [estId]: { ...prev[estId], mejora: { ...prev[estId].mejora, [campo]: valor.replace(',', '.') } } }));
+    setGrid(prev => conMejora(prev, estId, campo, valor));
     setSucios(s => ({ ...s, [estId]: true }));
   };
 
@@ -240,7 +236,7 @@ function CuadroCalificaciones() {
   };
 
   const guardar = async () => {
-    if (hayInvalidas) { setToast({ ok: false, t: 'Hay notas fuera de rango (0 a 10). Corrígelas antes de guardar.' }); return; }
+    if (hayInvalidas) { setToast({ ok: false, t: 'Hay notas inválidas: solo números de 0 a 10, con hasta 2 decimales. Corrígelas antes de guardar.' }); return; }
     const registros = alumnos.filter(a => sucios[a.id]).map(a => ({ estudiante_id: a.id, aportes: grid[a.id], mejora: grid[a.id].mejora }));
     if (!registros.length) { setToast({ ok: true, t: 'No hay cambios por guardar.' }); return; }
     setGuardando(true);
@@ -335,7 +331,7 @@ function CuadroCalificaciones() {
   );
 }
 
-function RegistroNotas({ cfg, alumnos, grid, calculos, editable, cargandoNotas, sucios, setCelda, setMejora, ausentesHoy = new Set() }) {
+export function RegistroNotas({ cfg, alumnos, grid, calculos, editable, cargandoNotas, sucios, setCelda, setMejora, ausentesHoy = new Set() }) {
   const contRef = useRef(null);
   // Enter baja al estudiante siguiente de la misma columna (y al terminar la lista pasa a la columna siguiente); Mayús+Enter sube.
   const alTeclear = e => {
@@ -373,7 +369,7 @@ function RegistroNotas({ cfg, alumnos, grid, calculos, editable, cargandoNotas, 
   const celdasGrupo = (a, r, g, ri) => [
     ...(r[g.tipo]?.[g.idx] || []).map((v, k) => (
       <td key={g.tipo + g.idx + '-' + k} style={{ padding: 3, textAlign: 'center' }}>
-        <input inputMode="decimal" enterKeyHint="next" data-r={ri} data-c={colIni[g.tipo + g.idx] + k} onKeyDown={alTeclear}
+        <input inputMode="decimal" enterKeyHint="next" maxLength={5} autoComplete="off" data-r={ri} data-c={colIni[g.tipo + g.idx] + k} onKeyDown={alTeclear}
           style={inp(celdaValida(v))} value={v} disabled={!editable || ausentesHoy.has(a.id)}
           onChange={e => setCelda(a.id, g.tipo, g.idx, k, e.target.value)} />
       </td>
@@ -420,7 +416,7 @@ function RegistroNotas({ cfg, alumnos, grid, calculos, editable, cargandoNotas, 
                 <td style={{ textAlign: 'center', fontWeight: 700 }}>{fmt(c.sumativo30)}</td>
                 {['mejora_directa', 'refuerzo', 'mejora_refuerzo'].map((k, j) => (
                   <td key={k} style={{ padding: 3, textAlign: 'center' }}>
-                    <input inputMode="decimal" enterKeyHint="next" data-r={ri} data-c={colMejora + j} onKeyDown={alTeclear} style={inp(celdaValida(r.mejora[k]))} value={r.mejora[k]} disabled={!editable || ausentesHoy.has(a.id)}
+                    <input inputMode="decimal" enterKeyHint="next" maxLength={5} autoComplete="off" data-r={ri} data-c={colMejora + j} onKeyDown={alTeclear} style={inp(celdaValida(r.mejora[k]))} value={r.mejora[k]} disabled={!editable || ausentesHoy.has(a.id)}
                       onChange={e => setMejora(a.id, k, e.target.value)} />
                   </td>
                 ))}
@@ -500,8 +496,8 @@ function CuadroParalelo({ paraleloId, cargas: cargasProp, periodoActivo, puedeEd
     const regs = Object.entries(supEdit)
       .filter(([k]) => k.startsWith(carga.id + '|'))
       .map(([k, v]) => ({ estudiante_id: k.split('|')[1], supletorio: v.replace(',', '.').trim() }));
-    if (regs.some(r => r.supletorio !== '' && !(Number.isFinite(Number(r.supletorio)) && Number(r.supletorio) >= 0 && Number(r.supletorio) <= 10))) {
-      setAviso({ ok: false, t: 'Hay notas de supletorio fuera de rango (0 a 10).' }); return;
+    if (regs.some(r => !esNotaValida(r.supletorio))) {
+      setAviso({ ok: false, t: 'Hay notas de supletorio inválidas: solo números de 0 a 10, con hasta 2 decimales.' }); return;
     }
     if (!regs.length) { setAviso({ ok: true, t: 'No hay cambios por guardar.' }); return; }
     setGuardandoSup(carga.id);
@@ -603,14 +599,14 @@ function CuadroParalelo({ paraleloId, cargas: cargasProp, periodoActivo, puedeEd
                     const llave = carga.id + '|' + f.a.id;
                     const guardado = datos.mejoras.find(x => x.estudiante_id === f.a.id && x.docente_materia_id === carga.id && x.periodo_evaluativo === 'SUP');
                     const valor = supEdit[llave] ?? (guardado?.supletorio == null ? '' : String(Number(guardado.supletorio)));
-                    const ok = valor === '' || (Number.isFinite(Number(valor)) && Number(valor) >= 0 && Number(valor) <= 10);
+                    const ok = esNotaValida(valor);
                     return (
                       <tr key={f.a.id}>
                         <td>{f.a.nombre}</td>
                         <td style={{ textAlign: 'center' }}>{fmt(m.anual.promedio)}</td>
                         <td style={{ textAlign: 'center' }}>
-                          <input inputMode="decimal" disabled={!puedeEditar} value={valor}
-                            onChange={e => setSupEdit(p => ({ ...p, [llave]: e.target.value }))}
+                          <input inputMode="decimal" maxLength={5} autoComplete="off" disabled={!puedeEditar} value={valor}
+                            onChange={e => setSupEdit(p => ({ ...p, [llave]: sanitizarNota(e.target.value, p[llave] ?? valor) }))}
                             style={{ width: 54, textAlign: 'center', padding: '4px 2px', fontSize: 12, border: '1px solid ' + (ok ? 'var(--line)' : 'var(--red)'), borderRadius: 6 }} />
                         </td>
                         <td style={{ textAlign: 'center' }}><span className={'badge ' + ESTADO_BADGE[m.anual.estado]}>{ESTADO_LABEL[m.anual.estado]}</span></td>

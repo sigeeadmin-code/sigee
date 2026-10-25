@@ -5,6 +5,7 @@ import { fetchDetalleEstudianteCalificaciones, fetchRepresentanteDe, fetchPeriod
 import { parcialDesdeActividades } from '../lib/rendimiento.js';
 import { construirDocumento, TIPOS_FICHA, OPCIONES_FICHA } from '../lib/fichasRendimiento.js';
 import DocumentoEditable from './DocumentoEditable.jsx';
+import { usarMargenesA4 } from '../lib/impresion.js';
 
 const CLAVE = 'sigee_ficha_opciones_';
 const ESTADO_TXT = { borrador: ['Borrador', '#64748b'], impresa: ['Impresa', '#0369a1'], revisada: ['Revisada por la autoridad', '#15803d'], observada: ['Observada por la autoridad', '#b91c1c'] };
@@ -86,10 +87,11 @@ export default function FichaDocumentoModal({ estudiante, institucion, trimestre
   useEffect(() => {
     if (!imprimiendo) return undefined;
     document.body.classList.add('imprimiendo-oficio');
-    const fin = () => { document.body.classList.remove('imprimiendo-oficio'); setImprimiendo(false); };
+    const quitarMargenes = usarMargenesA4();   // márgenes en cada hoja impresa (ver lib/impresion.js)
+    const fin = () => { document.body.classList.remove('imprimiendo-oficio'); quitarMargenes(); setImprimiendo(false); };
     window.addEventListener('afterprint', fin, { once: true });
     const t = setTimeout(() => window.print(), 150);
-    return () => { clearTimeout(t); window.removeEventListener('afterprint', fin); document.body.classList.remove('imprimiendo-oficio'); };
+    return () => { clearTimeout(t); window.removeEventListener('afterprint', fin); document.body.classList.remove('imprimiendo-oficio'); quitarMargenes(); };
   }, [imprimiendo]);
 
   const est = ESTADO_TXT[estados[tipo]];

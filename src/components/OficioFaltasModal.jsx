@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { construirOficio, OPCIONES_OFICIO, numeroCorrelativo } from '../lib/oficioFaltas.js';
+import { usarMargenesA4 } from '../lib/impresion.js';
 
 const CLAVE = 'sigee_oficio_faltas_';
 const hoyISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -82,10 +83,11 @@ export default function OficioFaltasModal({ alumnos, institucion, periodo, onClo
   useEffect(() => {
     if (!imprimiendo) return;
     document.body.classList.add('imprimiendo-oficio');
-    const fin = () => { document.body.classList.remove('imprimiendo-oficio'); setImprimiendo(null); };
+    const quitarMargenes = usarMargenesA4();   // márgenes en cada hoja impresa (ver lib/impresion.js)
+    const fin = () => { document.body.classList.remove('imprimiendo-oficio'); quitarMargenes(); setImprimiendo(null); };
     window.addEventListener('afterprint', fin, { once: true });
     const t = setTimeout(() => window.print(), 150);
-    return () => { clearTimeout(t); window.removeEventListener('afterprint', fin); document.body.classList.remove('imprimiendo-oficio'); };
+    return () => { clearTimeout(t); window.removeEventListener('afterprint', fin); document.body.classList.remove('imprimiendo-oficio'); quitarMargenes(); };
   }, [imprimiendo]);
 
   // al imprimir queda constancia en el historial de cada estudiante (como "emitido")

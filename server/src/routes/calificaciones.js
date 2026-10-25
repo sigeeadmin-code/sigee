@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../lib/auth.js';
 import { supabase } from '../lib/supabase.js';
 import {
-  TRIMESTRES, configPorDefecto, validarConfig, calcTrimestre, aplicarMejora, calcAnual, claseNivelEvaluacion
+  TRIMESTRES, configPorDefecto, validarConfig, calcTrimestre, aplicarMejora, calcAnual, claseNivelEvaluacion, valorValido
 } from '../lib/calificaciones.js';
 import { sanitizarConfig } from '../lib/configEvaluacion.js';
 
@@ -39,7 +39,6 @@ async function configEfectiva(institucionId, paraleloId, docenteMateriaId = null
 }
 
 const esVacio = v => v === null || v === undefined || v === '';
-function valorValido(v) { const n = Number(v); return Number.isFinite(n) && n >= 0 && n <= 10; }
 
 // POST /calificaciones
 // body: { docente_materia_id, periodo_evaluativo: 'T1'|'T2'|'T3',
@@ -95,7 +94,7 @@ calificacionesRouter.post('/', requireAuth, async (req, res) => {
         if (celdas.length > cfg[tipo][g].n) return res.status(400).json({ error: `El grupo '${cfg[tipo][g].nombre}' admite máximo ${cfg[tipo][g].n} notas.` });
         for (let a = 0; a < celdas.length; a++) {
           if (esVacio(celdas[a])) continue;
-          if (!valorValido(celdas[a])) return res.status(400).json({ error: `Nota inválida (${celdas[a]}): debe estar entre 0 y 10.` });
+          if (!valorValido(celdas[a])) return res.status(400).json({ error: `Nota inválida (${String(celdas[a]).slice(0, 12)}): solo números de 0 a 10, con hasta 2 decimales.` });
           filasAportes.push({
             estudiante_id: r.estudiante_id, docente_materia_id, periodo_evaluativo,
             tipo, grupo: g, actividad: a, valor: Number(celdas[a]), registrado_por: regPor, updated_at: new Date().toISOString()
@@ -106,7 +105,7 @@ calificacionesRouter.post('/', requireAuth, async (req, res) => {
     }
     const mj = r.mejora || {};
     for (const k of ['mejora_directa', 'refuerzo', 'mejora_refuerzo']) {
-      if (!esVacio(mj[k]) && !valorValido(mj[k])) return res.status(400).json({ error: `Valor inválido en ${k}.` });
+      if (!esVacio(mj[k]) && !valorValido(mj[k])) return res.status(400).json({ error: `Valor inválido en ${k}: solo números de 0 a 10, con hasta 2 decimales.` });
     }
     const hayMejora = ['mejora_directa', 'refuerzo', 'mejora_refuerzo'].some(k => !esVacio(mj[k]));
     if (hayMejora) {
@@ -260,7 +259,7 @@ calificacionesRouter.post('/supletorio', requireAuth, async (req, res) => {
     });
     const vacio = r.supletorio === null || r.supletorio === undefined || r.supletorio === '';
     if (vacio) { borrar.push(r.estudiante_id); continue; }
-    if (!valorValido(r.supletorio)) return res.status(400).json({ error: `Nota de supletorio inválida (${r.supletorio}): debe estar entre 0 y 10.` });
+    if (!valorValido(r.supletorio)) return res.status(400).json({ error: `Nota de supletorio inválida (${String(r.supletorio).slice(0, 12)}): solo números de 0 a 10, con hasta 2 decimales.` });
     const anual = calcAnual(trims);
     if (anual.estado !== 'supletorio') {
       return res.status(422).json({ error: `El estudiante ${r.estudiante_id} no puede rendir supletorio en esta materia (estado: ${anual.estado}; el supletorio es para promedios de 4.01 a 6.99 con los 3 trimestres cerrados).` });
