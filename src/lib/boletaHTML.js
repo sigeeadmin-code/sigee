@@ -1,6 +1,6 @@
 // Genera el HTML imprimible de la boleta (informe de aprendizaje) de un estudiante de Bachillerato.
 // Módulo puro: recibe datos ya calculados y devuelve texto. Todo dato libre se escapa.
-import { escalaDAAPA, calcAnual, TRIMESTRES } from './calificaciones.js';
+import { escalaDAAPA, calcAnual, TRIMESTRES, aDos } from './calificaciones.js';
 
 export const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const f2 = n => (n === null || n === undefined ? '—' : Number(n).toFixed(2));
@@ -82,8 +82,8 @@ export function boletaHTML(d) {
         <td class="c b">${esc(eq.c)}</td><td>${esc(eq.label)}</td></tr>`;
     }
   }
-  // Promedio con truncado a 2 decimales (misma regla que el cálculo de notas)
-  const general = cuenta ? Math.trunc((suma / cuenta) * 100 + 1e-9) / 100 : null;
+  // Promedio a 2 decimales (misma regla que el cálculo de notas)
+  const general = cuenta ? aDos(suma / cuenta) : null;
 
   const cabecera = anual
     ? `<tr><th>Asignatura</th><th class="c">1er Trim.</th><th class="c">2do Trim.</th><th class="c">3er Trim.</th><th class="c">Promedio final</th><th class="c">Equiv.</th><th class="c">Supletorio</th><th class="c">Estado</th></tr>`
@@ -156,5 +156,5 @@ export function promedioGeneralBoleta(materias, tipo) {
   const idx = ['T1', 'T2', 'T3'].indexOf(tipo);
   const notas = (materias || []).map(m => (tipo === 'anual' ? m.final : (idx >= 0 ? m.trims[idx] : null))).filter(n => n !== null && n !== undefined);
   if (!notas.length) return null;
-  return Math.trunc((notas.reduce((a, b) => a + b, 0) / notas.length) * 100 + 1e-9) / 100;
+  return aDos(notas.reduce((a, b) => a + b, 0) / notas.length);
 }

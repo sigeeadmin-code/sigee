@@ -27,10 +27,12 @@ const cfg2 = { ...cfg, sum: [{ nombre: 'A', n: 1, peso: 10 }, { nombre: 'B', n: 
 r = C.calcTrimestre({ ind: [[10]], grp: [], sum: [[10], [4]] }, cfg2);
 assert.equal(r.sumativo, 6); // (100+80)/30
 
-// Truncado, no redondeo, y sin error de coma flotante
-assert.equal(C.aDos(8.999), 8.99);
-assert.equal(C.aDos(0.29), 0.29);
-assert.equal(C.aDos(4.35), 4.35);
+// Redondeo a 2 decimales (decisión de la institución), con el empate hacia arriba y sin error de coma flotante
+assert.equal(C.MODO_DECIMALES, 'redondear');
+assert.equal(C.aDos(8.999), 9); assert.equal(C.aDos(8.994), 8.99); assert.equal(C.aDos(8.995), 9); assert.equal(C.aDos(8.985), 8.99);
+assert.equal(C.aDos(7.75 * 0.3), 2.33);                 // 7.75*0.3 = 2.3249999999999997 en coma flotante: debe dar 2.33, no 2.32
+assert.equal(C.aDos(8.25 * 0.3), 2.48); assert.equal(C.aDos(6.62 * 0.3), 1.99); assert.equal(C.aDos(5.935), 5.94);
+assert.equal(C.aDos(0.29), 0.29); assert.equal(C.aDos(4.35), 4.35); assert.equal(C.aDos(1.004), 1); assert.equal(C.aDos(null), null);
 
 // Mejoras
 assert.equal(C.aplicarMejora(8, { mejora_directa: 10 }), 9);

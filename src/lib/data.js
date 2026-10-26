@@ -1,6 +1,7 @@
 import { supabase, ROLE_GROUP, ROLE_LABELS } from './supabase.js';
 import { crearClienteBackend } from './backend.js';
 import { crearCache } from './cacheConsultas.js';
+import { aDos } from './calificaciones.js';
 
 // Caché corto de consultas de solo lectura (ver cacheConsultas.js). Se vacía al cerrar sesión y al guardar configuración.
 export const cacheConsultas = crearCache({ ttlMs: 60000 });
@@ -1865,7 +1866,7 @@ export async function fetchResumenCalificacionesDocente(cargas) {
       const vals = delTrim.map(n => Number(n.nota));
       porTrim[t] = {
         definitivas: delTrim.length,
-        promedio: vals.length ? Math.trunc((vals.reduce((a, b) => a + b, 0) / vals.length) * 100 + 1e-9) / 100 : null
+        promedio: vals.length ? aDos(vals.reduce((a, b) => a + b, 0) / vals.length) : null
       };
     });
     out[c.id] = { total, porTrim };

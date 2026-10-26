@@ -1,6 +1,7 @@
 // Lógica pura del módulo "Análisis de calificaciones" (alertas tempranas de bajo rendimiento).
 // Alerta = promedio entre 0,01 y 6,99 (por debajo de 7, la nota mínima para aprobar). Crítica = 4,00 o menos (escala NA).
 
+import { aDos } from './calificaciones.js';
 export const ALERTA_MIN = 0.01;
 export const ALERTA_MAX = 6.99;
 export const CRITICA_MAX = 4;
@@ -102,8 +103,8 @@ export function parcialDesdeActividades(acts) {
   const f = pond(['ind', 'grp']), s = pond(['sum']);
   const den = (f !== null ? 0.7 : 0) + (s !== null ? 0.3 : 0);
   if (!den) return { formativo: null, sumativo: null, parcial: null };
-  const trunc2 = x => Math.trunc(x * 100 + 1e-9) / 100;
-  return { formativo: f === null ? null : trunc2(f), sumativo: s === null ? null : trunc2(s), parcial: trunc2(((f ?? 0) * 0.7 + (s ?? 0) * 0.3) / den) };
+  // misma aproximación que el cálculo de notas (un solo interruptor: MODO_DECIMALES en calificaciones.js)
+  return { formativo: f === null ? null : aDos(f), sumativo: s === null ? null : aDos(s), parcial: aDos(((f ?? 0) * 0.7 + (s ?? 0) * 0.3) / den) };
 }
 
 /** Texto sin tildes ni mayúsculas, para buscar "Pérez" escribiendo "perez". */

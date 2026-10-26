@@ -12,16 +12,17 @@ export const NOTA_MINIMA_PA = 4.01;          // límite inferior de la escala PA
 // remedial y de gracia fueron ELIMINADOS desde el año lectivo 2023-2024: quien no aprueba el supletorio reprueba.
 export const NOTA_MINIMA_SUPLETORIO = 4.01;
 
-// Modo de aproximación a 2 decimales. El mockup institucional usa TRUNCAR (8.999 -> 8.99).
-// Si el reglamento pide redondear, cambiar solo esta constante.
-export const MODO_DECIMALES = 'truncar'; // 'truncar' | 'redondear'
+// Modo de aproximación a 2 decimales. Decisión de la institución: REDONDEAR (8.995 -> 9.00; 8.994 -> 8.99; 2.325 -> 2.33).
+// OJO: el Instructivo de Evaluación Estudiantil 2025 del Mineduc indica promedios con dos decimales truncados, sin redondeo;
+// para volver a esa regla basta cambiar solo esta constante a 'truncar' (en el servidor y en la pantalla) y recalcular las notas guardadas.
+export const MODO_DECIMALES = 'redondear'; // 'truncar' | 'redondear'
 
 export function aDos(x) {
   if (x === null || x === undefined || Number.isNaN(x)) return null;
-  // 1e-9 evita errores de coma flotante (0.29*100 = 28.999999...)
+  // 1e-9 evita errores de coma flotante (0.29*100 = 28.999999...; 7.75*0.3 = 2.3249999999999997 debe dar 2.33, no 2.32)
   return MODO_DECIMALES === 'truncar'
     ? Math.trunc(x * 100 + 1e-9) / 100
-    : Math.round((x + Number.EPSILON) * 100) / 100;
+    : Math.round(x * 100 + 1e-9) / 100;
 }
 
 // Configuración por defecto (MAQUETA institucional): ind+grp = 70 (formativa), sum = 30 (sumativa)
