@@ -3,7 +3,7 @@ import { supabase, ROLE_GROUP, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabas
 import { crearMonitorTic } from './ticMonitor.js';
 import { API_URL, fetchInstituciones, fetchInstitucionData, fetchDatosGlobales, fetchPermisosPlantel, fetchCursosComoTutor, limpiarCacheConsultas } from './data.js';
 import { borrarTodosLosBorradores } from './borradorNotas.js';
-const SessionCtx = createContext(null);
+export const SessionCtx = createContext(null);   // exportado para poder probar pantallas con una sesión de prueba
 export const useSession = () => useContext(SessionCtx);
 export function SessionProvider({ children }) {
   const [loading, setLoading] = useState(true);

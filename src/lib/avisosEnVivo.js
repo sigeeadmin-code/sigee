@@ -3,7 +3,11 @@
 // Es una mejora opcional: si falla o se desactiva, SIGEE sigue funcionando igual (solo hay que recargar para ver lo nuevo).
 // Para cuidar el límite de conexiones del plan, se cierra la conexión cuando la pestaña lleva un rato oculta.
 export function textoAviso(tabla, evento, nuevo) {
-  if (tabla === 'notificaciones') return evento === 'INSERT' ? `Nueva notificación${nuevo && nuevo.titulo ? ': ' + nuevo.titulo : ''}` : null;
+  if (tabla === 'notificaciones') {
+    if (evento !== 'INSERT') return null;
+    const prefijo = nuevo && nuevo.prioridad === 'urgente' ? 'URGENTE' : nuevo && nuevo.prioridad === 'importante' ? 'Importante' : 'Nueva notificación';
+    return `${prefijo}${nuevo && nuevo.titulo ? ': ' + nuevo.titulo : ''}`;
+  }
   if (tabla === 'justificaciones') {
     if (evento === 'INSERT') return 'Llegó una nueva justificación';
     if (evento === 'UPDATE' && nuevo && nuevo.estado) return `Una justificación quedó como: ${nuevo.estado}`;

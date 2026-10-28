@@ -27,6 +27,8 @@ begin
     insert into res(prueba,paso,detalle) values (u.r||' no ve notas de otros estudiantes', visto = 0, 'notas ajenas visibles: '||visto);
     select count(*) into visto from representantes;
     insert into res(prueba,paso,detalle) values (u.r||' solo ve sus representantes', visto <= greatest(esperado*3,1), 'representantes visibles: '||visto);
+    select count(*) into visto from notificaciones where not (para_roles && (case when u.r = 'estudiante' then array['all','todos','alumno','estudiante'] else array['all','todos','padre','representante'] end));
+    insert into res(prueba,paso,detalle) values (u.r||' no ve notificaciones dirigidas a otros', visto = 0, 'notificaciones ajenas visibles: '||visto);
     reset role;
   end loop;
 
@@ -44,13 +46,16 @@ begin
   insert into res(prueba,paso,detalle)
   select 'anónimo sin acceso a '||p.proname, not has_function_privilege('anon', p.oid, 'execute'), ''
   from pg_proc p where p.pronamespace = 'public'::regnamespace
-   and p.proname in ('aplicar_horario','guardar_catalogo_nivel','mover_bloque_horario','docente_eliminar','personal_cambiar_estado_cuenta','editar_usuario','vincular_cuenta_docente','asignar_docente_a_mi_plantel','es_familia','ids_estudiantes_familia','tic_conexiones_diarias');
+   and p.proname in ('aplicar_horario','guardar_catalogo_nivel','mover_bloque_horario','docente_eliminar','personal_cambiar_estado_cuenta','editar_usuario','vincular_cuenta_docente','asignar_docente_a_mi_plantel','es_familia','ids_estudiantes_familia','tic_conexiones_diarias','notificaciones_bandeja','notificaciones_marcar_leidas','notificaciones_no_leidas','notificaciones_audiencia','notificaciones_estadisticas','notificaciones_lectores','notificacion_visible');
 
   -- 4) La guarda de docentes y las reglas de familia existen
   insert into res(prueba,paso,detalle) values ('existe la guarda trg_docentes_proteger', exists(select 1 from pg_trigger where tgname='trg_docentes_proteger' and not tgisinternal), '');
   insert into res(prueba,paso,detalle)
   select 'regla familia_solo_lo_propio en '||t, exists(select 1 from pg_policies where schemaname='public' and tablename=t and policyname='familia_solo_lo_propio' and permissive='RESTRICTIVE'), ''
-  from unnest(array['estudiantes','matriculas','calificaciones','calificaciones_aportes','asistencia','justificaciones','docentes','profiles','representantes','docente_materia','tareas','notificaciones']) t;
+  from unnest(array['estudiantes','matriculas','calificaciones','calificaciones_aportes','asistencia','justificaciones','docentes','profiles','representantes','docente_materia','tareas']) t;
+
+  insert into res(prueba,paso,detalle) values ('regla solo_su_audiencia en notificaciones', exists(select 1 from pg_policies where schemaname='public' and tablename='notificaciones' and policyname='solo_su_audiencia' and permissive='RESTRICTIVE'), '');
+  insert into res(prueba,paso,detalle) values ('docentes ya no pueden borrar notificaciones ajenas (sin política de escritura abierta)', not exists(select 1 from pg_policies where schemaname='public' and tablename='notificaciones' and policyname='notificaciones_write'), '');
 
   -- 5) Tiempo real: solo las dos tablas previstas
   insert into res(prueba,paso,detalle)

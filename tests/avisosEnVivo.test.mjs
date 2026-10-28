@@ -12,6 +12,8 @@ let timers = []; const setT = (f, ms) => { timers.push({ f, ms }); return timers
 
 // Textos
 assert.equal(textoAviso('notificaciones', 'INSERT', { titulo: 'Reunión' }), 'Nueva notificación: Reunión');
+assert.equal(textoAviso('notificaciones', 'INSERT', { titulo: 'Lluvias', prioridad: 'urgente' }), 'URGENTE: Lluvias');
+assert.equal(textoAviso('notificaciones', 'INSERT', { titulo: 'Notas', prioridad: 'importante' }), 'Importante: Notas');
 assert.equal(textoAviso('notificaciones', 'DELETE', {}), null);
 assert.equal(textoAviso('justificaciones', 'INSERT', {}), 'Llegó una nueva justificación');
 assert.equal(textoAviso('justificaciones', 'UPDATE', { estado: 'aprobada' }), 'Una justificación quedó como: aprobada');

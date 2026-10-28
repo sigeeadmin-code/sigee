@@ -1,9 +1,11 @@
 import React, { useEffect } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useSession } from '../lib/SessionContext.jsx';
 import { NAV_BY_ROL, itemVisibleParaRolDb } from '../lib/nav.js';
 import { ROLE_LABELS, supabase } from '../lib/supabase.js';
 import { crearAvisosEnVivo } from '../lib/avisosEnVivo.js';
+import { fetchNoLeidasNotif } from '../lib/data.js';
+import { grupoDeRol, esParaGrupo } from '../lib/notificaciones.js';
 import ErrorBoundary from '../components/ErrorBoundary.jsx';
 export default function Shell() {
   const { profile, institucion, logout, permisos, esTutor } = useSession();
@@ -23,16 +25,35 @@ export default function Shell() {
   // Avisos en vivo: notificaciones y justificaciones nuevas de este plantel aparecen solas (sin recargar). Es un extra opcional:
   // si falla o se apaga con VITE_REALTIME=off, SIGEE funciona igual. Las pantallas interesadas escuchan el evento 'sigee:avisos'.
   const [aviso, setAviso] = React.useState(null);
+  const [noLeidas, setNoLeidas] = React.useState(0);
+  const navigate = useNavigate();
+  const grupoNotif = grupoDeRol(profile.rolDb);
+  const rutaNotif = (categorias.flatMap(g => g.items).find(it => ['/notificaciones', '/anuncios', '/comunicados'].includes(it.to)) || {}).to;
   const institucionIdVivo = institucion?.id;
+  // Contador de notificaciones sin leer en el menú: se actualiza al llegar un aviso, al leer y cada 3 minutos.
+  useEffect(() => {
+    if (!institucionIdVivo || !rutaNotif) { setNoLeidas(0); return undefined; }
+    let vivo = true;
+    const cargar = async () => { try { const n = await fetchNoLeidasNotif(institucionIdVivo); if (vivo) setNoLeidas(n); } catch { /* el contador es un extra */ } };
+    cargar();
+    window.addEventListener('sigee:avisos', cargar); window.addEventListener('sigee:notif-leidas', cargar);
+    const id = setInterval(cargar, 180000);
+    return () => { vivo = false; clearInterval(id); window.removeEventListener('sigee:avisos', cargar); window.removeEventListener('sigee:notif-leidas', cargar); };
+  }, [institucionIdVivo, rutaNotif]);
   useEffect(() => {
     if (import.meta.env.VITE_REALTIME === 'off' || !institucionIdVivo || !profile?.id) return undefined;
     const vivo = crearAvisosEnVivo(supabase, {
       institucionId: institucionIdVivo, perfilId: profile.id,
-      alAviso: a => { try { window.dispatchEvent(new CustomEvent('sigee:avisos', { detail: a })); } catch { /* sin efecto */ } if (a.texto) setAviso({ texto: a.texto }); }
+      alAviso: a => {
+        try { window.dispatchEvent(new CustomEvent('sigee:avisos', { detail: a })); } catch { /* sin efecto */ }
+        // Las notificaciones solo avisan a quien van dirigidas (la dirección recibe todas por permisos, pero no todas son para ella)
+        if (a.tabla === 'notificaciones' && a.registro && !esParaGrupo(a.registro.para_roles, grupoNotif)) return;
+        if (a.texto) setAviso({ texto: a.texto, ruta: a.tabla === 'notificaciones' ? rutaNotif : null, urgente: !!(a.registro && a.registro.prioridad === 'urgente') });
+      }
     });
     vivo.iniciar();
     return () => vivo.detener();
-  }, [institucionIdVivo, profile?.id]);
+  }, [institucionIdVivo, profile?.id, grupoNotif, rutaNotif]);
   useEffect(() => { if (!aviso) return undefined; const t = setTimeout(() => setAviso(null), 6000); return () => clearTimeout(t); }, [aviso]);
 
   // Cierra el menú móvil automáticamente al navegar a otra pantalla.
@@ -77,6 +98,7 @@ export default function Shell() {
                 >
                   <span className={'ico ' + item.icon} />
                   {item.label}
+                  {['/notificaciones', '/anuncios', '/comunicados'].includes(item.to) && noLeidas > 0 && <span className="nav-count" aria-label={`${noLeidas} sin leer`}>{noLeidas > 99 ? '99+' : noLeidas}</span>}
                   {item.wip && <span className="nbadge">pronto</span>}
                   {item.modulo === 'base_docentes' && !permisos?.baseDocentes && <span className="nbadge" title="Lo activa el administrador global de SIGEE">desactivado</span>}
                 </NavLink>
@@ -105,7 +127,7 @@ export default function Shell() {
         </div>
       </main>
       {aviso && (
-        <div role="status" onClick={() => setAviso(null)} style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 60, background: '#0f172a', color: '#fff', padding: '10px 14px', borderRadius: 10, fontSize: 13, maxWidth: 320, boxShadow: '0 6px 20px rgba(0,0,0,.25)', cursor: 'pointer' }}>
+        <div role="status" onClick={() => { if (aviso.ruta) navigate(aviso.ruta); setAviso(null); }} style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 60, background: aviso.urgente ? '#b91c1c' : '#0f172a', color: '#fff', padding: '10px 14px', borderRadius: 10, fontSize: 13, maxWidth: 320, boxShadow: '0 6px 20px rgba(0,0,0,.25)', cursor: 'pointer' }}>
           <span className="ti ti-bell" style={{ marginRight: 8 }} />{aviso.texto}
         </div>
       )}

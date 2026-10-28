@@ -2645,3 +2645,29 @@ export async function fetchTicIpsBloqueadas() {
   if (error) throw new Error(error.message);
   return (data || []).filter(b => !b.hasta || new Date(b.hasta) > new Date());
 }
+
+/* ── Módulo de Notificaciones (funciones seguras de la base de datos: ver supabase/sql/notificaciones_modulo.sql) ── */
+async function rpcNotif(nombre, params) {
+  const { data, error } = await supabase.rpc(nombre, params);
+  if (error) throw new Error(error.message);
+  return data;
+}
+export const fetchBandejaNotif = async (institucionId, limite = 120) => (await rpcNotif('notificaciones_bandeja', { p_institucion: institucionId || null, p_limite: limite })) || [];
+export const marcarNotifLeidas = ids => rpcNotif('notificaciones_marcar_leidas', { p_ids: ids });
+export const fetchNoLeidasNotif = async institucionId => Number(await rpcNotif('notificaciones_no_leidas', { p_institucion: institucionId || null })) || 0;
+export const fetchAudienciaNotif = (roles, paralelos, institucionId) => rpcNotif('notificaciones_audiencia', { p_roles: roles, p_paralelos: paralelos && paralelos.length ? paralelos : null, p_institucion: institucionId || null });
+export const fetchEstadisticasNotif = (institucionId, dias = 30) => rpcNotif('notificaciones_estadisticas', { p_institucion: institucionId || null, p_dias: dias });
+export const fetchLectoresNotif = id => rpcNotif('notificaciones_lectores', { p_id: id });
+export async function enviarNotificacionPro(fila) {
+  const { data, error } = await supabase.from('notificaciones').insert(fila).select('id').single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+export async function fijarNotificacion(id, fijada) {
+  const { error } = await supabase.from('notificaciones').update({ fijada: !!fijada }).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+export async function borrarNotificacion(id) {
+  const { error } = await supabase.from('notificaciones').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}
