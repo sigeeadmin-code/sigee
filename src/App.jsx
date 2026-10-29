@@ -45,6 +45,7 @@ import AnalisisAsistencia from './pages/AnalisisAsistencia.jsx';
 import AnalisisCalificaciones from './pages/AnalisisCalificaciones.jsx';
 import CursoTutor from './pages/CursoTutor.jsx';
 import EstadisticasAMIE from './pages/EstadisticasAMIE.jsx';
+import OficiosDocumental from './pages/OficiosDocumental.jsx';
 import Placeholder from './pages/Placeholder.jsx';
 function AccesoDenegado() {
   return (
@@ -57,22 +58,12 @@ function AccesoDenegado() {
   );
 }
 
-/**
- * Guardián de rutas: valida el rol real del usuario contra el mismo NAV_BY_ROL
- * que arma el menú lateral, para que ocultar un link en el sidebar y bloquear
- * la URL directa sean siempre la misma regla (nunca se desincronizan).
- */
 function Protegida({ path, children }) {
   const { profile } = useSession();
-  // profile.rol es el rol AGRUPADO (mismo que usa Shell.jsx para armar el menú);
-  // profile.rolDb es el crudo de la BD. Deben compararse contra el mismo tipo
-  // que las claves de NAV_BY_ROL (agrupado), o el guardián bloquea a roles
-  // que sí deberían entrar (pasó con inspector_general, estudiante, etc).
   const permitido = rolesConAcceso(path).includes(profile.rol) && rutaPermitidaParaRolDb(path, profile.rol, profile.rolDb);
   return permitido ? children : <AccesoDenegado />;
 }
 
-// /base-docentes: el Super Admin ve la base central completa; el admin de un plantel ve (si se la activaron) lo asignado a su plantel.
 function BaseDocentesRuta() {
   const { profile } = useSession();
   return profile.rolDb === 'super_admin' ? <BasesCentrales clave="base-docentes" /> : <BaseDocentesPlantel />;
@@ -116,6 +107,7 @@ function Gate() {
         <Route path="/curso-tutor" element={<Protegida path="/curso-tutor"><CursoTutor /></Protegida>} />
         <Route path="/reportes-asistencia" element={<Protegida path="/reportes-asistencia"><ReportesAsistencia /></Protegida>} />
         <Route path="/inasistencias" element={<Protegida path="/inasistencias"><Inasistencias /></Protegida>} />
+        <Route path="/oficios" element={<Protegida path="/oficios"><OficiosDocumental /></Protegida>} />
         <Route path="/modulos-plantel" element={<Protegida path="/modulos-plantel"><ModulosPlantel /></Protegida>} />
         <Route path="/mi-perfil" element={<Protegida path="/mi-perfil"><MiPerfil /></Protegida>} />
         <Route path="/mis-estudiantes" element={<Protegida path="/mis-estudiantes"><MisEstudiantes /></Protegida>} />
@@ -145,7 +137,6 @@ export default function App() {
   );
 }
 
-// /financiero lo comparten dos módulos: el de SIGEE (cobro a los planteles, solo Super Admin) y el de cada plantel (aún en construcción).
 function FinancieroRuta() {
   const { profile } = useSession();
   return profile.rolDb === 'super_admin' ? <Financiero /> : <Placeholder title="Financiero" />;
