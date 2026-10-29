@@ -1,62 +1,62 @@
 # Módulo Oficios y Tráfico Documental · SIGEE
 
-**Especificación:** v1.0 · 27 de octubre de 2026  
-**Principio:** un caso = un documento = un PDF por versión de contenido · recorrido con firmas en el sistema.
+**Especificación:** v1.0 · 27 oct 2026  
+**Principio:** un caso = un documento = un PDF por versión · firmas = acciones de usuario (no PDFs paralelos).
 
-## Archivos del módulo (en este repo)
+## Orden de despliegue (Claude / admin)
 
-| Ruta | Descripción |
-|------|-------------|
-| `supabase/sql/2026-10-28_oficios_documental.sql` | Tablas `oficios_tipos`, `oficios_documentos`, `oficios_correlativos` + RLS |
-| `src/lib/oficiosDocumental.js` | Cliente: tipos, estados, RPCs, helpers |
-| `src/pages/OficiosDocumental.jsx` | UI: bandejas, detalle, acciones, impresión entrega/recorrido |
+### 1. SQL en Supabase (SQL Editor)
+
+Ejecutar **en este orden**, sin borrar nada existente:
+
+1. `supabase/sql/2026-10-28_oficios_documental.sql`  
+   → tablas `oficios_tipos`, `oficios_documentos`, `oficios_correlativos` + RLS + seeds de tipos
+
+2. `supabase/sql/2026-10-28_oficios_rpcs.sql`  
+   → 10 funciones security definer + grants a `authenticated`  
+   → usa `es_super_admin()`, `mi_institucion()`, `mi_rol()` del sistema actual  
+   → **no toca** otras tablas ni políticas existentes
+
+### 2. Frontend (ya en el repo)
+
+| Archivo | Rol |
+|---------|-----|
+| `src/lib/oficiosDocumental.js` | Cliente RPC + helpers |
+| `src/pages/OficiosDocumental.jsx` | UI bandeja + detalle + impresión |
 | `src/App.jsx` | Ruta `/oficios` |
-| `src/lib/nav.js` | Ítem de menú para roles relevantes |
+| `src/lib/nav.js` | Menú para admin, secretario, inspector, docente (tutor) |
 
-## Qué debe hacer Claude (o el admin)
+### 3. Verificar
 
-1. **Aplicar el SQL en Supabase** (SQL Editor del proyecto):
-   - Ejecutar `supabase/sql/2026-10-28_oficios_documental.sql` (tablas + políticas).
-   - Completar las **funciones RPC** si el archivo base no las trae todas:
-     - `oficios_siguiente_numero`
-     - `oficios_crear_borrador`
-     - `oficios_enviar`
-     - `oficios_aprobar_paso`
-     - `oficios_observar`
-     - `oficios_corregir`
-     - `oficios_registrar_entrega`
-     - `oficios_archivar`
-     - `oficios_rechazar`
-     - `oficios_bandeja`
-   - Las firmas y lógica están en la especificación adjunta y en el historial de commits de Grok.
+- Login como tutor/docente → crear borrador → enviar a ruta
+- Login como inspector → ver en bandeja → aprobar / observar
+- Imprimir «Para entrega» (sin historial) y «Con recorrido» (con historial)
+- CA-01 … CA-10 de la especificación
 
-2. **Revisar / corregir:**
-   - Mapeo rol ↔ cargo en `puedeActuarEnPaso` y en `oficios_aprobar_paso`.
-   - Plantillas por tipo (datos_plantilla) más ricas (tablas de notas, cronograma).
-   - Integración con alertas de calificaciones y ficha de asistencia (atajos “Generar oficio”).
-   - Storage de PDF en Supabase Storage (Fase 4).
+## Seguridad (no romper el sistema)
 
-3. **Publicar:** deploy frontend (Vite/Cloudflare) tras merge.
+- Solo `create table if not exists` / `create or replace function`
+- RLS por `mi_institucion()` + emisor
+- RPCs `security definer` con `set search_path = public`
+- Grants solo a `authenticated`; revoke a `anon`
+- Mapeo rol→cargo alineado a roles reales de SIGEE (`inspector_general`, `admin_plantel`, `secretario`, `docente`, etc.)
 
-## Criterios de aceptación (CA-01 … CA-10)
+## Tipos de documento
 
-Ver especificación PDF. Resumen:
-- Crear borrador de cada tipo y enviar a ruta.
-- Cada autoridad solo actúa en su `paso_actual`.
-- Observar exige motivo; reenviar continúa.
-- No se crea un segundo documento al firmar.
-- Imprimir entrega sin recorrido; imprimir con recorrido incluye historial.
-- Seguimientos enlazan `documento_origen_id/numero`.
-- Versión PDF solo sube tras corrección de contenido.
+oficio_alerta · ficha_tutor · plan_refuerzo · acta_compromiso · oficio_faltas · informe_seguimiento
 
 ## Estados
 
-`borrador` → `en_ruta` → (`observado` → corregir → `en_ruta`) → `aprobado_final` → `entregado` → `archivado`  
-También: `rechazado`.
+borrador → en_ruta ⇄ observado → aprobado_final → entregado → archivado  
+(también: rechazado)
 
-## Tipos
+## Pendiente (Fase 3–4, opcional)
 
-oficio_alerta, ficha_tutor, plan_refuerzo, acta_compromiso, oficio_faltas, informe_seguimiento.
+- Atajos desde alertas de calificaciones y ficha de asistencia
+- Pestaña Oficios en ficha del estudiante
+- Storage de PDF en Supabase Storage
+- Notificaciones al siguiente cargo
+- Portal representante (acuse)
 
 ---
-*Generado por Grok para SIGEE · Zona 7 · El Oro · Ecuador*
+*Zona 7 · El Oro · Ecuador · Listo para que Claude lea, ejecute SQL y publique*
