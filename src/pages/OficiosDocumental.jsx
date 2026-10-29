@@ -460,7 +460,7 @@ function VistaImpresion({ doc, modo, nombreEstudiante, institucion }) {
     <div className="oficio-hoja" style={{ maxWidth: 720, margin: '0 auto', padding: 24, fontFamily: 'serif', fontSize: 13, lineHeight: 1.45 }}>
       <div style={{ textAlign: 'center', marginBottom: 16 }}>
         <div style={{ fontWeight: 700, fontSize: 15 }}>{institucion?.nombre || 'INSTITUCIÓN EDUCATIVA'}</div>
-        {institucion?.codigo_amie && <div style={{ fontSize: 11 }}>AMIE {institucion.codigo_amie}</div>}
+        {institucion?.amie && <div style={{ fontSize: 11 }}>AMIE {institucion.amie}</div>}
         <div style={{ marginTop: 10, fontWeight: 700, fontSize: 14, textTransform: 'uppercase' }}>{etiquetaTipo(doc.tipo)}</div>
         {doc.numero && <div style={{ marginTop: 4 }}>N° {doc.numero}</div>}
         {conRecorrido && (

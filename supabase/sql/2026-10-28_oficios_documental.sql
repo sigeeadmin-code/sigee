@@ -80,27 +80,12 @@ drop policy if exists oficios_doc_select on public.oficios_documentos;
 create policy oficios_doc_select on public.oficios_documentos for select to authenticated
   using (public.es_super_admin() or institucion_id = public.mi_institucion());
 
+-- Escritura SOLO por RPC (security definer): se retiran las políticas directas
+-- para que nadie salte la máquina de estados desde el cliente.
 drop policy if exists oficios_doc_insert on public.oficios_documentos;
-create policy oficios_doc_insert on public.oficios_documentos for insert to authenticated
-  with check (
-    public.es_super_admin()
-    or (institucion_id = public.mi_institucion() and emisor_id = auth.uid()
-        and public.mi_rol()::text in ('docente','inspector_general','admin_plantel','secretario','supervisor_plantel'))
-  );
-
 drop policy if exists oficios_doc_update on public.oficios_documentos;
-create policy oficios_doc_update on public.oficios_documentos for update to authenticated
-  using (public.es_super_admin() or institucion_id = public.mi_institucion())
-  with check (public.es_super_admin() or institucion_id = public.mi_institucion());
-
 drop policy if exists oficios_doc_delete on public.oficios_documentos;
-create policy oficios_doc_delete on public.oficios_documentos for delete to authenticated
-  using (public.es_super_admin() or (institucion_id = public.mi_institucion() and emisor_id = auth.uid() and estado = 'borrador'));
-
 drop policy if exists oficios_corr_all on public.oficios_correlativos;
-create policy oficios_corr_all on public.oficios_correlativos for all to authenticated
-  using (public.es_super_admin() or institucion_id = public.mi_institucion())
-  with check (public.es_super_admin() or institucion_id = public.mi_institucion());
 
 -- Ver archivo completo en el repositorio para todas las funciones RPC:
 -- oficios_siguiente_numero, oficios_crear_borrador, oficios_enviar,

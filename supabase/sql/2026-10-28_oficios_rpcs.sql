@@ -16,7 +16,7 @@ begin
   on conflict (institucion_id, anio) do nothing;
   update public.oficios_correlativos set ultimo = ultimo + 1
    where institucion_id = p_institucion and anio = v_anio returning ultimo into v_ult;
-  select coalesce(nullif(btrim(codigo_amie), ''), 'UE') into v_amie from public.instituciones where id = p_institucion;
+  select coalesce(nullif(btrim(amie), ''), 'UE') into v_amie from public.instituciones where id = p_institucion;
   v_pref := coalesce(nullif(btrim(p_prefijo), ''), '');
   if v_pref <> '' then return lpad(v_ult::text, 4, '0') || '-' || v_anio || '-' || v_amie || '-' || v_pref; end if;
   return lpad(v_ult::text, 4, '0') || '-' || v_anio || '-' || v_amie;
@@ -54,7 +54,7 @@ begin
      where id = p_documento_origen_id and (institucion_id = p_institucion or public.es_super_admin());
     v_es_seg := true;
   end if;
-  select coalesce(nullif(btrim(codigo_amie), ''), null) into v_amie from public.instituciones where id = p_institucion;
+  select coalesce(nullif(btrim(amie), ''), null) into v_amie from public.instituciones where id = p_institucion;
   v_emisor_cargo := case v_rol when 'inspector_general' then 'inspector_general' when 'admin_plantel' then 'rector' when 'secretario' then 'secretaria' else 'tutor' end;
   insert into public.oficios_documentos (
     institucion_id, amie, tipo, titulo, asunto, estudiante_id, curso, paralelo, periodo,
@@ -346,15 +346,15 @@ grant execute on function public.oficios_archivar(uuid) to authenticated;
 grant execute on function public.oficios_rechazar(uuid, text) to authenticated;
 grant execute on function public.oficios_bandeja(text) to authenticated;
 
-revoke execute on function public.oficios_siguiente_numero(uuid, text) from anon;
-revoke execute on function public.oficios_crear_borrador(uuid, text, text, uuid, text, text, text, text, jsonb, uuid) from anon;
-revoke execute on function public.oficios_enviar(uuid) from anon;
-revoke execute on function public.oficios_aprobar_paso(uuid, text) from anon;
-revoke execute on function public.oficios_observar(uuid, text) from anon;
-revoke execute on function public.oficios_corregir(uuid, jsonb, text, text) from anon;
-revoke execute on function public.oficios_registrar_entrega(uuid, text, text, text) from anon;
-revoke execute on function public.oficios_archivar(uuid) from anon;
-revoke execute on function public.oficios_rechazar(uuid, text) from anon;
-revoke execute on function public.oficios_bandeja(text) from anon;
+revoke execute on function public.oficios_siguiente_numero(uuid, text) from public, anon;
+revoke execute on function public.oficios_crear_borrador(uuid, text, text, uuid, text, text, text, text, jsonb, uuid) from public, anon;
+revoke execute on function public.oficios_enviar(uuid) from public, anon;
+revoke execute on function public.oficios_aprobar_paso(uuid, text) from public, anon;
+revoke execute on function public.oficios_observar(uuid, text) from public, anon;
+revoke execute on function public.oficios_corregir(uuid, jsonb, text, text) from public, anon;
+revoke execute on function public.oficios_registrar_entrega(uuid, text, text, text) from public, anon;
+revoke execute on function public.oficios_archivar(uuid) from public, anon;
+revoke execute on function public.oficios_rechazar(uuid, text) from public, anon;
+revoke execute on function public.oficios_bandeja(text) from public, anon;
 
 -- Fin RPCs Oficios · listo para Claude / SQL Editor de Supabase
