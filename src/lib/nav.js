@@ -25,6 +25,7 @@ export const NAV_BY_ROL = {
       { to: '/asistencia', label: 'Asistencia', icon: 'ti ti-calendar-check' },
       { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' },
       { to: '/inasistencias', label: 'Inasistencias', icon: 'ti ti-message-circle' },
+      { to: '/oficios', label: 'Oficios / documental', icon: 'ti ti-file-description' },
       { to: '/calendario', label: 'Calendario académico', icon: 'ti ti-calendar' },
       { to: '/aulas', label: 'Aulas', icon: 'ti ti-door' },
       { to: '/horario', label: 'Horario', icon: 'ti ti-clock' }
@@ -67,6 +68,7 @@ export const NAV_BY_ROL = {
       { to: '/boletas', label: 'Boletas', icon: 'ti ti-report-analytics' },
       { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' },
       { to: '/inasistencias', label: 'Inasistencias', icon: 'ti ti-message-circle' },
+      { to: '/oficios', label: 'Oficios / documental', icon: 'ti ti-file-description' },
       { to: '/calendario', label: 'Calendario académico', icon: 'ti ti-calendar' },
       { to: '/aulas', label: 'Aulas', icon: 'ti ti-door' },
       { to: '/horario', label: 'Horario', icon: 'ti ti-clock' }
@@ -95,6 +97,7 @@ export const NAV_BY_ROL = {
       { to: '/analisis-asistencia', label: 'Análisis de asistencia', icon: 'ti ti-chart-dots' },
       { to: '/boletas', label: 'Boletas', icon: 'ti ti-report-analytics' },
       { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' },
+      { to: '/oficios', label: 'Oficios / documental', icon: 'ti ti-file-description' },
       { to: '/calendario', label: 'Calendario académico', icon: 'ti ti-calendar' },
       { to: '/aulas', label: 'Aulas', icon: 'ti ti-door' },
       { to: '/horario', label: 'Horario', icon: 'ti ti-clock' }
@@ -106,9 +109,6 @@ export const NAV_BY_ROL = {
       { to: '/configuracion', label: 'Configuración', icon: 'ti ti-settings' }
     ]}
   ],
-  // Clave 'inspector': es el nombre de GRUPO (ver ROLE_GROUP en supabase.js),
-  // no el rol crudo de la BD — el enum real es 'inspector_general', pero
-  // Shell.jsx busca el menú por profile.rol (ya agrupado), no por rolDb.
   inspector: [
     { cat: 'Principal', items: [
       { to: '/', label: 'Dashboard', icon: 'ti ti-layout-dashboard' },
@@ -124,6 +124,7 @@ export const NAV_BY_ROL = {
       { to: '/boletas', label: 'Boletas', icon: 'ti ti-report-analytics' },
       { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' },
       { to: '/inasistencias', label: 'Inasistencias / WhatsApp', icon: 'ti ti-message-circle' },
+      { to: '/oficios', label: 'Oficios / documental', icon: 'ti ti-file-description' },
       { to: '/calendario', label: 'Calendario académico', icon: 'ti ti-calendar' }
     ]},
     { cat: 'Sistema', items: [
@@ -144,6 +145,7 @@ export const NAV_BY_ROL = {
       { to: '/boletas', label: 'Boletas del curso', icon: 'ti ti-report-analytics', requiere: 'tutor' },
       { to: '/asistencia', label: 'Asistencia', icon: 'ti ti-calendar-check' },
       { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check', requiere: 'tutor' },
+      { to: '/oficios', label: 'Oficios / documental', icon: 'ti ti-file-description', requiere: 'tutor' },
       { to: '/mis-estudiantes', label: 'Mis estudiantes', icon: 'ti ti-users', requiere: 'tutor' },
       { to: '/tareas', label: 'Tareas y avisos', icon: 'ti ti-clipboard-list' }
     ]},
@@ -151,7 +153,6 @@ export const NAV_BY_ROL = {
       { to: '/configuracion', label: 'Configuración', icon: 'ti ti-settings' }
     ]}
   ],
-  // Clave 'alumno': nombre de GRUPO; el rol crudo real en la BD es 'estudiante'.
   alumno: [
     { cat: 'Principal', items: [
       { to: '/', label: 'Inicio', icon: 'ti ti-layout-dashboard' },
@@ -183,28 +184,14 @@ export const NAV_BY_ROL = {
       { to: '/configuracion', label: 'Configuración', icon: 'ti ti-settings' }
     ]}
   ]
-  // supervisor_general, contador_general y supervisor_plantel se agrupan como
-  // 'admin_plantel' (ROLE_GROUP en supabase.js); contador_plantel y
-  // administrativo se agrupan como 'secretario'. Por eso no tienen una clave
-  // propia aquí: ya heredan ese menú automáticamente vía profile.rol.
 };
 
-/**
- * Deriva, a partir del propio menú (NAV_BY_ROL), qué roles tienen acceso a
- * una ruta dada. Es intencional que sea el MISMO origen de datos que arma el
- * sidebar: si un rol no ve el link, tampoco debe poder entrar escribiendo la
- * URL a mano. Usado por el guardián de rutas en App.jsx.
- */
 export function rolesConAcceso(path) {
   return Object.entries(NAV_BY_ROL)
     .filter(([, categorias]) => categorias.some(cat => cat.items.some(it => it.to === path)))
     .map(([rol]) => rol);
 }
 
-/**
- * Algunas pantallas (Usuarios) solo son para ciertos roles reales de la base de datos aunque el rol comparta el menú de su grupo
- * (por ejemplo, supervisor_plantel y contador_general usan el menú del administrador de plantel pero NO deben ver Usuarios).
- */
 export function itemVisibleParaRolDb(item, rolDb) {
   return !item.soloRolDb || item.soloRolDb.includes(rolDb);
 }
