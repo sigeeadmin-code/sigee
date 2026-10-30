@@ -462,7 +462,7 @@ button.ofd-kpi:focus-visible,button.ofd-kpi.on{outline:2px solid var(--brand);ou
 
 /* Detalle: panel fijo a la derecha en pantalla ancha; hoja superpuesta en el resto */
 .ofd-panel{position:fixed;inset:0 0 0 auto;width:min(560px,100%);z-index:500;background:var(--white);box-shadow:-12px 0 32px rgba(15,23,42,.18);display:flex}
-.ofd-detalle{display:flex;flex-direction:column;width:100%;min-height:0;height:100%}
+.ofd-detalle{display:flex;flex-direction:column;flex:1 1 auto;width:100%;min-width:0;min-height:0;height:100%}
 .ofd-det-h{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);flex:0 0 auto}
 .ofd-det-id{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1;min-width:0}
 .ofd-cerrar{display:none}
@@ -535,7 +535,7 @@ button.ofd-kpi:focus-visible,button.ofd-kpi.on{outline:2px solid var(--brand);ou
 /* Pantalla ancha: el detalle convive con la lista (sin cubrirla) */
 @media (min-width:1280px){
   .ofd-con-detalle .ofd-cuerpo{grid-template-columns:minmax(0,1fr) 460px}
-  .ofd-con-detalle .ofd-panel{position:sticky;top:12px;inset:auto;width:auto;z-index:1;box-shadow:var(--sh);border:1px solid var(--line);border-radius:var(--r2);max-height:calc(100vh - 96px);overflow:hidden}
+  .ofd-con-detalle .ofd-panel{position:sticky;top:12px;inset:auto;width:auto;z-index:1;box-shadow:var(--sh);border:1px solid var(--line);border-radius:var(--r2);height:calc(100vh - 110px);min-height:420px;overflow:hidden}
   .ofd-con-detalle .ofd-c-despacho,.ofd-con-detalle .ofd-c-fecha{display:none}
   .ofd-volver{display:none}.ofd-cerrar{display:inline-flex}
 }
