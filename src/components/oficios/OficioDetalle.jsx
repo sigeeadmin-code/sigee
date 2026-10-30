@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { etiquetaTipo } from '../../lib/oficiosDocumental.js';
-import { accionesDisponibles, fmtEspera, fmtFecha, LIMITE_VERSIONES, ultimaObservacion } from '../../lib/oficiosVista.js';
+import { etiquetaCargo, etiquetaTipo } from '../../lib/oficiosDocumental.js';
+import { accionesDisponibles, fmtEspera, fmtFecha, LIMITE_VERSIONES, ultimaObservacion, versionesDe } from '../../lib/oficiosVista.js';
 import { EstadoBadge, MotivoForm, Recorrido, RutaStepper } from './OficioUI.jsx';
 
 const editable = d => d.soy_emisor && (d.estado === 'borrador' || d.estado === 'observado');
@@ -9,7 +9,7 @@ const editable = d => d.soy_emisor && (d.estado === 'borrador' || d.estado === '
  * Detalle de un documento: cabecera, ruta, contenido, recorrido y acciones.
  * Los permisos vienen del servidor (doc.puede_actuar / doc.soy_emisor); aquí solo se muestran.
  */
-export default function OficioDetalle({ doc, nombreEst, ocupado, onAccion, onCerrar }) {
+export default function OficioDetalle({ doc, nombreEst, ocupado, onAccion, onCerrar, seguimientos = [], origen = null, onAbrir }) {
   const [edit, setEdit] = useState({ titulo: '', asunto: '', notas: '' });
   const [modo, setModo] = useState(null);                       // 'observar' | 'rechazar' | 'entrega' | null
   const [entrega, setEntrega] = useState({ recibidoPor: '', cedula: '', medio: 'presencial' });
@@ -51,7 +51,8 @@ export default function OficioDetalle({ doc, nombreEst, ocupado, onAccion, onCer
           <div><dt>Período</dt><dd>{doc.periodo || '—'}</dd></div>
           <div><dt>Emitido por</dt><dd>{doc.emisor_nombre || '—'}</dd></div>
           <div><dt>Creado</dt><dd>{fmtFecha(doc.created_at)}</dd></div>
-          {doc.documento_origen_numero && <div className="ofd-wide"><dt>Documento de origen</dt><dd className="ofd-num">{doc.documento_origen_numero}</dd></div>}
+          {doc.documento_origen_numero && <div className="ofd-wide"><dt>Documento de origen</dt><dd className="ofd-num">{origen && onAbrir
+            ? <button type="button" className="ofd-link" onClick={() => onAbrir(origen.id)}>{doc.documento_origen_numero}</button> : doc.documento_origen_numero}</dd></div>}
           {doc.estado === 'en_ruta' && doc.espera_seg != null && <div><dt>En este despacho</dt><dd>{fmtEspera(doc.espera_seg)}</dd></div>}
         </dl>
 
@@ -74,7 +75,7 @@ export default function OficioDetalle({ doc, nombreEst, ocupado, onAccion, onCer
         <RutaStepper doc={doc} />
 
         <div className="tabs ofd-subtabs" role="tablist">
-          {[['documento', 'Documento'], ['recorrido', `Recorrido (${(doc.historial_recorrido || []).length})`]].map(([id, label]) => (
+          {[['documento', 'Documento'], ['recorrido', `Recorrido (${(doc.historial_recorrido || []).length})`], ['versiones', `Versiones (${doc.version})`], ...(seguimientos.length || acc.includes('seguimiento') ? [['seguimientos', `Seguimientos (${seguimientos.length})`]] : [])].map(([id, label]) => (
             <button key={id} type="button" role="tab" aria-selected={pestana === id} className={'tab' + (pestana === id ? ' on' : '')} onClick={() => setPestana(id)}>{label}</button>
           ))}
         </div>
@@ -94,7 +95,32 @@ export default function OficioDetalle({ doc, nombreEst, ocupado, onAccion, onCer
                 {doc.entrega.cedula ? ` (CI ${doc.entrega.cedula})` : ''} · {doc.entrega.medio} · {fmtFecha(doc.entrega.fecha)}</p>
             )}
           </div>
-        ) : <Recorrido historial={doc.historial_recorrido} />}
+        ) : pestana === 'recorrido' ? <Recorrido historial={doc.historial_recorrido} />
+          : pestana === 'versiones' ? (
+            <ul className="ofd-ver">
+              {versionesDe(doc).reverse().map(v => (
+                <li key={v.version} className={v.actual ? 'ofd-ver-act' : ''}>
+                  <div className="ofd-ver-top"><span className="ofd-chip">v{v.version}</span>{v.actual && <strong>Vigente</strong>}<time className="ofd-muted">{fmtFecha(v.fecha)}</time></div>
+                  <small>{v.nota}{v.usuario ? ` · ${v.usuario}` : ''}</small>
+                  {v.observadaPor && <small>Observada por {etiquetaCargo(v.observadaPor.cargo)}: {v.observadaPor.motivo}</small>}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="ofd-contenido">
+              {seguimientos.length ? (
+                <ul className="ofd-ver">
+                  {seguimientos.map(x => (
+                    <li key={x.id}>
+                      <div className="ofd-ver-top"><span className="ofd-num">{x.numero || 'Borrador'}</span><EstadoBadge estado={x.estado} /></div>
+                      <small>{x.titulo}</small>
+                      {onAbrir && <button type="button" className="ofd-link" onClick={() => onAbrir(x.id)}>Abrir seguimiento</button>}
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="ofd-muted">Aún no se registró ningún seguimiento de este documento.</p>}
+            </div>
+          )}
 
         {modo === 'observar' && (
           <MotivoForm etiqueta="Motivo de la observación" placeholder="Indica qué debe corregir el emisor…" boton="Devolver al emisor" disabled={ocupado}
@@ -133,6 +159,7 @@ export default function OficioDetalle({ doc, nombreEst, ocupado, onAccion, onCer
           {acc.includes('observar') && <button className="btn btn-secondary" disabled={ocupado} onClick={() => setModo('observar')}>Observar</button>}
           {acc.includes('entregar') && <button className="btn btn-success" disabled={ocupado} onClick={() => setModo('entrega')}>Registrar entrega</button>}
           {acc.includes('archivar') && <button className="btn btn-secondary" disabled={ocupado} onClick={() => onAccion('archivar')}>Archivar</button>}
+          {acc.includes('seguimiento') && <button className="btn btn-secondary" disabled={ocupado} onClick={() => onAccion('seguimiento')}>Generar seguimiento</button>}
           {acc.includes('imprimir') && (
             <>
               <button className="btn btn-ghost" onClick={() => onAccion('imprimir', 'entrega')}><span className="ti ti-printer" /> Para entrega</button>

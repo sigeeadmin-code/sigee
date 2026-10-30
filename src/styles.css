@@ -517,12 +517,26 @@ button.ofd-kpi:focus-visible,button.ofd-kpi.on{outline:2px solid var(--brand);ou
 .ofd-pick-sel{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line);border-radius:var(--r);padding:8px 12px}
 .ofd-pick-sel div{display:flex;flex-direction:column;min-width:0}
 
+/* Aprobación en lote, versiones y seguimientos */
+.ofd-lote{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 14px;background:var(--brandL);border:1px solid var(--brandXL);border-radius:var(--r)}
+.ofd-lote strong{font-size:13px;color:var(--brandD)}
+.ofd-c-sel{width:34px;text-align:center}
+.ofd-c-sel input{width:16px;height:16px;accent-color:var(--brand);cursor:pointer}
+.ofd-lista-sim{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto}
+.ofd-lista-sim li{display:flex;justify-content:space-between;gap:10px;font-size:13px;border-bottom:1px solid var(--line);padding:6px 0}
+.ofd-ver{display:flex;flex-direction:column;gap:10px;list-style:none;margin:0;padding:0}
+.ofd-ver li{border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;font-size:13px}
+.ofd-ver li.ofd-ver-act{border-color:var(--brand);background:var(--brandL)}
+.ofd-ver-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ofd-ver small{display:block;color:var(--slate);margin-top:3px}
+.ofd-link{all:unset;cursor:pointer;color:var(--brandD);font-weight:600;text-decoration:underline}
+.ofd-link:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:3px}
+
 /* Pantalla ancha: el detalle convive con la lista (sin cubrirla) */
 @media (min-width:1280px){
   .ofd-con-detalle .ofd-cuerpo{grid-template-columns:minmax(0,1fr) 460px}
   .ofd-con-detalle .ofd-panel{position:sticky;top:12px;inset:auto;width:auto;z-index:1;box-shadow:var(--sh);border:1px solid var(--line);border-radius:var(--r2);max-height:calc(100vh - 96px);overflow:hidden}
-  .ofd-con-detalle .ofd-tabla th:nth-child(5),.ofd-con-detalle .ofd-tabla td:nth-child(5),
-  .ofd-con-detalle .ofd-tabla th:nth-child(7),.ofd-con-detalle .ofd-tabla td:nth-child(7){display:none}
+  .ofd-con-detalle .ofd-c-despacho,.ofd-con-detalle .ofd-c-fecha{display:none}
   .ofd-volver{display:none}.ofd-cerrar{display:inline-flex}
 }
 /* Tablet / móvil: lista de tarjetas */
@@ -537,6 +551,7 @@ button.ofd-kpi:focus-visible,button.ofd-kpi.on{outline:2px solid var(--brand);ou
   .ofd-tabla td.ofd-doc{grid-column:1/-1;order:-2}.ofd-tabla td.ofd-doc::before{display:none}
   .ofd-tabla td.ofd-num{grid-column:1/-1;order:-1;flex-direction:row}.ofd-tabla td.ofd-num::before{display:none}
   .ofd-tabla td.ofd-est{grid-column:1/-1}
+  .ofd-tabla td.ofd-c-sel{grid-column:1/-1;order:-3;flex-direction:row;width:auto;text-align:left}.ofd-tabla td.ofd-c-sel::before{display:none}
   .ofd-tabla tr.ofd-pend{border-left:3px solid var(--amber)}.ofd-tabla tr.ofd-sel{background:var(--brandL)}
   .ofd-abrir{max-width:none}.ofd-abrir strong{white-space:normal}
 }

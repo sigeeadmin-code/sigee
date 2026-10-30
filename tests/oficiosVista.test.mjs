@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   fmtEspera, semaforoEspera, filtrarTab, filtrarOficios, resumenOficios, accionesDisponibles,
-  ultimaObservacion, firmantesPorCargo, periodoPorDefecto, fmtDias
+  ultimaObservacion, firmantesPorCargo, periodoPorDefecto, fmtDias, ordenarPorEspera, seguimientosDe, versionesDe
 } from '../src/lib/oficiosVista.js';
 
 assert.equal(fmtEspera(null), '—');
@@ -56,6 +56,20 @@ assert.deepEqual(accionesDisponibles({ estado: 'aprobado_final' }), ['entregar',
 assert.deepEqual(accionesDisponibles({ estado: 'entregado' }), ['archivar', 'imprimir']);
 assert.deepEqual(accionesDisponibles({ estado: 'archivado' }), ['imprimir']);
 assert.deepEqual(accionesDisponibles(null), []);
+assert.deepEqual(accionesDisponibles({ estado: 'entregado', tipo: 'plan_refuerzo' }), ['archivar', 'imprimir', 'seguimiento']);
+assert.deepEqual(accionesDisponibles({ estado: 'entregado', tipo: 'plan_refuerzo', es_seguimiento: true }), ['archivar', 'imprimir']);
+assert.deepEqual(accionesDisponibles({ estado: 'en_ruta', tipo: 'plan_refuerzo', puede_actuar: false }), ['imprimir']);
+
+assert.deepEqual(ordenarPorEspera([{ id: 'a', espera_seg: 10 }, { id: 'b', espera_seg: 500 }, { id: 'c' }]).map(d => d.id), ['b', 'a', 'c']);
+assert.deepEqual(seguimientosDe([{ id: 1, documento_origen_id: 'x' }, { id: 2 }], 'x').map(d => d.id), [1]);
+
+const v = versionesDe({ version: 2, created_at: '2026-10-01', historial_recorrido: [
+  { accion: 'emitido', fecha_accion: '2026-10-01', usuario_nombre: 'Karina' },
+  { accion: 'observado', cargo: 'rector', comentario: 'Falta detalle', fecha_accion: '2026-10-02' },
+  { accion: 'corregido', version_pdf: 2, comentario: 'Contenido corregido → versión 2', fecha_accion: '2026-10-03', usuario_nombre: 'Karina' }] });
+assert.equal(v.length, 2);
+assert.equal(v[0].version, 1); assert.equal(v[0].observadaPor.motivo, 'Falta detalle'); assert.equal(v[0].actual, false);
+assert.equal(v[1].version, 2); assert.equal(v[1].actual, true); assert.equal(v[1].observadaPor, null);
 
 assert.deepEqual(firmantesPorCargo({ historial_recorrido: [
   { accion: 'aprobado', cargo: 'tutor', usuario_nombre: 'Zambrano Karina' },

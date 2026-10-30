@@ -11,7 +11,7 @@ import {
   corregirOficio, registrarEntregaOficio, archivarOficio, rechazarOficio, eliminarBorradorOficio, guardarBorradorOficio,
   TIPOS_DOCUMENTO, ESTADOS
 } from '../lib/oficiosDocumental.js';
-import { filtrarOficios, filtrarTab, fmtDias, fmtEspera, resumenOficios, TABS } from '../lib/oficiosVista.js';
+import { filtrarOficios, filtrarTab, fmtDias, fmtEspera, ordenarPorEspera, resumenOficios, seguimientosDe, TABS } from '../lib/oficiosVista.js';
 import { useEstudiantesEmisor } from '../lib/useEstudiantesEmisor.js';
 import OficiosTabla from '../components/oficios/OficiosTabla.jsx';
 import OficioDetalle from '../components/oficios/OficioDetalle.jsx';
@@ -38,7 +38,9 @@ export default function OficiosDocumental() {
   const [toast, setToast] = useState(null);
   const [nuevo, setNuevo] = useState(false);
   const [imprimir, setImprimir] = useState(null);
-  const [extra, setExtra] = useState(null);       // documento abierto por enlace que no está en la lista
+  const [extra, setExtra] = useState(null);
+  const [seleccion, setSeleccion] = useState(() => new Set());
+  const [confirmarLote, setConfirmarLote] = useState(false);       // documento abierto por enlace que no está en la lista
 
   const tabs = useMemo(() => TABS.filter(t => t.id !== 'todos' || VEN_TODO.includes(profile?.rolDb)), [profile?.rolDb]);
 
@@ -66,10 +68,13 @@ export default function OficiosDocumental() {
     setTab(resumen.porCargo > 0 ? 'por_cargo' : 'mios');
   }, [cargando, tab, resumen.porCargo]);
 
-  const lista = useMemo(
-    () => filtrarOficios(filtrarTab(items, tab || 'mios'), { q: busqueda, tipo, estado, nombreEstudiante: nombreEst }),
-    [items, tab, busqueda, tipo, estado, nombreEst]
-  );
+  const lista = useMemo(() => {
+    const base = filtrarOficios(filtrarTab(items, tab || 'mios'), { q: busqueda, tipo, estado, nombreEstudiante: nombreEst });
+    return tab === 'por_cargo' ? ordenarPorEspera(base) : base;     // despacho: lo más antiguo primero
+  }, [items, tab, busqueda, tipo, estado, nombreEst]);
+  useEffect(() => { setSeleccion(new Set()); }, [tab, items]);        // la selección no sobrevive a un cambio de vista o de datos
+  const alternar = id => setSeleccion(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const alternarTodos = hab => setSeleccion(s => (hab.every(d => s.has(d.id)) ? new Set() : new Set(hab.map(d => d.id))));
   const cuenta = id => filtrarTab(items, id).length;
 
   const seleccionado = useMemo(() => items.find(d => d.id === docId) || (extra?.id === docId ? extra : null), [items, docId, extra]);
@@ -89,6 +94,16 @@ export default function OficiosDocumental() {
     try { const r = await fn(); await cargar(); if (ok) avisar(ok); return r; }
     catch (e) { avisar(e.message || 'No se pudo completar la acción.', 'err'); return null; }
     finally { setOcupado(false); }
+  }
+
+  async function aprobarLote() {
+    const ids = [...seleccion]; let ok = 0; const fallos = [];
+    setOcupado(true); setConfirmarLote(false);
+    for (const id of ids) {
+      try { await aprobarPasoOficio(id); ok++; } catch (e) { fallos.push(e.message); }
+    }
+    await cargar(); setOcupado(false);
+    if (fallos.length) avisar(`${ok} aprobados, ${fallos.length} no se pudieron aprobar: ${fallos[0]}`, 'warn'); else avisar(`${ok} documento(s) aprobados.`);
   }
 
   async function onCrear(f) {
@@ -119,6 +134,13 @@ export default function OficiosDocumental() {
         if (!window.confirm('¿Eliminar este borrador? No se puede deshacer.')) return undefined;
         return ejecutar(async () => { await eliminarBorradorOficio(d.id); abrir(null); }, 'Borrador eliminado.');
       case 'imprimir': return setImprimir(a);
+      case 'seguimiento': return ejecutar(async () => {
+        const h = await crearBorradorOficio({
+          institucionId, tipo: 'informe_seguimiento', titulo: `Seguimiento · ${d.titulo}`.slice(0, 160), estudianteId: d.estudiante_id,
+          curso: d.curso, paralelo: d.paralelo, periodo: d.periodo, datosPlantilla: { notas: '' }, documentoOrigenId: d.id
+        });
+        setTab('mios'); abrir(h.id);
+      }, 'Seguimiento creado como borrador, enlazado al documento de origen.');
       default: return undefined;
     }
   }
@@ -185,18 +207,45 @@ export default function OficiosDocumental() {
         {(busqueda || tipo || estado) && <button className="btn btn-ghost" onClick={() => { setBusqueda(''); setTipo(''); setEstado(''); }}>Limpiar</button>}
       </div>
 
+      {tab === 'por_cargo' && seleccion.size > 0 && (
+        <div className="ofd-lote" role="region" aria-label="Acciones en lote">
+          <strong>{seleccion.size} seleccionado(s)</strong>
+          <span><button className="btn btn-ghost btn-sm" onClick={() => setSeleccion(new Set())}>Quitar selección</button>{' '}
+            <button className="btn btn-success btn-sm" disabled={ocupado} onClick={() => setConfirmarLote(true)}>Aprobar seleccionados</button></span>
+        </div>
+      )}
+
       <div className="ofd-cuerpo">
         <div className="card ofd-lista">
           {cargando ? <p className="ofd-muted ofd-pad">Cargando…</p>
-            : <OficiosTabla items={lista} seleccionadoId={docId} onSelect={abrir} nombreEst={nombreEst} vacio={vacio} />}
+            : <OficiosTabla items={lista} seleccionadoId={docId} onSelect={abrir} nombreEst={nombreEst} vacio={vacio}
+                seleccion={tab === 'por_cargo' ? seleccion : undefined} onToggle={alternar} onToggleTodos={alternarTodos} />}
         </div>
         {seleccionado && (
           <aside className="ofd-panel">
-            <OficioDetalle doc={seleccionado} nombreEst={nombreEst} ocupado={ocupado} onAccion={onAccion} onCerrar={() => abrir(null)} />
+            <OficioDetalle doc={seleccionado} nombreEst={nombreEst} ocupado={ocupado} onAccion={onAccion} onCerrar={() => abrir(null)}
+              seguimientos={seguimientosDe(items, seleccionado.id)} origen={items.find(d => d.id === seleccionado.documento_origen_id) || null} onAbrir={abrir} />
           </aside>
         )}
       </div>
 
+      {confirmarLote && (
+        <div className="modal-bg" onClick={e => { if (e.target === e.currentTarget) setConfirmarLote(false); }}>
+          <div className="modal ofd-modal" role="dialog" aria-modal="true" aria-labelledby="ofd-lote-t">
+            <div className="modal-h"><h3 id="ofd-lote-t">Aprobar {seleccion.size} documento(s)</h3></div>
+            <div className="modal-b">
+              <p className="ofd-sub">Cada aprobación queda registrada con tu nombre y la hora en el recorrido. Revisa la lista antes de confirmar.</p>
+              <ul className="ofd-lista-sim">
+                {items.filter(d => seleccion.has(d.id)).map(d => <li key={d.id}><span className="ofd-num">{d.numero}</span><span>{d.titulo}</span></li>)}
+              </ul>
+            </div>
+            <div className="modal-f">
+              <button className="btn btn-secondary" onClick={() => setConfirmarLote(false)}>Cancelar</button>
+              <button className="btn btn-success" onClick={aprobarLote}>Aprobar todos</button>
+            </div>
+          </div>
+        </div>
+      )}
       {nuevo && <OficioNuevoModal estudiantes={estudiantes} guardando={ocupado} onCrear={onCrear} onCerrar={() => setNuevo(false)} />}
       {imprimir && seleccionado && <OficioImpresion doc={seleccionado} modo={imprimir} nombreEstudiante={nombreEst(seleccionado.estudiante_id)} institucion={institucion} />}
       {toast && <div className={'toast ' + toast.tipo} role="status">{toast.msg}</div>}

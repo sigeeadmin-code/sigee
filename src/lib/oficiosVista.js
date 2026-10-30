@@ -113,6 +113,7 @@ export function accionesDisponibles(doc) {
   if (doc.estado === 'aprobado_final') a.push('entregar');
   if (doc.estado === 'entregado') a.push('archivar');
   if (doc.estado !== 'borrador') a.push('imprimir');
+  if (SEGUIMIENTO_DESDE.includes(doc.tipo) && !doc.es_seguimiento && ['aprobado_final', 'entregado', 'archivado'].includes(doc.estado)) a.push('seguimiento');
   return a;
 }
 
@@ -120,3 +121,26 @@ export function periodoPorDefecto(fecha = new Date()) {
   const y = fecha.getFullYear();
   return fecha.getMonth() >= 4 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
 }
+
+/** Tipos tras los cuales se controla «¿mejoró?» con un informe de seguimiento enlazado (especificación §10). */
+export const SEGUIMIENTO_DESDE = ['oficio_alerta', 'plan_refuerzo', 'acta_compromiso'];
+
+/** Despacho: lo que lleva más tiempo esperando va primero (SLA 24 h / 48 h). */
+export const ordenarPorEspera = items => [...items].sort((a, b) => (b.espera_seg ?? -1) - (a.espera_seg ?? -1));
+
+/** Informes de seguimiento que cuelgan de un documento origen. */
+export const seguimientosDe = (items, id) => items.filter(d => d.documento_origen_id === id);
+
+/** Versiones del PDF a partir del historial inmutable: v1 = emisión; cada «corregido» abre una versión nueva. */
+export function versionesDe(doc) {
+  const h = doc?.historial_recorrido || [];
+  const out = [];
+  const primera = h[0];
+  out.push({ version: 1, fecha: primera?.fecha_accion || doc?.created_at, usuario: primera?.usuario_nombre || null, nota: 'Emisión inicial' });
+  for (const x of h) if (x.accion === 'corregido') out.push({ version: x.version_pdf, fecha: x.fecha_accion, usuario: x.usuario_nombre || null, nota: x.comentario });
+  const motivos = h.filter(x => x.accion === 'observado');
+  return out.map((v, i) => ({ ...v, observadaPor: motivos[i] ? { cargo: motivos[i].cargo, motivo: motivos[i].comentario } : null, actual: v.version === doc?.version }));
+}
+
+/** Aprobación en lote: solo documentos donde el usuario puede actuar. */
+export const seleccionables = items => items.filter(d => d.puede_actuar);
