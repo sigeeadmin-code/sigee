@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #F6F5F1;
+  --foreground: #1B2430;
+  --primary: #1F4E79;
+  --primary-foreground: #FFFFFF;
+  --secondary: #E9E6DE;
+  --secondary-foreground: #2B3645;
+  --accent: #C97A12;
+  --accent-foreground: #FFFFFF;
+  --muted: #EEEBE3;
+  --muted-foreground: #6B7280;
+  --card: #FFFFFF;
+  --card-foreground: #1B2430;
+  --border: #DDD9CE;
+  --input: #D3CEC0;
+  --ring: #2A6AA3;
+  --radius: 0.625rem;
+  --font-sans: var(--font-plus-jakarta-sans);
+  --success: #2F7D4F;
+  --success-foreground: #FFFFFF;
+  --warning: #B8700B;
+  --warning-foreground: #FFFFFF;
+  --destructive: #B3392F;
+  --destructive-foreground: #FFFFFF;
+  --info: #2A6AA3;
+  --info-foreground: #FFFFFF;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    border-color: var(--border);
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  h1, h2, h3, h4, h5, h6, p {
+    margin: 0;
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .font-doc {
+    font-family: var(--font-plex-mono), ui-monospace, monospace;
+    letter-spacing: -0.01em;
+  }
+  .paper-grain {
+    background-image: radial-gradient(var(--border) 0.6px, transparent 0.6px);
+    background-size: 14px 14px;
+  }
+  .scroll-thin::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb {
+    background: var(--input);
+    border-radius: 999px;
+  }
+  .scroll-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .row-exit {
+    opacity: 0;
+    max-height: 0;
+    transition: opacity 200ms ease, max-height 260ms ease;
+  }
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .fade-up {
+    animation: fade-up 260ms ease both;
+  }
+  @keyframes modal-in {
+    from { opacity: 0; transform: scale(0.97); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  .modal-in {
+    animation: modal-in 180ms ease both;
+  }
+  @keyframes slide-bar {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .slide-bar {
+    animation: slide-bar 220ms ease both;
+  }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.45; transform: scale(1.35); }
+  }
+  .pulse-dot {
+    animation: pulse-dot 1.8s ease-in-out infinite;
+  }
+  .print-hide {
+    display: initial;
+  }
+  @media print {
+    .print-hide {
+      display: none !important;
+    }
+  }
+}

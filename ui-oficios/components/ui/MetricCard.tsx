@@ -1,30 +1,52 @@
 import React from 'react';
 
-type Tone = 'info' | 'alert' | 'warning' | 'success' | 'neutral';
-const TONE: Record<Tone, string> = {
-  info: 'border-l-4 border-l-sky-500',
-  alert: 'border-l-4 border-l-red-500',
-  warning: 'border-l-4 border-l-amber-500',
-  success: 'border-l-4 border-l-emerald-500',
-  neutral: 'border-l-4 border-l-slate-400',
-};
+export type MetricTone = 'neutral' | 'alert' | 'warning' | 'success' | 'info';
 
-interface Props {
-  label: string; value: string; unit?: string; hint?: string; tone?: Tone; hero?: boolean;
-  icon?: React.ReactNode; className?: string; children?: React.ReactNode;
+interface MetricCardProps {
+  label: string;
+  value: string;
+  unit?: string;
+  hint: string;
+  icon: React.ReactNode;
+  tone?: MetricTone;
+  hero?: boolean;
+  className?: string;
+  children?: React.ReactNode;
 }
 
-export default function MetricCard({ label, value, unit, hint, tone = 'neutral', hero, icon, className = '', children }: Props) {
+const TONE: Record<MetricTone, { wrap: string; icon: string; value: string }> = {
+  neutral: { wrap: 'bg-card border-border', icon: 'bg-muted text-secondary-foreground', value: 'text-foreground' },
+  alert: { wrap: 'bg-destructive/5 border-destructive/30', icon: 'bg-destructive/15 text-destructive', value: 'text-destructive' },
+  warning: { wrap: 'bg-warning/5 border-warning/30', icon: 'bg-warning/15 text-warning', value: 'text-warning' },
+  success: { wrap: 'bg-success/5 border-success/25', icon: 'bg-success/15 text-success', value: 'text-success' },
+  info: { wrap: 'bg-info/5 border-info/25', icon: 'bg-info/15 text-info', value: 'text-info' },
+};
+
+export default function MetricCard({
+  label,
+  value,
+  unit,
+  hint,
+  icon,
+  tone = 'neutral',
+  hero = false,
+  className = '',
+  children,
+}: MetricCardProps) {
+  const t = TONE[tone];
   return (
-    <div className={`rounded-lg border border-border bg-card p-4 shadow-sm ${TONE[tone]} ${hero ? 'min-h-[120px]' : ''} ${className}`}>
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
-        {icon && <span className="text-muted-foreground">{icon}</span>}
+    <div
+      className={`fade-up flex flex-col justify-between rounded-lg border p-4 transition-shadow duration-150 hover:shadow-md ${t.wrap} ${hero ? 'p-5' : ''} ${className}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[13px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${t.icon}`}>{icon}</span>
       </div>
-      <p className="mt-2 text-3xl font-extrabold tabular text-foreground">
-        {value}{unit && <span className="ml-1 text-base font-semibold text-muted-foreground">{unit}</span>}
-      </p>
-      {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+      <div className="mt-3 flex items-baseline gap-1.5">
+        <span className={`font-bold tabular leading-none ${hero ? 'text-5xl' : 'text-3xl'} ${t.value}`}>{value}</span>
+        {unit && <span className="text-sm font-medium text-muted-foreground">{unit}</span>}
+      </div>
+      <p className="mt-2 text-sm text-muted-foreground">{hint}</p>
       {children && <div className="mt-3">{children}</div>}
     </div>
   );
