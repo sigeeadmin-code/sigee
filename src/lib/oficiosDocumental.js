@@ -53,13 +53,9 @@ export async function fetchOficiosBandeja(filtro = 'todos') {
   return Array.isArray(data) ? data : [];
 }
 
-/** Obtiene un documento por id. */
+/** Obtiene un documento por id (con puede_actuar / soy_emisor calculados en el servidor). */
 export async function fetchOficio(id) {
-  const { data, error } = await supabase
-    .from('oficios_documentos')
-    .select('*')
-    .eq('id', id)
-    .single();
+  const { data, error } = await supabase.rpc('oficios_obtener', { p_id: id });
   if (error) throw new Error(error.message || 'Documento no encontrado.');
   return data;
 }
@@ -147,29 +143,24 @@ export async function rechazarOficio(id, motivo) {
   return data;
 }
 
-/** Elimina solo borradores propios. */
+/** Elimina solo borradores propios (RPC: no hay escritura directa a la tabla). */
 export async function eliminarBorradorOficio(id) {
-  const { error } = await supabase.from('oficios_documentos').delete().eq('id', id).eq('estado', 'borrador');
+  const { error } = await supabase.rpc('oficios_eliminar_borrador', { p_id: id });
   if (error) throw new Error(error.message || 'No se pudo eliminar el borrador.');
 }
 
-/** Actualiza datos_plantilla / título / asunto en borrador. */
+/** Actualiza título / asunto / contenido / contexto del borrador. */
 export async function guardarBorradorOficio(id, campos) {
-  const patch = { updated_at: new Date().toISOString() };
-  if (campos.titulo !== undefined) patch.titulo = campos.titulo;
-  if (campos.asunto !== undefined) patch.asunto = campos.asunto;
-  if (campos.datos_plantilla !== undefined) patch.datos_plantilla = campos.datos_plantilla;
-  if (campos.estudiante_id !== undefined) patch.estudiante_id = campos.estudiante_id;
-  if (campos.curso !== undefined) patch.curso = campos.curso;
-  if (campos.paralelo !== undefined) patch.paralelo = campos.paralelo;
-  if (campos.periodo !== undefined) patch.periodo = campos.periodo;
-  const { data, error } = await supabase
-    .from('oficios_documentos')
-    .update(patch)
-    .eq('id', id)
-    .eq('estado', 'borrador')
-    .select()
-    .single();
+  const { data, error } = await supabase.rpc('oficios_guardar_borrador', {
+    p_id: id,
+    p_titulo: campos.titulo ?? null,
+    p_asunto: campos.asunto ?? null,
+    p_datos_plantilla: campos.datos_plantilla ?? null,
+    p_estudiante_id: campos.estudiante_id ?? null,
+    p_curso: campos.curso ?? null,
+    p_paralelo: campos.paralelo ?? null,
+    p_periodo: campos.periodo ?? null
+  });
   if (error) throw new Error(error.message || 'No se pudo guardar.');
   return data;
 }
@@ -190,26 +181,6 @@ export function etiquetaTipo(tipo) {
   return TIPOS_DOCUMENTO[tipo]?.nombre || tipo;
 }
 
-/** ¿El usuario actual puede actuar en el paso_actual del documento? */
-export function puedeActuarEnPaso(doc, profile) {
-  if (!doc || !profile) return false;
-  if (doc.estado !== 'en_ruta') return false;
-  const paso = (doc.ruta || [])[doc.paso_actual];
-  if (!paso) return false;
-  const cargo = paso.cargo;
-  const rol = profile.rolDb || profile.rol;
-  const mapa = {
-    docente: ['tutor'],
-    inspector_general: ['inspector_general', 'tutor'],
-    admin_plantel: ['rector', 'vicerrector', 'inspector_general', 'dece', 'secretaria', 'tutor'],
-    secretario: ['secretaria', 'inspector_general'],
-    supervisor_plantel: ['rector', 'vicerrector', 'inspector_general'],
-    super_admin: Object.keys(CARGOS)
-  };
-  const permitidos = mapa[rol] || [];
-  return permitidos.includes(cargo);
-}
-
-export function esEmisor(doc, profile) {
-  return doc && profile && doc.emisor_id === profile.id;
-}
+/** Los permisos los calcula el servidor (oficios_puede_actuar): el cliente solo los lee. */
+export const puedeActuarEnPaso = doc => !!doc?.puede_actuar;
+export const esEmisor = doc => !!doc?.soy_emisor;

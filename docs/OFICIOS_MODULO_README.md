@@ -60,3 +60,9 @@ borrador → en_ruta ⇄ observado → aprobado_final → entregado → archivad
 
 ---
 *Zona 7 · El Oro · Ecuador · Listo para que Claude lea, ejecute SQL y publique*
+
+## v1.1 (29 oct 2026) · adaptación al sistema
+- **SQL** `2026-10-29_oficios_ajustes.sql` (ya aplicado en producción): una sola regla de permisos (`oficios_puede_actuar`), un docente solo actúa en el paso «tutor» de SUS documentos, `oficios_guardar_borrador` / `oficios_eliminar_borrador` / `oficios_obtener`, `tiempo_espera` real, y la versión solo sube si el contenido cambió. La bandeja devuelve `puede_actuar`, `soy_emisor`, `espera_seg`, `emisor_nombre`.
+- **Escritura solo por RPC**: la tabla no tiene políticas de insert/update/delete para el cliente.
+- **UI**: `src/pages/OficiosDocumental.jsx` solo orquesta; piezas reutilizables en `src/components/oficios/` (tabla responsive, detalle, ruta, recorrido, buscador de estudiante, impresión) y lógica pura probada en `src/lib/oficiosVista.js` (`tests/oficiosVista.test.mjs`). Estilos `ofd-*` al final de `styles.css` con los tokens del sistema.
+- Pendiente (fases 3-4 de la especificación): vincular con `fichas_control` / `oficios_inasistencia`, seguimientos desde el origen, notificación al siguiente cargo, rutas configurables por plantel, cargos DECE/Vicerrector asignables.
