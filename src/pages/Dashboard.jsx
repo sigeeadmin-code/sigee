@@ -3,12 +3,13 @@ import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchMetricasGlobales, fetchEstudianteIdPorProfile, fetchHijosDeRepresentante, fetchProgramacionEstudiante,
   fetchCargasDocente, fetchHorarioDocente, fetchResumenAsistenciaDocente,
-  fetchPanelInspector, fetchResumenAcademicoEstudiante, fetchHorarioAlumno, fetchTareasAlumno,
+  fetchPanelInspector, fetchResumenAcademicoEstudiante, fetchTareasAlumno,
   fetchResumenCalificacionesDocente
 } from '../lib/data.js';
 import { usaEvaluacionNumerica } from '../lib/calificaciones.js';
 import { Link } from 'react-router-dom';
 import HistorialAsistencia from '../components/HistorialAsistencia.jsx';
+import MiSeguimiento from '../components/MiSeguimiento.jsx';
 import RecordatorioRendimiento from '../components/RecordatorioRendimiento.jsx';
 import AvisosJustificacion from '../components/AvisosJustificacion.jsx';
 
@@ -390,7 +391,6 @@ function DashboardEstudiante() {
   const [estudianteId, setEstudianteId] = useState(null);
   const [prog, setProg] = useState(null);
   const [resumen, setResumen] = useState(null);
-  const [horario, setHorario] = useState([]);
   const [tareasPend, setTareasPend] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -424,14 +424,12 @@ function DashboardEstudiante() {
     let activo = true;
     if (!estudianteId || !prog) return;
     (async () => {
-      const [res, hor, tareas] = await Promise.all([
+      const [res, tareas] = await Promise.all([
         fetchResumenAcademicoEstudiante(estudianteId, prog.matricula?.paralelo_id, prog.matricula?.periodo_id),
-        fetchHorarioAlumno(prog.matricula?.paralelo_id),
         fetchTareasAlumno(estudianteId)
       ]);
       if (!activo) return;
       setResumen(res);
-      setHorario(hor);
       setTareasPend(tareas.filter(t => !t.miEntrega || t.miEntrega.estado === 'pendiente'));
     })();
     return () => { activo = false; };
@@ -463,7 +461,7 @@ function DashboardEstudiante() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 14 }}>
+      <div className="dash-kpis">
         <div className="card" style={{ padding: 16 }}>
           <div style={{ fontSize: 12, color: 'var(--slate)' }}>Promedio general</div>
           <div style={{ fontSize: 26, fontWeight: 800, margin: '6px 0' }}>{resumen?.promedioGeneral != null ? resumen.promedioGeneral.toFixed(1) : '—'}</div>
@@ -486,7 +484,7 @@ function DashboardEstudiante() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+      <div className="dash-2">
         <div className="card">
           <div className="ch"><h3>Mis calificaciones</h3></div>
           <div className="cb">
@@ -504,22 +502,7 @@ function DashboardEstudiante() {
             )}
           </div>
         </div>
-        <div className="card">
-          <div className="ch"><h3>Horario semanal</h3></div>
-          <div className="cb">
-            {horario.length === 0 ? (
-              <div className="empty" style={{ padding: 16 }}><p style={{ fontSize: 13 }}>Horario aún no publicado para tu curso.</p></div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {[...horario].sort((a, b) => (a.dia + a.franja).localeCompare(b.dia + b.franja)).map(b => (
-                  <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, padding: '6px 0', borderBottom: '1px solid var(--line)' }}>
-                    <span>{b.dia} · {b.franja}</span><strong>{b.materia}</strong>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        <MiSeguimiento key={estudianteId} estudianteId={estudianteId} nombreEstudiante={`${prog.estudiante.apellidos} ${prog.estudiante.nombres}`} />
       </div>
 
       <div className="card" style={{ marginBottom: 14 }}>

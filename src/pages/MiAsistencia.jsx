@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useSession } from '../lib/SessionContext.jsx';
 import { fetchHijosDeRepresentante, fetchEstudianteIdPorProfile } from '../lib/data.js';
 import HistorialAsistencia from '../components/HistorialAsistencia.jsx';
+import MiSeguimiento from '../components/MiSeguimiento.jsx';
 
 // Módulo "Asistencia y faltas" de las cuentas de ESTUDIANTE y REPRESENTANTE (solo lectura).
 // El estudiante ve lo suyo; el representante ve el de cada uno de sus hijos (la RLS de Supabase lo garantiza).
@@ -63,7 +64,10 @@ export default function MiAsistencia() {
         <div className="empty"><span className="ti ti-users" /><p>{esPadre ? 'No hay ningún estudiante vinculado a tu cuenta todavía. Contacta a la secretaría del plantel.' : 'No se encontró tu ficha de estudiante. Contacta a la secretaría del plantel.'}</p></div>
       )}
       {!cargando && estudianteId && (
-        <HistorialAsistencia key={estudianteId} estudianteId={estudianteId} institucionId={institucion?.id} titulo="Asistencia y faltas desde el inicio de clases" />
+        <>
+          <HistorialAsistencia key={estudianteId} estudianteId={estudianteId} institucionId={institucion?.id} titulo="Asistencia y faltas desde el inicio de clases" />
+          <MiSeguimiento key={'seg' + estudianteId} estudianteId={estudianteId} nombreEstudiante={hijo?.nombre || ''} titulo="Hoja de ruta de las faltas y documentos" limite={10} />
+        </>
       )}
     </div>
   );

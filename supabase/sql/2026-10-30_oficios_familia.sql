@@ -1,0 +1,6 @@
+-- SIGEE · Oficios · acceso de la FAMILIA (30 oct 2026) — ya aplicado en producción
+-- 1) Estudiantes y representantes no leen oficios_documentos directamente (antes sí, a nivel plantel).
+-- 2) oficios_hoja_ruta_familia(p_estudiante): solo lo del propio estudiante y solo lo ya aprobado
+--    (aprobado_final, entregado, archivado) + oficios por inasistencia + avisos. Sin historial interno,
+--    observaciones, borradores ni documentos en revisión, y sin datos del personal.
+-- (El texto completo de la función está en la migración oficios_familia_hoja_de_ruta de Supabase.)

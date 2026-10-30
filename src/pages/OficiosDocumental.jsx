@@ -13,6 +13,7 @@ import {
 } from '../lib/oficiosDocumental.js';
 import { filtrarOficios, filtrarTab, fmtDias, fmtEspera, ordenarPorEspera, resumenOficios, seguimientosDe, TABS } from '../lib/oficiosVista.js';
 import { useEstudiantesEmisor } from '../lib/useEstudiantesEmisor.js';
+import { useImpresionOficio } from '../lib/useImpresionOficio.js';
 import OficiosTabla from '../components/oficios/OficiosTabla.jsx';
 import OficioDetalle from '../components/oficios/OficioDetalle.jsx';
 import OficioNuevoModal from '../components/oficios/OficioNuevoModal.jsx';
@@ -37,7 +38,7 @@ export default function OficiosDocumental() {
   const [ocupado, setOcupado] = useState(false);
   const [toast, setToast] = useState(null);
   const [nuevo, setNuevo] = useState(false);
-  const [imprimir, setImprimir] = useState(null);
+  const { modo: imprimir, imprimir: setImprimir } = useImpresionOficio();
   const [extra, setExtra] = useState(null);
   const [seleccion, setSeleccion] = useState(() => new Set());
   const [confirmarLote, setConfirmarLote] = useState(false);       // documento abierto por enlace que no está en la lista
@@ -144,15 +145,6 @@ export default function OficiosDocumental() {
       default: return undefined;
     }
   }
-
-  useEffect(() => {
-    if (!imprimir) return undefined;
-    document.body.classList.add('imprimiendo-oficio');
-    const fin = () => { document.body.classList.remove('imprimiendo-oficio'); setImprimir(null); };
-    window.addEventListener('afterprint', fin, { once: true });
-    const t = setTimeout(() => window.print(), 200);
-    return () => { clearTimeout(t); window.removeEventListener('afterprint', fin); document.body.classList.remove('imprimiendo-oficio'); };
-  }, [imprimir]);
 
   if (!institucionId && !esSuper) {
     return <div className="empty"><span className="ti ti-building" /><p>Selecciona un plantel para ver los oficios.</p></div>;

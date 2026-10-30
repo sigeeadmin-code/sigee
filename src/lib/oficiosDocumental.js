@@ -184,3 +184,10 @@ export function etiquetaTipo(tipo) {
 /** Los permisos los calcula el servidor (oficios_puede_actuar): el cliente solo los lee. */
 export const puedeActuarEnPaso = doc => !!doc?.puede_actuar;
 export const esEmisor = doc => !!doc?.soy_emisor;
+
+/** Hoja de ruta de un estudiante para su familia: solo lo propio y ya aprobado (RPC con control de acceso). */
+export async function fetchHojaRutaFamilia(estudianteId) {
+  const { data, error } = await supabase.rpc('oficios_hoja_ruta_familia', { p_estudiante: estudianteId });
+  if (error) throw new Error(error.message || 'No se pudo cargar el seguimiento.');
+  return data || { documentos: [], oficios_faltas: [], avisos: [] };
+}
