@@ -1,20 +1,37 @@
-import React from 'react';
+'use client';
 
-interface Props {
+import React, { useState } from 'react';
+import { Toaster } from 'sonner';
+import Sidebar from '@/components/Sidebar';
+import Topbar from '@/components/Topbar';
+
+interface AppLayoutProps {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
 }
 
-/** Stub layout · Claude: en SIGEE Vite usar sidebar + topbar real */
-export default function AppLayout({ title, subtitle, children }: Props) {
+export default function AppLayout({ title, subtitle, children }: AppLayoutProps) {
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border bg-card px-6 py-4">
-        <h1 className="text-xl font-bold tracking-tight">{title}</h1>
-        {subtitle && <p className="mt-0.5 text-sm text-muted-foreground">{subtitle}</p>}
-      </header>
-      <main className="mx-auto max-w-[1400px] px-4 py-5 sm:px-6">{children}</main>
+    <div className="flex min-h-screen bg-background text-foreground">
+      <div className="print-hide contents">
+        <Sidebar
+          collapsed={collapsed}
+          onToggle={() => setCollapsed((v) => !v)}
+          mobileOpen={mobileOpen}
+          onCloseMobile={() => setMobileOpen(false)}
+        />
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <Topbar title={title} subtitle={subtitle} onOpenMobile={() => setMobileOpen(true)} />
+        <main className="mx-auto w-full max-w-screen-2xl flex-1 px-4 py-5 md:px-6 lg:px-8 xl:px-10 2xl:px-16">
+          {children}
+        </main>
+      </div>
+      <Toaster position="bottom-right" richColors closeButton duration={3000} />
     </div>
   );
 }
