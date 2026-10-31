@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { etiquetaCargo, etiquetaTipo } from '../../lib/oficiosDocumental.js';
-import { accionesDisponibles, fmtEspera, fmtFecha, LIMITE_VERSIONES, ultimaObservacion, versionesDe } from '../../lib/oficiosVista.js';
+import { accionesDisponibles, fmtEspera, fmtFecha, indicadoresTramite, LIMITE_VERSIONES, ultimaObservacion, versionesDe } from '../../lib/oficiosVista.js';
 import { EstadoBadge, MotivoForm, Recorrido, RutaStepper } from './OficioUI.jsx';
 import OficioDocumentoModal from './OficioDocumentoModal.jsx';
 import { notasDe } from '../../lib/documentoOficio.js';
@@ -11,7 +11,7 @@ const editable = d => d.soy_emisor && (d.estado === 'borrador' || d.estado === '
  * Detalle de un documento: cabecera, ruta, contenido, recorrido y acciones.
  * Los permisos vienen del servidor (doc.puede_actuar / doc.soy_emisor); aquí solo se muestran.
  */
-export default function OficioDetalle({ doc, nombreEst, ocupado, onAccion, onCerrar, seguimientos = [], origen = null, onAbrir, institucion, abrirVisor = false, pestanaInicial = 'documento', onVisorAbierto }) {
+export default function OficioDetalle({ doc, nombreEst, ocupado, onAccion, onCerrar, seguimientos = [], origen = null, onAbrir, institucion, abrirVisor = false, pestanaInicial = 'documento', onVisorAbierto, modoInicial = null, relacionados = [] }) {
   const [edit, setEdit] = useState({ titulo: '', asunto: '', notas: '', documento: null });
   const [visor, setVisor] = useState(null);                    // 'ver' | 'editar' | null
   const [modo, setModo] = useState(null);                       // 'observar' | 'rechazar' | 'entrega' | null
@@ -21,7 +21,7 @@ export default function OficioDetalle({ doc, nombreEst, ocupado, onAccion, onCer
   // Reinicia el formulario al cambiar de documento o de versión (no al refrescar por una acción ajena).
   useEffect(() => {
     setEdit({ titulo: doc.titulo || '', asunto: doc.asunto || '', notas: doc.datos_plantilla?.notas || '', documento: doc.datos_plantilla?.documento || null });
-    setModo(null); setPestana(pestanaInicial); setVisor(abrirVisor ? 'ver' : null);
+    setModo(modoInicial && accionesDisponibles(doc).includes(modoInicial) ? modoInicial : null); setPestana(pestanaInicial); setVisor(abrirVisor ? 'ver' : null);
     if (abrirVisor) onVisorAbierto?.();
   }, [doc.id, doc.version, doc.estado]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -29,6 +29,7 @@ export default function OficioDetalle({ doc, nombreEst, ocupado, onAccion, onCer
   const puedeEditar = editable(doc);
   const obs = doc.estado === 'observado' ? ultimaObservacion(doc) : null;
   const datos = () => ({ titulo: edit.titulo, asunto: edit.asunto, datos_plantilla: { ...(doc.datos_plantilla || {}), ...(edit.documento ? { documento: edit.documento, notas: notasDe(edit.documento) } : { notas: edit.notas }) } });
+  const ind = indicadoresTramite(doc);
   const sinCambios = edit.titulo === (doc.titulo || '') && edit.asunto === (doc.asunto || '') && edit.notas === (doc.datos_plantilla?.notas || '')
     && JSON.stringify(edit.documento) === JSON.stringify(doc.datos_plantilla?.documento || null);
 
@@ -104,6 +105,20 @@ export default function OficioDetalle({ doc, nombreEst, ocupado, onAccion, onCer
             {puedeEditar && !edit.documento && (<>
               <label className="fl" htmlFor="ofd-notas">Contenido</label>
               <textarea id="ofd-notas" className="fc" rows={9} value={edit.notas} onChange={e => setEdit(x => ({ ...x, notas: e.target.value }))} placeholder="Redacta el cuerpo del documento…" />
+            </>)}
+            <h4 className="ofd-sec">Indicadores del trámite</h4>
+            <div className="ofd-ind">
+              <div><span>Tiempo total del trámite</span><b>{ind.horas == null ? '—' : fmtEspera(ind.horas * 3600)} <em className={'ofd-meta-t ' + (ind.horas > ind.metaHoras ? 'ofd-t-warn' : 'ofd-t-ok')}>meta {ind.metaHoras} h</em></b></div>
+              <div><span>Devoluciones</span><b>{ind.devoluciones} {ind.devoluciones === 1 ? 'observación' : 'observaciones'}</b></div>
+              <div><span>Versión actual del PDF</span><b>v{ind.version} de {ind.maxVersiones} permitidas</b></div>
+            </div>
+            {relacionados.length > 0 && (<>
+              <h4 className="ofd-sec">Documentos relacionados</h4>
+              <ul className="ofd-rel">
+                {relacionados.slice(0, 6).map(x => (
+                  <li key={x.id}><div><button type="button" className="ofd-link ofd-num" onClick={() => onAbrir?.(x.id)}>{x.numero || 'Borrador'}</button><small>{etiquetaTipo(x.tipo)}</small></div><EstadoBadge estado={x.estado} /></li>
+                ))}
+              </ul>
             </>)}
             {doc.entrega && (
               <p className="ofd-entrega"><span className="ti ti-circle-check" /> Entregado a <strong>{doc.entrega.recibido_por}</strong>

@@ -144,3 +144,109 @@ export function versionesDe(doc) {
 
 /** Aprobación en lote: solo documentos donde el usuario puede actuar. */
 export const seleccionables = items => items.filter(d => d.puede_actuar);
+
+// ───────────────────────── Tableros (emisor y despacho) ─────────────────────────
+export const META_TRAMITE_DIAS = 3;                  // meta institucional del tiempo de trámite
+export const ESTADOS_ORDEN = ['borrador', 'observado', 'en_ruta', 'aprobado_final', 'entregado', 'archivado', 'rechazado'];
+const TZ = 'America/Guayaquil';
+const DIA_MS = 86400000;
+
+/** Clave de día (YYYY-MM-DD) en hora de Ecuador. */
+export const claveDia = v => (v ? new Date(v).toLocaleDateString('en-CA', { timeZone: TZ }) : '');
+const diasEntre = (desde, ahora) => (desde ? Math.max(0, Math.floor((ahora - new Date(desde).getTime()) / DIA_MS)) : 0);
+const ACCIONES_DECISION = ['aprobado', 'observado', 'rechazado'];
+
+/** Indicadores de «Mis documentos» (el emisor). */
+export function resumenEmisor(items, ahora = Date.now()) {
+  const mios = items.filter(d => d.soy_emisor);
+  const obs = mios.filter(d => d.estado === 'observado')
+    .map(d => ({ id: d.id, numero: d.numero, version: d.version, dias: diasEntre(ultimaObservacion(d)?.fecha_accion || d.updated_at, ahora) }))
+    .sort((a, b) => b.dias - a.dias);
+  const enRuta = mios.filter(d => d.estado === 'en_ruta');
+  const cargos = [...new Set(enRuta.map(d => (d.ruta || [])[d.paso_actual]?.cargo).filter(Boolean))];
+  const borr = mios.filter(d => d.estado === 'borrador');
+  const alta = mios.filter(d => abierto(d) && d.version > LIMITE_VERSIONES).sort((a, b) => b.version - a.version);
+  const cerrados = mios.filter(d => d.closed_at && d.created_at && d.estado !== 'rechazado');
+  const dias = cerrados.map(d => (new Date(d.closed_at) - new Date(d.created_at)) / DIA_MS).filter(n => n >= 0);
+  const medio = dias.length ? dias.reduce((a, b) => a + b, 0) / dias.length : null;
+  return {
+    observados: { n: obs.length, items: obs, masAntiguoDias: obs[0]?.dias ?? 0 },
+    enRuta: { n: enRuta.length, cargos },
+    borradores: { n: borr.length, items: borr.map(d => ({ id: d.id, numero: d.numero, tipo: d.tipo })) },
+    versionAlta: { n: alta.length, doc: alta[0] ? { id: alta[0].id, numero: alta[0].numero, version: alta[0].version } : null },
+    tramite: { medioDias: medio, metaDias: META_TRAMITE_DIAS, dentroMeta: medio == null ? null : medio <= META_TRAMITE_DIAS },
+    carga: ESTADOS_ORDEN.map(e => ({ estado: e, n: mios.filter(d => d.estado === e).length }))
+  };
+}
+
+const decisiones = items => items.flatMap(d => (d.historial_recorrido || []).map((h, i, arr) => ({ ...h, _llegada: i > 0 ? arr[i - 1].fecha_accion : h.fecha_entrada, _doc: d })))
+  .filter(h => ACCIONES_DECISION.includes(h.accion));
+
+/** Indicadores del despacho (lo que el usuario debe resolver y cómo viene resolviendo). */
+export function resumenDespacho(items, userId, ahora = Date.now()) {
+  const pend = items.filter(d => d.puede_actuar && d.espera_seg != null);
+  const b = { ok: 0, warn: 0, err: 0 };
+  for (const d of pend) b[semaforoEspera(d.espera_seg)]++;
+  const maxima = [...pend].sort((a, b2) => b2.espera_seg - a.espera_seg)[0] || null;
+  const media = pend.length ? pend.reduce((s, d) => s + d.espera_seg, 0) / pend.length : null;
+
+  const todas = decisiones(items);
+  const mias = todas.filter(h => h.usuario_id === userId);
+  const hoy = claveDia(ahora);
+  const hoyMias = mias.filter(h => claveDia(h.fecha_accion) === hoy);
+  const semana = mias.filter(h => ahora - new Date(h.fecha_accion).getTime() < 7 * DIA_MS);
+  const dev = semana.filter(h => h.accion === 'observado').length;
+
+  const acum = {};
+  for (const h of todas) {
+    if (h.accion === 'rechazado' || h.tiempo_espera == null || ahora - new Date(h.fecha_accion).getTime() > 30 * DIA_MS) continue;
+    (acum[h.cargo] ||= []).push(h.tiempo_espera / 3600);
+  }
+  const esperaPorCargo = Object.entries(acum).map(([cargo, hs]) => ({ cargo, horas: hs.reduce((a, c) => a + c, 0) / hs.length, n: hs.length })).sort((a, c) => c.horas - a.horas);
+
+  const dias = [];
+  for (let i = 9; i >= 0; i--) { const k = claveDia(ahora - i * DIA_MS); dias.push({ clave: k, llegadas: 0, resueltos: 0 }); }
+  const idx = Object.fromEntries(dias.map((d, i) => [d.clave, i]));
+  for (const h of mias) { const i = idx[claveDia(h.fecha_accion)]; if (i != null) dias[i].resueltos++; const j = idx[claveDia(h._llegada)]; if (j != null) dias[j].llegadas++; }
+  for (const d of pend) { const ult = (d.historial_recorrido || []).slice(-1)[0]; const j = idx[claveDia(ult?.fecha_accion)]; if (j != null) dias[j].llegadas++; }
+
+  return {
+    pendientes: { n: pend.length, ...b, masDe48: b.err },
+    maxima: maxima ? { id: maxima.id, numero: maxima.numero, seg: maxima.espera_seg } : null,
+    mediaSeg: media, sobreSla: media != null && media / 3600 > SLA_HORAS,
+    resueltosHoy: { n: hoyMias.length, aprobados: hoyMias.filter(h => h.accion === 'aprobado').length, observados: hoyMias.filter(h => h.accion === 'observado').length },
+    ritmoSemanal: semana.length / 7,
+    devolucionesSemana: { n: dev, despachados: semana.length, tasa: semana.length ? (dev / semana.length) * 100 : 0 },
+    esperaPorCargo, serieDiaria: dias
+  };
+}
+
+/** Cargos con documentos pendientes de decisión del usuario (pestañas de la cola de despacho). */
+export function cargosEnCola(items) {
+  const m = new Map();
+  for (const d of items.filter(x => x.puede_actuar)) { const c = (d.ruta || [])[d.paso_actual]?.cargo; if (c) m.set(c, (m.get(c) || 0) + 1); }
+  return [...m.entries()].map(([cargo, n]) => ({ cargo, n })).sort((a, b) => b.n - a.n);
+}
+
+/** Filtros de la cola: todos | vencidos (>24 h en el despacho) | reenviados (ya devueltos al menos una vez). */
+export function filtrarCola(items, { cargo = '', modo = 'todos' } = {}) {
+  return items.filter(d => {
+    if (cargo && (d.ruta || [])[d.paso_actual]?.cargo !== cargo) return false;
+    if (modo === 'vencidos') return d.espera_seg != null && d.espera_seg / 3600 >= SLA_HORAS;
+    if (modo === 'reenviados') return numObservaciones(d) > 0;
+    return true;
+  });
+}
+
+/** Documentos del mismo estudiante (para «Documentos relacionados»). */
+export const relacionados = (items, doc) => items.filter(d => d.id !== doc.id && doc.estudiante_id && d.estudiante_id === doc.estudiante_id);
+
+/** Indicadores del trámite de UN documento. */
+export function indicadoresTramite(doc, ahora = Date.now()) {
+  const fin = doc.closed_at ? new Date(doc.closed_at).getTime() : ahora;
+  const dias = doc.created_at ? Math.max(0, (fin - new Date(doc.created_at).getTime()) / DIA_MS) : null;
+  return { dias, horas: dias == null ? null : dias * 24, devoluciones: numObservaciones(doc), version: doc.version, maxVersiones: LIMITE_VERSIONES, metaHoras: META_TRAMITE_DIAS * 24 };
+}
+
+/** Carga por estado de cualquier conjunto de documentos. */
+export const cargaPorEstado = items => ESTADOS_ORDEN.map(e => ({ estado: e, n: items.filter(d => d.estado === e).length }));

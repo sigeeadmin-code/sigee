@@ -11,10 +11,13 @@ import {
   corregirOficio, registrarEntregaOficio, archivarOficio, rechazarOficio, eliminarBorradorOficio, guardarBorradorOficio,
   TIPOS_DOCUMENTO, ESTADOS
 } from '../lib/oficiosDocumental.js';
-import { filtrarOficios, filtrarTab, fmtDias, fmtEspera, ordenarPorEspera, resumenOficios, seguimientosDe, TABS } from '../lib/oficiosVista.js';
+import { cargaPorEstado, cargosEnCola, filtrarCola, filtrarOficios, filtrarTab, ordenarPorEspera, relacionados, resumenDespacho, resumenEmisor, seguimientosDe, TABS } from '../lib/oficiosVista.js';
 import { useEstudiantesEmisor } from '../lib/useEstudiantesEmisor.js';
 import { useImpresionOficio } from '../lib/useImpresionOficio.js';
 import { armarDocumentoOficio, tieneConstructor } from '../lib/documentoOficio.js';
+import { TableroDespacho, TableroEmisor, TableroTodos } from '../components/oficios/OficiosTableros.jsx';
+import { ColumnasMenu, useColumnas } from '../components/oficios/OficiosTabla.jsx';
+import { etiquetaCargo } from '../lib/oficiosDocumental.js';
 import OficiosTabla from '../components/oficios/OficiosTabla.jsx';
 import OficioDetalle from '../components/oficios/OficioDetalle.jsx';
 import OficioNuevoModal from '../components/oficios/OficioNuevoModal.jsx';
@@ -43,7 +46,7 @@ export default function OficiosDocumental() {
   const [extra, setExtra] = useState(null);
   const [seleccion, setSeleccion] = useState(() => new Set());
   const [confirmarLote, setConfirmarLote] = useState(false);
-  const [inicial, setInicial] = useState({ visor: false, pestana: 'documento' });       // documento abierto por enlace que no está en la lista
+  const [inicial, setInicial] = useState({ visor: false, pestana: 'documento', accion: null });       // documento abierto por enlace que no está en la lista
 
   const tabs = useMemo(() => TABS.filter(t => t.id !== 'todos' || VEN_TODO.includes(profile?.rolDb)), [profile?.rolDb]);
 
@@ -63,18 +66,25 @@ export default function OficiosDocumental() {
   }, [institucionId, esSuper]);
   useEffect(() => { cargar(); }, [cargar]);
 
-  const resumen = useMemo(() => resumenOficios(items), [items]);
+  const resEmisor = useMemo(() => resumenEmisor(items), [items]);
+  const resDespacho = useMemo(() => resumenDespacho(items, profile?.id), [items, profile?.id]);
+  const enCola = useMemo(() => cargosEnCola(items), [items]);
+  const [columnas, alternarColumna] = useColumnas();
+  const [cargoCola, setCargoCola] = useState('');
+  const [modoCola, setModoCola] = useState('todos');
 
   // Pestaña inicial: «Por mi cargo» si hay pendientes; si no, lo propio. Solo la primera vez.
   useEffect(() => {
     if (tab || cargando) return;
-    setTab(resumen.porCargo > 0 ? 'por_cargo' : 'mios');
-  }, [cargando, tab, resumen.porCargo]);
+    setTab(resDespacho.pendientes.n > 0 ? 'por_cargo' : 'mios');
+  }, [cargando, tab, resDespacho.pendientes.n]);
 
   const lista = useMemo(() => {
-    const base = filtrarOficios(filtrarTab(items, tab || 'mios'), { q: busqueda, tipo, estado, nombreEstudiante: nombreEst });
-    return tab === 'por_cargo' ? ordenarPorEspera(base) : base;     // despacho: lo más antiguo primero
-  }, [items, tab, busqueda, tipo, estado, nombreEst]);
+    let base = filtrarOficios(filtrarTab(items, tab || 'mios'), { q: busqueda, tipo, estado, nombreEstudiante: nombreEst });
+    if (tab === 'por_cargo') base = ordenarPorEspera(filtrarCola(base, { cargo: cargoCola, modo: modoCola }));   // despacho: lo más antiguo primero
+    return base;
+  }, [items, tab, busqueda, tipo, estado, nombreEst, cargoCola, modoCola]);
+  const cedulaEst = useCallback(id => estudiantes.find(e => e.id === id)?.cedula || (data?.estudiantes || []).find(e => e.id === id)?.cedula || '', [estudiantes, data?.estudiantes]);
   useEffect(() => { setSeleccion(new Set()); }, [tab, items]);        // la selección no sobrevive a un cambio de vista o de datos
   const alternar = id => setSeleccion(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const alternarTodos = hab => setSeleccion(s => (hab.every(d => s.has(d.id)) ? new Set() : new Set(hab.map(d => d.id))));
@@ -87,7 +97,7 @@ export default function OficiosDocumental() {
   }, [docId, cargando]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function abrir(id, opciones = {}) {
-    setInicial({ visor: !!opciones.visor, pestana: opciones.pestana || 'documento' });
+    setInicial({ visor: !!opciones.visor, pestana: opciones.pestana || 'documento', accion: opciones.accion || null });
     const p = new URLSearchParams(params);
     if (id) p.set('doc', id); else p.delete('doc');
     setParams(p, { replace: !!id === !!docId });
@@ -98,6 +108,11 @@ export default function OficiosDocumental() {
     try { const r = await fn(); await cargar(); if (ok) avisar(ok); return r; }
     catch (e) { avisar(e.message || 'No se pudo completar la acción.', 'err'); return null; }
     finally { setOcupado(false); }
+  }
+
+  function decidir(id, que) {
+    if (que === 'aprobar') { setSeleccion(new Set([id])); setConfirmarLote(true); return; }
+    abrir(id, { accion: que });
   }
 
   async function aprobarLote() {
@@ -176,24 +191,9 @@ export default function OficiosDocumental() {
         <button className="btn btn-primary" onClick={() => setNuevo(true)}><span className="ti ti-plus" /> Nuevo documento</button>
       </div>
 
-      <div className="ofd-kpis">
-        <button type="button" className={'metric m-blue ofd-kpi' + (tab === 'por_cargo' ? ' on' : '')} onClick={() => setTab('por_cargo')}>
-          <div className="m-lbl">Por mi cargo</div><div className="m-val">{resumen.porCargo}</div>
-          <div className="m-sub">{resumen.porCargo ? `Espera máxima ${fmtEspera(resumen.esperaMaxSeg)}` : 'Nada pendiente'}</div>
-        </button>
-        <button type="button" className={'metric m-amber ofd-kpi' + (tab === 'mios' && estado === 'observado' ? ' on' : '')} onClick={() => { setTab('mios'); setEstado('observado'); }}>
-          <div className="m-lbl">Observados por corregir</div><div className="m-val">{resumen.observadosMios}</div>
-          <div className="m-sub">{resumen.observadosMios ? 'Devueltos a ti' : 'Al día'}</div>
-        </button>
-        <button type="button" className="metric m-teal ofd-kpi" onClick={() => { setTab(tabs.some(t => t.id === 'todos') ? 'todos' : 'mios'); setEstado('en_ruta'); }}>
-          <div className="m-lbl">En ruta</div><div className="m-val">{resumen.enRuta}</div>
-          <div className="m-sub">{resumen.sobreSla ? `${resumen.sobreSla} sobre la meta de 24 h` : 'Dentro de la meta'}</div>
-        </button>
-        <div className="metric m-green ofd-kpi">
-          <div className="m-lbl">Trámite promedio</div><div className="m-val">{fmtDias(resumen.tramiteMedioDias)}</div>
-          <div className="m-sub">{resumen.versionAlta ? `${resumen.versionAlta} con más de 5 versiones` : 'Documentos cerrados'}</div>
-        </div>
-      </div>
+      {!cargando && tab === 'mios' && <TableroEmisor r={resEmisor} onAbrir={id => abrir(id)} onEstado={e => setEstado(estado === e ? '' : e)} />}
+      {!cargando && tab === 'por_cargo' && <TableroDespacho r={resDespacho} onAbrir={id => abrir(id)} />}
+      {!cargando && tab === 'todos' && <TableroTodos carga={cargaPorEstado(items)} total={items.length} />}
 
       <div className="tabs ofd-tabs" role="tablist">
         {tabs.map(t => (
@@ -210,6 +210,7 @@ export default function OficiosDocumental() {
           <option value="">Todos los tipos</option>{Object.entries(TIPOS_DOCUMENTO).map(([k, v]) => <option key={k} value={k}>{v.nombre}</option>)}</select>
         <select className="fc" value={estado} onChange={e => setEstado(e.target.value)} aria-label="Estado">
           <option value="">Todos los estados</option>{Object.entries(ESTADOS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select>
+        <ColumnasMenu vis={columnas} onAlternar={alternarColumna} />
         {(busqueda || tipo || estado) && <button className="btn btn-ghost" onClick={() => { setBusqueda(''); setTipo(''); setEstado(''); }}>Limpiar</button>}
       </div>
 
@@ -223,15 +224,30 @@ export default function OficiosDocumental() {
 
       <div className="ofd-cuerpo">
         <div className="card ofd-lista">
+          {tab === 'por_cargo' && !cargando && (
+            <div className="ofd-cola-h">
+              <div><h3>Cola de despacho</h3><p className="ofd-sub">Ordenada por tiempo de espera</p></div>
+              {enCola.length > 0 && (
+                <div className="ofd-pills" role="group" aria-label="Cargo">
+                  <button type="button" className="ofd-pill" aria-pressed={!cargoCola} onClick={() => setCargoCola('')}>Todos <span className="ofd-cuenta">{enCola.reduce((a, c) => a + c.n, 0)}</span></button>
+                  {enCola.map(c => <button key={c.cargo} type="button" className="ofd-pill" aria-pressed={cargoCola === c.cargo} onClick={() => setCargoCola(c.cargo)}>{etiquetaCargo(c.cargo)} <span className="ofd-cuenta">{c.n}</span></button>)}
+                </div>
+              )}
+              {resDespacho.pendientes.masDe48 > 0 && <div className="ofd-banner" role="alert"><span className="ti ti-alert-triangle" /> {resDespacho.pendientes.masDe48} {resDespacho.pendientes.masDe48 === 1 ? 'documento supera' : 'documentos superan'} las 48 horas en tu despacho. Prioriza los de mayor espera.</div>}
+              <div className="ofd-seg" role="group" aria-label="Filtrar la cola">
+                {[['todos', 'Todos'], ['vencidos', 'Vencidos'], ['reenviados', 'Reenviados']].map(([k, t]) => <button key={k} type="button" aria-pressed={modoCola === k} onClick={() => setModoCola(k)}>{t}</button>)}
+              </div>
+            </div>
+          )}
           {cargando ? <p className="ofd-muted ofd-pad">Cargando…</p>
-            : <OficiosTabla items={lista} seleccionadoId={docId} onSelect={abrir} nombreEst={nombreEst} vacio={vacio}
+            : <OficiosTabla items={lista} seleccionadoId={docId} onSelect={abrir} nombreEst={nombreEst} cedulaEst={cedulaEst} columnas={columnas} vacio={vacio} onDecidir={tab === 'por_cargo' ? decidir : undefined}
                 onVer={id => abrir(id, { visor: true })} onRecorrido={id => abrir(id, { pestana: 'recorrido' })}
                 seleccion={tab === 'por_cargo' ? seleccion : undefined} onToggle={alternar} onToggleTodos={alternarTodos} />}
         </div>
         {seleccionado && (
           <aside className="ofd-panel">
             <OficioDetalle doc={seleccionado} nombreEst={nombreEst} ocupado={ocupado} onAccion={onAccion} onCerrar={() => abrir(null)}
-              institucion={institucion} abrirVisor={inicial.visor} pestanaInicial={inicial.pestana} onVisorAbierto={() => setInicial(i => ({ ...i, visor: false }))}
+              institucion={institucion} abrirVisor={inicial.visor} pestanaInicial={inicial.pestana} modoInicial={inicial.accion} relacionados={relacionados(items, seleccionado)} onVisorAbierto={() => setInicial(i => ({ ...i, visor: false }))}
               seguimientos={seguimientosDe(items, seleccionado.id)} origen={items.find(d => d.id === seleccionado.documento_origen_id) || null} onAbrir={abrir} />
           </aside>
         )}
