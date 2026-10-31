@@ -67,5 +67,5 @@ export function resumenHojaRuta(items) {
 
 /** Adapta el documento sanitizado de la familia a lo que espera la hoja imprimible (vista de entrega). */
 export const docParaImpresion = d => ({
-  ...d, created_at: d.emitido, datos_plantilla: { notas: d.contenido || '' }, historial_recorrido: [], entrega: null
+  ...d, created_at: d.emitido, datos_plantilla: { notas: d.contenido || '', documento: d.documento || null }, historial_recorrido: [], entrega: null
 });

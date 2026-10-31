@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { TIPOS_DOCUMENTO } from '../../lib/oficiosDocumental.js';
 import { periodoPorDefecto } from '../../lib/oficiosVista.js';
 import EstudiantePicker from './EstudiantePicker.jsx';
+import { TRIMESTRES, tieneConstructor } from '../../lib/documentoOficio.js';
 
-const VACIO = () => ({ tipo: 'oficio_alerta', titulo: '', asunto: '', estudiante: null, curso: '', paralelo: '', periodo: periodoPorDefecto() });
+const VACIO = () => ({ tipo: 'oficio_alerta', titulo: '', asunto: '', estudiante: null, trimestre: 'T1', curso: '', paralelo: '', periodo: periodoPorDefecto() });
 
 /** Alta de un documento nuevo (crea el borrador; el contenido se redacta en el detalle). */
 export default function OficioNuevoModal({ estudiantes, guardando, onCrear, onCerrar }) {
@@ -35,6 +36,12 @@ export default function OficioNuevoModal({ estudiantes, guardando, onCrear, onCe
               <label className="fl" htmlFor="ofd-est">Estudiante</label>
               <EstudiantePicker id="ofd-est" estudiantes={estudiantes} value={f.estudiante?.id} onChange={elegir} />
             </div>
+            {tieneConstructor(f.tipo) && f.estudiante && (
+              <div className="full"><label className="fl" htmlFor="ofd-trim">Trimestre del informe</label>
+                <select id="ofd-trim" className="fc" value={f.trimestre} onChange={e => set('trimestre', e.target.value)}>
+                  {TRIMESTRES.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+                <small className="ofd-ayuda">La hoja se arma con las notas reales de ese trimestre.</small></div>
+            )}
             <div><label className="fl" htmlFor="ofd-curso">Curso</label>
               <input id="ofd-curso" className="fc" value={f.curso} onChange={e => set('curso', e.target.value)} /></div>
             <div><label className="fl" htmlFor="ofd-par">Paralelo</label>
@@ -45,7 +52,7 @@ export default function OficioNuevoModal({ estudiantes, guardando, onCrear, onCe
         </div>
         <div className="modal-f">
           <button type="button" className="btn btn-secondary" onClick={onCerrar}>Cancelar</button>
-          <button type="submit" className="btn btn-primary" disabled={!valido || guardando}>{guardando ? 'Creando…' : 'Crear borrador'}</button>
+          <button type="submit" className="btn btn-primary" disabled={!valido || guardando}>{guardando ? 'Armando documento…' : 'Crear borrador'}</button>
         </div>
       </form>
     </div>

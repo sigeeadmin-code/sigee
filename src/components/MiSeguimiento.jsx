@@ -4,6 +4,7 @@ import { fetchHojaRutaFamilia } from '../lib/oficiosDocumental.js';
 import { armarLineaTiempo, docParaImpresion, resumenHojaRuta, soloFecha } from '../lib/hojaRutaFamilia.js';
 import { useImpresionOficio } from '../lib/useImpresionOficio.js';
 import OficioImpresion from './oficios/OficioImpresion.jsx';
+import OficioHoja, { HojaAjustada } from './oficios/OficioHoja.jsx';
 
 /**
  * «Mi seguimiento»: hoja de ruta del estudiante para él y su representante (solo lectura).
@@ -70,14 +71,16 @@ export default function MiSeguimiento({ estudianteId, nombreEstudiante, limite =
 
       {abierto && (
         <div className="modal-bg" onClick={e => { if (e.target === e.currentTarget) setAbierto(null); }}>
-          <div className="modal ofd-modal" role="dialog" aria-modal="true" aria-labelledby="ms-t">
+          <div className="modal ofd-visor" role="dialog" aria-modal="true" aria-labelledby="ms-t">
             <div className="modal-h"><h3 id="ms-t">{abierto.tipo_nombre}</h3>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAbierto(null)} aria-label="Cerrar"><span className="ti ti-x" /></button></div>
             <div className="modal-b">
               <p className="ofd-num" style={{ margin: '0 0 6px' }}>{abierto.numero} · {soloFecha(abierto.fecha)}</p>
               <p style={{ fontWeight: 700, margin: '0 0 6px' }}>{abierto.asunto || abierto.titulo}</p>
               {abierto.documento_origen_numero && <p className="ofd-sub">Seguimiento del documento {abierto.documento_origen_numero}</p>}
-              <p className="ofd-texto">{abierto.contenido || 'Sin contenido adicional.'}</p>
+              {abierto.documento
+                ? <HojaAjustada><OficioHoja doc={docParaImpresion(abierto)} institucion={institucion} nombreEstudiante={nombreEstudiante || ''} /></HojaAjustada>
+                : <p className="ofd-texto">{abierto.contenido || 'Sin contenido adicional.'}</p>}
             </div>
             <div className="modal-f">
               <button type="button" className="btn btn-secondary" onClick={() => setAbierto(null)}>Cerrar</button>

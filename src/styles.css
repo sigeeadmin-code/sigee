@@ -533,12 +533,16 @@ button.ofd-kpi:focus-visible,button.ofd-kpi.on{outline:2px solid var(--brand);ou
 .ofd-link:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:3px}
 
 /* Pantalla ancha: el detalle convive con la lista (sin cubrirla) */
-@media (min-width:1280px){
-  .ofd-con-detalle .ofd-cuerpo{grid-template-columns:minmax(0,1fr) 460px}
+@media (min-width:1360px){
+  .ofd-con-detalle .ofd-cuerpo{grid-template-columns:minmax(0,1fr) 400px}
   .ofd-con-detalle .ofd-panel{position:sticky;top:12px;inset:auto;width:auto;z-index:1;box-shadow:var(--sh);border:1px solid var(--line);border-radius:var(--r2);height:calc(100vh - 110px);min-height:420px;overflow:hidden}
   .ofd-con-detalle .ofd-c-despacho,.ofd-con-detalle .ofd-c-fecha{display:none}
+  .ofd-con-detalle .ofd-abrir{max-width:150px}
+  .ofd-con-detalle .ofd-tabla th,.ofd-con-detalle .ofd-tabla td{padding-left:8px;padding-right:8px}
+  .ofd-con-detalle .ofd-num{font-size:11px}
   .ofd-volver{display:none}.ofd-cerrar{display:inline-flex}
 }
+@media (min-width:1600px){.ofd-con-detalle .ofd-cuerpo{grid-template-columns:minmax(0,1fr) 460px}}
 /* Tablet / móvil: lista de tarjetas */
 @media (max-width:900px){
   .ofd-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
@@ -559,7 +563,7 @@ button.ofd-kpi:focus-visible,button.ofd-kpi.on{outline:2px solid var(--brand);ou
   .ofd-cab .btn{width:100%;justify-content:center}
   .ofd-filtros .fc,.ofd-filtros .btn{flex:1 1 100%;width:100%}
   .ofd-panel{width:100%}
-  .ofd-meta{grid-template-columns:1fr}
+  .ofd-meta{grid-template-columns:repeat(2,minmax(0,1fr))}
   .ofd-ruta{flex-direction:column;gap:12px}
   .ofd-paso{flex-direction:row;text-align:left;align-items:center}
   .ofd-paso:not(:last-child)::after{top:30px;left:12px;right:auto;width:2px;height:calc(100% - 6px + 6px);bottom:-18px}
@@ -601,3 +605,28 @@ button.ofd-kpi:focus-visible,button.ofd-kpi.on{outline:2px solid var(--brand);ou
 .dash-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}
 .dash-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:14px;align-items:start}
 @media (max-width:900px){.dash-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.dash-2{grid-template-columns:minmax(0,1fr)}}
+
+/* Visor de documento (pantalla): hoja A4 ajustada al ancho y fondo de mesa de trabajo */
+.ofd-hoja-caja{background:#cbd5e1;border-radius:10px;padding:12px;overflow:hidden}
+.ofd-zoom-btn{margin-bottom:10px}
+.ofd-hoja-scroll{overflow-x:hidden}.ofd-hoja-scroll.ofd-scroll-x{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.ofd-hoja-zoom{display:flex;flex-direction:column;align-items:center;gap:14px}
+.ofd-visor{max-width:min(980px,96vw);width:100%;display:flex;flex-direction:column;max-height:94vh}
+.ofd-visor .modal-b{overflow-y:auto;min-height:0;flex:1}
+.ofd-seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--white)}
+.ofd-seg button{font:inherit;font-size:13px;font-weight:600;padding:7px 14px;border:none;background:none;color:var(--slate);cursor:pointer}
+.ofd-seg button[aria-pressed=true]{background:var(--brand);color:#fff}
+.ofd-seg button:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
+.ofd-anexo-t{font-size:12pt;margin:0 0 8px}
+@media (max-width:600px){.ofd-visor{max-height:100vh;height:100%;border-radius:0}.ofd-visor .modal-h h3{font-size:15px}}
+.ofd-docbox{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid var(--line);border-radius:var(--r);padding:12px;background:var(--page)}
+.ofd-docbox-i{flex:0 0 36px;height:36px;border-radius:8px;background:var(--brandL);color:var(--brandD);display:grid;place-items:center;font-size:18px}
+.ofd-docbox-t{flex:1 1 160px;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:13px}
+.ofd-docbox-t small{color:var(--slate);font-size:12px}
+.ofd-docbox-b{display:flex;gap:8px;flex-wrap:wrap}
+.ofd-c-acc{width:1%;white-space:nowrap}
+.ofd-acc{display:inline-flex;gap:4px}
+.ofd-ico{width:32px;height:32px;display:grid;place-items:center;border:1px solid var(--line);border-radius:8px;background:var(--white);color:var(--slate);cursor:pointer;font-size:16px;padding:0}
+.ofd-ico:hover{color:var(--brandD);border-color:var(--brand);background:var(--brandL)}
+.ofd-ico:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+@media (max-width:900px){.ofd-tabla td.ofd-c-acc{grid-column:1/-1;width:auto}.ofd-tabla td.ofd-c-acc::before{display:none}.ofd-ico{width:40px;height:40px}}

@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { etiquetaCargo, etiquetaTipo } from '../../lib/oficiosDocumental.js';
 import { accionesDisponibles, fmtEspera, fmtFecha, LIMITE_VERSIONES, ultimaObservacion, versionesDe } from '../../lib/oficiosVista.js';
 import { EstadoBadge, MotivoForm, Recorrido, RutaStepper } from './OficioUI.jsx';
+import OficioDocumentoModal from './OficioDocumentoModal.jsx';
+import { notasDe } from '../../lib/documentoOficio.js';
 
 const editable = d => d.soy_emisor && (d.estado === 'borrador' || d.estado === 'observado');
 
@@ -9,23 +11,26 @@ const editable = d => d.soy_emisor && (d.estado === 'borrador' || d.estado === '
  * Detalle de un documento: cabecera, ruta, contenido, recorrido y acciones.
  * Los permisos vienen del servidor (doc.puede_actuar / doc.soy_emisor); aquí solo se muestran.
  */
-export default function OficioDetalle({ doc, nombreEst, ocupado, onAccion, onCerrar, seguimientos = [], origen = null, onAbrir }) {
-  const [edit, setEdit] = useState({ titulo: '', asunto: '', notas: '' });
+export default function OficioDetalle({ doc, nombreEst, ocupado, onAccion, onCerrar, seguimientos = [], origen = null, onAbrir, institucion, abrirVisor = false, pestanaInicial = 'documento', onVisorAbierto }) {
+  const [edit, setEdit] = useState({ titulo: '', asunto: '', notas: '', documento: null });
+  const [visor, setVisor] = useState(null);                    // 'ver' | 'editar' | null
   const [modo, setModo] = useState(null);                       // 'observar' | 'rechazar' | 'entrega' | null
   const [entrega, setEntrega] = useState({ recibidoPor: '', cedula: '', medio: 'presencial' });
   const [pestana, setPestana] = useState('documento');
 
   // Reinicia el formulario al cambiar de documento o de versión (no al refrescar por una acción ajena).
   useEffect(() => {
-    setEdit({ titulo: doc.titulo || '', asunto: doc.asunto || '', notas: doc.datos_plantilla?.notas || '' });
-    setModo(null); setPestana('documento');
+    setEdit({ titulo: doc.titulo || '', asunto: doc.asunto || '', notas: doc.datos_plantilla?.notas || '', documento: doc.datos_plantilla?.documento || null });
+    setModo(null); setPestana(pestanaInicial); setVisor(abrirVisor ? 'ver' : null);
+    if (abrirVisor) onVisorAbierto?.();
   }, [doc.id, doc.version, doc.estado]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const acc = accionesDisponibles(doc);
   const puedeEditar = editable(doc);
   const obs = doc.estado === 'observado' ? ultimaObservacion(doc) : null;
-  const datos = () => ({ titulo: edit.titulo, asunto: edit.asunto, datos_plantilla: { ...(doc.datos_plantilla || {}), notas: edit.notas } });
-  const sinCambios = edit.titulo === (doc.titulo || '') && edit.asunto === (doc.asunto || '') && edit.notas === (doc.datos_plantilla?.notas || '');
+  const datos = () => ({ titulo: edit.titulo, asunto: edit.asunto, datos_plantilla: { ...(doc.datos_plantilla || {}), ...(edit.documento ? { documento: edit.documento, notas: notasDe(edit.documento) } : { notas: edit.notas }) } });
+  const sinCambios = edit.titulo === (doc.titulo || '') && edit.asunto === (doc.asunto || '') && edit.notas === (doc.datos_plantilla?.notas || '')
+    && JSON.stringify(edit.documento) === JSON.stringify(doc.datos_plantilla?.documento || null);
 
   return (
     <section className="ofd-detalle" aria-label="Detalle del documento">
@@ -72,6 +77,16 @@ export default function OficioDetalle({ doc, nombreEst, ocupado, onAccion, onCer
           </div>
         )}
 
+        <div className="ofd-docbox">
+          <span className="ti ti-file-text ofd-docbox-i" aria-hidden="true" />
+          <div className="ofd-docbox-t"><strong>{doc.datos_plantilla?.documento ? 'Documento generado' : 'Contenido del documento'}</strong>
+            <small>{doc.datos_plantilla?.documento ? 'Hoja oficial con notas del estudiante, firmas y recepción.' : 'Documento sin hoja estructurada.'}</small></div>
+          <div className="ofd-docbox-b">
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setVisor('ver')}><span className="ti ti-eye" /> Ver documento</button>
+            {puedeEditar && edit.documento && <button type="button" className="btn btn-primary btn-sm" onClick={() => setVisor('editar')}><span className="ti ti-edit" /> Editar</button>}
+          </div>
+        </div>
+
         <RutaStepper doc={doc} />
 
         <div className="tabs ofd-subtabs" role="tablist">
@@ -86,10 +101,10 @@ export default function OficioDetalle({ doc, nombreEst, ocupado, onAccion, onCer
             {puedeEditar
               ? <input id="ofd-asunto" className="fc" value={edit.asunto} onChange={e => setEdit(x => ({ ...x, asunto: e.target.value }))} maxLength={200} />
               : <p className="ofd-texto">{doc.asunto || '—'}</p>}
-            <label className="fl" htmlFor="ofd-notas">Contenido</label>
-            {puedeEditar
-              ? <textarea id="ofd-notas" className="fc" rows={9} value={edit.notas} onChange={e => setEdit(x => ({ ...x, notas: e.target.value }))} placeholder="Redacta el cuerpo del documento…" />
-              : <p className="ofd-texto">{doc.datos_plantilla?.notas || '—'}</p>}
+            {puedeEditar && !edit.documento && (<>
+              <label className="fl" htmlFor="ofd-notas">Contenido</label>
+              <textarea id="ofd-notas" className="fc" rows={9} value={edit.notas} onChange={e => setEdit(x => ({ ...x, notas: e.target.value }))} placeholder="Redacta el cuerpo del documento…" />
+            </>)}
             {doc.entrega && (
               <p className="ofd-entrega"><span className="ti ti-circle-check" /> Entregado a <strong>{doc.entrega.recibido_por}</strong>
                 {doc.entrega.cedula ? ` (CI ${doc.entrega.cedula})` : ''} · {doc.entrega.medio} · {fmtFecha(doc.entrega.fecha)}</p>
@@ -149,6 +164,11 @@ export default function OficioDetalle({ doc, nombreEst, ocupado, onAccion, onCer
         )}
       </div>
 
+      {visor && (
+        <OficioDocumentoModal doc={visor === 'editar' ? { ...doc, datos_plantilla: { ...doc.datos_plantilla, documento: edit.documento } } : doc} editable={visor === 'editar'}
+          institucion={institucion} nombreEstudiante={nombreEst(doc.estudiante_id)} onCerrar={() => setVisor(null)}
+          onAplicar={h => { setEdit(x => ({ ...x, documento: h })); setVisor(null); }} onImprimir={m => { setVisor(null); onAccion('imprimir', m); }} />
+      )}
       {!modo && (
         <footer className="ofd-acciones">
           {acc.includes('enviar') && <button className="btn btn-primary" disabled={ocupado} onClick={() => onAccion('enviar', datos(), !sinCambios)}>Enviar a ruta</button>}

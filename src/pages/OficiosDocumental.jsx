@@ -14,6 +14,7 @@ import {
 import { filtrarOficios, filtrarTab, fmtDias, fmtEspera, ordenarPorEspera, resumenOficios, seguimientosDe, TABS } from '../lib/oficiosVista.js';
 import { useEstudiantesEmisor } from '../lib/useEstudiantesEmisor.js';
 import { useImpresionOficio } from '../lib/useImpresionOficio.js';
+import { armarDocumentoOficio, tieneConstructor } from '../lib/documentoOficio.js';
 import OficiosTabla from '../components/oficios/OficiosTabla.jsx';
 import OficioDetalle from '../components/oficios/OficioDetalle.jsx';
 import OficioNuevoModal from '../components/oficios/OficioNuevoModal.jsx';
@@ -41,7 +42,8 @@ export default function OficiosDocumental() {
   const { modo: imprimir, imprimir: setImprimir } = useImpresionOficio();
   const [extra, setExtra] = useState(null);
   const [seleccion, setSeleccion] = useState(() => new Set());
-  const [confirmarLote, setConfirmarLote] = useState(false);       // documento abierto por enlace que no está en la lista
+  const [confirmarLote, setConfirmarLote] = useState(false);
+  const [inicial, setInicial] = useState({ visor: false, pestana: 'documento' });       // documento abierto por enlace que no está en la lista
 
   const tabs = useMemo(() => TABS.filter(t => t.id !== 'todos' || VEN_TODO.includes(profile?.rolDb)), [profile?.rolDb]);
 
@@ -84,7 +86,8 @@ export default function OficiosDocumental() {
     fetchOficio(docId).then(setExtra).catch(() => { avisar('No se encontró el documento.', 'err'); abrir(null); });
   }, [docId, cargando]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function abrir(id) {
+  function abrir(id, opciones = {}) {
+    setInicial({ visor: !!opciones.visor, pestana: opciones.pestana || 'documento' });
     const p = new URLSearchParams(params);
     if (id) p.set('doc', id); else p.delete('doc');
     setParams(p, { replace: !!id === !!docId });
@@ -112,10 +115,21 @@ export default function OficiosDocumental() {
     try {
       const doc = await crearBorradorOficio({
         institucionId, tipo: f.tipo, titulo: f.titulo.trim(), estudianteId: f.estudiante?.id || null,
-        curso: f.curso || null, paralelo: f.paralelo || null, periodo: f.periodo || null,
+        curso: f.curso || null, paralelo: f.paralelo || null, periodo: f.periodo || null, asunto: f.titulo.trim(),
         datosPlantilla: { notas: '' }
       });
-      setNuevo(false); setTab('mios'); await cargar(); abrir(doc.id); avisar('Borrador creado. Redacta el contenido y envíalo a ruta.');
+      // Hoja oficial con las notas reales del estudiante (mismos constructores de las fichas de SIGEE)
+      let aviso = 'Borrador creado con su hoja oficial. Revísala y envíala a ruta.';
+      try {
+        const tutorNombre = profile?.rolDb === 'docente' ? `${profile?.apellidos || ''} ${profile?.nombres || ''}`.trim() : '';
+        const est = f.estudiante ? { ...f.estudiante, curso: f.curso || f.estudiante.curso, paralelo: f.paralelo || '' } : { nombre: '', curso: f.curso, paralelo: f.paralelo };
+        const { documento, notas } = await armarDocumentoOficio({
+          tipo: f.tipo, estudiante: est, institucion, trimestre: f.trimestre, numero: doc.numero, titulo: f.titulo.trim(), asunto: f.titulo.trim(), tutorNombre
+        });
+        await guardarBorradorOficio(doc.id, { datos_plantilla: { documento, notas } });
+        if (tieneConstructor(f.tipo) && !f.estudiante) aviso = 'Borrador creado. Elige un estudiante para que la hoja traiga sus notas.';
+      } catch (e) { aviso = 'Borrador creado, pero no se pudo armar la hoja con las notas: ' + (e.message || 'error'); }
+      setNuevo(false); setTab('mios'); await cargar(); abrir(doc.id); avisar(aviso);
     } catch (e) { avisar(e.message || 'No se pudo crear.', 'err'); }
     setOcupado(false);
   }
@@ -211,11 +225,13 @@ export default function OficiosDocumental() {
         <div className="card ofd-lista">
           {cargando ? <p className="ofd-muted ofd-pad">Cargando…</p>
             : <OficiosTabla items={lista} seleccionadoId={docId} onSelect={abrir} nombreEst={nombreEst} vacio={vacio}
+                onVer={id => abrir(id, { visor: true })} onRecorrido={id => abrir(id, { pestana: 'recorrido' })}
                 seleccion={tab === 'por_cargo' ? seleccion : undefined} onToggle={alternar} onToggleTodos={alternarTodos} />}
         </div>
         {seleccionado && (
           <aside className="ofd-panel">
             <OficioDetalle doc={seleccionado} nombreEst={nombreEst} ocupado={ocupado} onAccion={onAccion} onCerrar={() => abrir(null)}
+              institucion={institucion} abrirVisor={inicial.visor} pestanaInicial={inicial.pestana} onVisorAbierto={() => setInicial(i => ({ ...i, visor: false }))}
               seguimientos={seguimientosDe(items, seleccionado.id)} origen={items.find(d => d.id === seleccionado.documento_origen_id) || null} onAbrir={abrir} />
           </aside>
         )}

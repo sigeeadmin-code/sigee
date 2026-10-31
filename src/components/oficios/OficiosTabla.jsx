@@ -7,7 +7,7 @@ import { EsperaTag, EstadoBadge } from './OficioUI.jsx';
  * Lista de documentos. Un solo marcado: tabla en pantallas anchas y tarjetas apiladas en móvil
  * (las celdas llevan data-label y el CSS las convierte; no hay dos versiones de la lista).
  */
-export default function OficiosTabla({ items, seleccionadoId, onSelect, nombreEst, vacio, seleccion, onToggle, onToggleTodos }) {
+export default function OficiosTabla({ items, seleccionadoId, onSelect, nombreEst, vacio, seleccion, onToggle, onToggleTodos, onVer, onRecorrido }) {
   const conLote = !!seleccion;
   const habilitados = items.filter(d => d.puede_actuar);
   const todos = conLote && habilitados.length > 0 && habilitados.every(d => seleccion.has(d.id));
@@ -18,7 +18,7 @@ export default function OficiosTabla({ items, seleccionadoId, onSelect, nombreEs
     <div className="ofd-tabla-wrap">
       <table className="data ofd-tabla">
         <thead>
-          <tr>{conLote && <th className="ofd-c-sel"><input type="checkbox" checked={todos} disabled={!habilitados.length} onChange={() => onToggleTodos(habilitados)} aria-label="Seleccionar todos los pendientes" /></th>}<th>N°</th><th>Documento</th><th>Estudiante</th><th>Estado</th><th className="ofd-c-despacho">Despacho</th><th>En trámite</th><th className="ofd-c-fecha">Actualizado</th></tr>
+          <tr>{conLote && <th className="ofd-c-sel"><input type="checkbox" checked={todos} disabled={!habilitados.length} onChange={() => onToggleTodos(habilitados)} aria-label="Seleccionar todos los pendientes" /></th>}<th>N°</th><th>Documento</th><th>Estudiante</th><th>Estado</th><th className="ofd-c-despacho">Despacho</th><th>En trámite</th><th className="ofd-c-fecha">Actualizado</th><th className="ofd-c-acc">Acciones</th></tr>
         </thead>
         <tbody>
           {items.map(d => {
@@ -49,6 +49,12 @@ export default function OficiosTabla({ items, seleccionadoId, onSelect, nombreEs
                 <td data-label="Despacho" className="ofd-c-despacho">{paso ? etiquetaCargo(paso.cargo) : <span className="ofd-muted">—</span>}</td>
                 <td data-label="En trámite"><EsperaTag doc={d} /></td>
                 <td data-label="Actualizado" className="ofd-fecha ofd-c-fecha">{fmtFecha(d.updated_at)}</td>
+                <td className="ofd-c-acc">
+                  <span className="ofd-acc">
+                    <button type="button" className="ofd-ico" title="Ver documento" aria-label={`Ver documento ${d.numero || ''}`} onClick={() => onVer(d.id)}><span className="ti ti-eye" /></button>
+                    <button type="button" className="ofd-ico" title="Seguir el recorrido" aria-label={`Seguir el recorrido de ${d.numero || 'este documento'}`} onClick={() => onRecorrido(d.id)}><span className="ti ti-route" /></button>
+                  </span>
+                </td>
               </tr>
             );
           })}
