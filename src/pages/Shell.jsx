@@ -123,7 +123,7 @@ export default function Shell() {
           <div className="ava" style={{ width: 32, height: 32 }}>{initials}</div>
         </header>
         <div className="content">
-          <ErrorBoundary reinicio={location.pathname}><Outlet /></ErrorBoundary>
+          <ErrorBoundary reinicio={location.pathname}><React.Suspense fallback={<div className="splash" style={{ minHeight: 200 }}>Cargando…</div>}><Outlet /></React.Suspense></ErrorBoundary>
         </div>
       </main>
       {aviso && (

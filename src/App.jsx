@@ -7,45 +7,63 @@ import ErrorBoundary from './components/ErrorBoundary.jsx';
 import Login from './pages/Login.jsx';
 import Shell from './pages/Shell.jsx';
 import Dashboard from './pages/Dashboard.jsx';
-import Planteles from './pages/Planteles.jsx';
-import Academico from './pages/Academico.jsx';
-import RolesPermisos from './pages/RolesPermisos.jsx';
-import Diagnostico from './pages/Diagnostico.jsx';
-import SoporteTIC from './pages/SoporteTIC.jsx';
-import Docentes from './pages/Docentes.jsx';
-import Estudiantes from './pages/Estudiantes.jsx';
-import Usuarios from './pages/Usuarios.jsx';
-import Tareas from './pages/Tareas.jsx';
-import Asistencia from './pages/Asistencia.jsx';
-import ReportesAsistencia from './pages/ReportesAsistencia.jsx';
-import Calificaciones from './pages/Calificaciones.jsx';
-import Aulas from './pages/Aulas.jsx';
-import Horario from './pages/Horario.jsx';
-import Notificaciones from './pages/Notificaciones.jsx';
-import MiPlantel from './pages/MiPlantel.jsx';
-import Configuracion from './pages/Configuracion.jsx';
-import Calendario from './pages/Calendario.jsx';
-import Justificaciones from './pages/Justificaciones.jsx';
-import MiAsistencia from './pages/MiAsistencia.jsx';
-import Boletas from './pages/Boletas.jsx';
-import ModulosPlantel from './pages/ModulosPlantel.jsx';
-import BaseDocentesPlantel from './pages/BaseDocentesPlantel.jsx';
-import MiPerfil from './pages/MiPerfil.jsx';
-import MisEstudiantes from './pages/MisEstudiantes.jsx';
-import Encadenamiento from './pages/Encadenamiento.jsx';
-import Licencias from './pages/Licencias.jsx';
-import Inasistencias from './pages/Inasistencias.jsx';
-import PromocionMatriculas from './pages/PromocionMatriculas.jsx';
-import ReportesMatriculas from './pages/ReportesMatriculas.jsx';
-import Egresados from './pages/Egresados.jsx';
-import BasesCentrales from './pages/BasesCentrales.jsx';
-import ContenidoSitio from './pages/ContenidoSitio.jsx';
-import Financiero from './pages/Financiero.jsx';
-import AnalisisAsistencia from './pages/AnalisisAsistencia.jsx';
-import AnalisisCalificaciones from './pages/AnalisisCalificaciones.jsx';
-import CursoTutor from './pages/CursoTutor.jsx';
-import EstadisticasAMIE from './pages/EstadisticasAMIE.jsx';
-import OficiosDocumental from './pages/OficiosDocumental.jsx';
+// Carga por pantalla: cada página se descarga solo cuando se entra a ella.
+// Si el archivo ya no existe (hubo un despliegue nuevo), se recarga una sola vez para tomar la versión nueva.
+function cargar(importar) {
+  return React.lazy(() =>
+    importar().catch((err) => {
+      const clave = 'sigee:recarga-chunk';
+      try {
+        if (!sessionStorage.getItem(clave)) {
+          sessionStorage.setItem(clave, '1');
+          window.location.reload();
+          return new Promise(() => {});
+        }
+        sessionStorage.removeItem(clave);
+      } catch { /* sin sessionStorage */ }
+      throw err;
+    })
+  );
+}
+const Planteles = cargar(() => import('./pages/Planteles.jsx'));
+const Academico = cargar(() => import('./pages/Academico.jsx'));
+const RolesPermisos = cargar(() => import('./pages/RolesPermisos.jsx'));
+const Diagnostico = cargar(() => import('./pages/Diagnostico.jsx'));
+const SoporteTIC = cargar(() => import('./pages/SoporteTIC.jsx'));
+const Docentes = cargar(() => import('./pages/Docentes.jsx'));
+const Estudiantes = cargar(() => import('./pages/Estudiantes.jsx'));
+const Usuarios = cargar(() => import('./pages/Usuarios.jsx'));
+const Tareas = cargar(() => import('./pages/Tareas.jsx'));
+const Asistencia = cargar(() => import('./pages/Asistencia.jsx'));
+const ReportesAsistencia = cargar(() => import('./pages/ReportesAsistencia.jsx'));
+const Calificaciones = cargar(() => import('./pages/Calificaciones.jsx'));
+const Aulas = cargar(() => import('./pages/Aulas.jsx'));
+const Horario = cargar(() => import('./pages/Horario.jsx'));
+const Notificaciones = cargar(() => import('./pages/Notificaciones.jsx'));
+const MiPlantel = cargar(() => import('./pages/MiPlantel.jsx'));
+const Configuracion = cargar(() => import('./pages/Configuracion.jsx'));
+const Calendario = cargar(() => import('./pages/Calendario.jsx'));
+const Justificaciones = cargar(() => import('./pages/Justificaciones.jsx'));
+const MiAsistencia = cargar(() => import('./pages/MiAsistencia.jsx'));
+const Boletas = cargar(() => import('./pages/Boletas.jsx'));
+const ModulosPlantel = cargar(() => import('./pages/ModulosPlantel.jsx'));
+const BaseDocentesPlantel = cargar(() => import('./pages/BaseDocentesPlantel.jsx'));
+const MiPerfil = cargar(() => import('./pages/MiPerfil.jsx'));
+const MisEstudiantes = cargar(() => import('./pages/MisEstudiantes.jsx'));
+const Encadenamiento = cargar(() => import('./pages/Encadenamiento.jsx'));
+const Licencias = cargar(() => import('./pages/Licencias.jsx'));
+const Inasistencias = cargar(() => import('./pages/Inasistencias.jsx'));
+const PromocionMatriculas = cargar(() => import('./pages/PromocionMatriculas.jsx'));
+const ReportesMatriculas = cargar(() => import('./pages/ReportesMatriculas.jsx'));
+const Egresados = cargar(() => import('./pages/Egresados.jsx'));
+const BasesCentrales = cargar(() => import('./pages/BasesCentrales.jsx'));
+const ContenidoSitio = cargar(() => import('./pages/ContenidoSitio.jsx'));
+const Financiero = cargar(() => import('./pages/Financiero.jsx'));
+const AnalisisAsistencia = cargar(() => import('./pages/AnalisisAsistencia.jsx'));
+const AnalisisCalificaciones = cargar(() => import('./pages/AnalisisCalificaciones.jsx'));
+const CursoTutor = cargar(() => import('./pages/CursoTutor.jsx'));
+const EstadisticasAMIE = cargar(() => import('./pages/EstadisticasAMIE.jsx'));
+const OficiosDocumental = cargar(() => import('./pages/OficiosDocumental.jsx'));
 import Placeholder from './pages/Placeholder.jsx';
 function AccesoDenegado() {
   return (

@@ -1,0 +1,31 @@
+-- SIGEE · Índices sobre claves foráneas (1 nov 2026) — ya aplicado en producción (migración indices_claves_foraneas_rendimiento)
+-- Solo agrega índices; no cambia datos ni permisos. Reversible con DROP INDEX. Se omiten columnas de auditoría (registrado_por, created_by...).
+create index if not exists idx_asistencia_docente_materia on public.asistencia (docente_materia_id);
+create index if not exists idx_calificaciones_docente_materia on public.calificaciones (docente_materia_id);
+create index if not exists idx_calif_mejoras_docente_materia on public.calificaciones_mejoras (docente_materia_id);
+create index if not exists idx_config_eval_paralelo on public.config_evaluacion (paralelo_id);
+create index if not exists idx_config_eval_docente_materia on public.config_evaluacion (docente_materia_id);
+create index if not exists idx_docente_materia_paralelo on public.docente_materia (paralelo_id);
+create index if not exists idx_docente_materia_periodo on public.docente_materia (periodo_id);
+create index if not exists idx_grados_institucion on public.grados (institucion_id);
+create index if not exists idx_materias_institucion on public.materias (institucion_id);
+create index if not exists idx_matriculas_grado on public.matriculas (grado_id);
+create index if not exists idx_matriculas_periodo on public.matriculas (periodo_id);
+create index if not exists idx_periodos_lectivos_institucion on public.periodos_lectivos (institucion_id);
+create index if not exists idx_paralelos_tutor_docente on public.paralelos (tutor_docente_id);
+create index if not exists idx_rep_est_estudiante on public.representantes_estudiantes (estudiante_id);
+create index if not exists idx_estudiantes_profile on public.estudiantes (profile_id);
+create index if not exists idx_representantes_profile on public.representantes (profile_id);
+create index if not exists idx_administrativos_profile on public.administrativos (profile_id);
+create index if not exists idx_calendario_periodo on public.calendario_eventos (periodo_id);
+create index if not exists idx_calendario_paralelo on public.calendario_eventos (paralelo_id);
+create index if not exists idx_tareas_materia on public.tareas (materia_id);
+create index if not exists idx_tareas_docente on public.tareas (docente_id);
+create index if not exists idx_tareas_periodo on public.tareas (periodo_id);
+create index if not exists idx_licencias_paralelo_grado on public.licencias_paralelo (grado_id);
+create index if not exists idx_licencias_paralelo_paralelo on public.licencias_paralelo (paralelo_id);
+create index if not exists idx_avisos_just_estudiante on public.avisos_justificacion (estudiante_id);
+create index if not exists idx_avisos_just_institucion on public.avisos_justificacion (institucion_id);
+create index if not exists idx_alertas_seg_docente_materia on public.alertas_seguimiento (docente_materia_id);
+create index if not exists idx_alertas_seg_institucion on public.alertas_seguimiento (institucion_id);
+create index if not exists idx_fichas_control_paralelo on public.fichas_control (paralelo_id);
