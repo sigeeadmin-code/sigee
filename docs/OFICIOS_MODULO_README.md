@@ -80,3 +80,8 @@ borrador → en_ruta ⇄ observado → aprobado_final → entregado → archivad
 - **Supabase** (pvwsdohhydeqmruopkfc): migraciones aplicadas `oficios_documental_tablas`, `oficios_documental_rpcs`, `oficios_ajustes_v1_1`, `oficios_familia_hoja_de_ruta`, `oficios_numero_al_crear_y_documento_familia` y `oficios_cerrar_funciones_auxiliares`. Las 46 funciones RPC que llama el código existen.
 - **Vercel** (equipo sigee): producción en el commit de `main` más reciente; alias `sigee-sigee.vercel.app` y `sigee-blush.vercel.app`.
 - El backend de Railway (`server/`) no cambió con este módulo.
+
+## Revisión de seguridad (1 nov 2026)
+- Soporte TIC: `tic_cerrar_sesion`, `tic_iniciar_sesion`, `tic_latido` y `tic_reportar_denegado` ya no son ejecutables sin sesión; `tic_login_fallido` sigue abierta (se llama antes de entrar) pero con tope global de 300 eventos por minuto.
+- Las 16 funciones del módulo financiero y utilitarias quedaron con `search_path` fijo. Sin SQL pendiente de aplicar: todo lo de `supabase/sql` ya existe en la base.
+- Pendiente fuera del código: activar la protección de contraseñas filtradas (Auth, panel de Supabase) y mover `pg_net` fuera del esquema público.
