@@ -75,3 +75,8 @@ borrador → en_ruta ⇄ observado → aprobado_final → entregado → archivad
 - **Detalle** como panel lateral fijo (pantalla completa en celular), con indicadores del trámite y documentos relacionados.
 - **Familia**: `oficios_hoja_ruta_familia` ahora devuelve también el documento oficial aprobado.
 - **Base de datos** (migraciones ya aplicadas en Supabase): `oficios_numero_al_crear_y_documento_familia` (el número se asigna al crear el borrador).
+
+## Estado de despliegue (1 nov 2026)
+- **Supabase** (pvwsdohhydeqmruopkfc): migraciones aplicadas `oficios_documental_tablas`, `oficios_documental_rpcs`, `oficios_ajustes_v1_1`, `oficios_familia_hoja_de_ruta`, `oficios_numero_al_crear_y_documento_familia` y `oficios_cerrar_funciones_auxiliares`. Las 46 funciones RPC que llama el código existen.
+- **Vercel** (equipo sigee): producción en el commit de `main` más reciente; alias `sigee-sigee.vercel.app` y `sigee-blush.vercel.app`.
+- El backend de Railway (`server/`) no cambió con este módulo.
