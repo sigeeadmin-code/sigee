@@ -40,6 +40,10 @@ export default function Justificaciones() {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({ estudiante_id: '', fecha: '', motivo: '' });
   const [saving, setSaving] = useState(false);
+  const [filtro, setFiltro] = useState('todas');
+  const [busqueda, setBusqueda] = useState('');
+  const [detalle, setDetalle] = useState(null);
+  const esFamilia = ['estudiante', 'padre'].includes(profile.rolDb);
 
   const cargar = useCallback(async () => {
     if (!institucionId) return;
@@ -110,6 +114,149 @@ export default function Justificaciones() {
 
   if (loading) return <p style={{ fontSize: 13, color: 'var(--slate)' }}>Cargando…</p>;
 
+  const modalCrear = (
+modalOpen && (
+        <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget) setModalOpen(false); }}>
+          <form className="modal" onSubmit={crear} style={{ maxWidth: 460 }}>
+            <div className="modal-h"><h3>Nueva justificación</h3></div>
+            <div className="modal-b">
+              <div className="form-grid">
+                <div className="full">
+                  <label className="fl">Estudiante</label>
+                  <select className="fc" value={form.estudiante_id} onChange={e => setForm(f => ({ ...f, estudiante_id: e.target.value }))}>
+                    {estudiantes.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="fl">Fecha de la falta</label>
+                  <input className="fc" type="date" value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} />
+                </div>
+                <div className="full">
+                  <label className="fl">Motivo</label>
+                  <textarea className="fc" rows={3} value={form.motivo} onChange={e => setForm(f => ({ ...f, motivo: e.target.value }))} />
+                </div>
+              </div>
+            </div>
+            <div className="modal-f">
+              <button type="button" className="btn btn-secondary" onClick={() => setModalOpen(false)}>Cancelar</button>
+              <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Guardando…' : 'Registrar'}</button>
+            </div>
+          </form>
+        </div>
+      )
+  );
+  const toastEl = (toast && <div className={'toast ' + (toast.tipo === 'ok' ? 'ok' : 'err')}>{toast.msg}</div>);
+
+  if (esFamilia) {
+    const norm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const lista = itemsVisibles;
+    const cuenta = est => lista.filter(j => j.estado === est).length;
+    const q = norm(busqueda);
+    const visibles = lista
+      .filter(j => filtro === 'todas' || j.estado === filtro)
+      .filter(j => !q || norm(j.motivo).includes(q) || norm(fmt(j.fecha)).includes(q) || String(j.fecha).includes(q) || norm(nombreEst(j.estudiante_id)).includes(q));
+    const dia = f => new Date(String(f).slice(0, 10) + 'T00:00:00');
+    const iconoMotivo = m => {
+      const t = norm(m);
+      if (/medic|enferm|salud|doctor|hospital|cita/.test(t)) return 'ti-stethoscope';
+      if (/famil|fallec|luto|calamidad/.test(t)) return 'ti-users';
+      if (/lluvia|clima|inunda|via|transito|transporte|bus/.test(t)) return 'ti-cloud-rain';
+      if (/olimp|concurso|torneo|evento|deport|academ/.test(t)) return 'ti-trophy';
+      if (/viaje/.test(t)) return 'ti-plane';
+      return 'ti-file-text';
+    };
+    const etiqueta = { pendiente: 'Pendiente', aprobada: 'Aprobada', rechazada: 'Rechazada' };
+    const tarjeta = (clave, clase, icono, titulo, estado) => (
+      <button type="button" className={`fj-stat ${clase}${filtro === estado ? ' on' : ''}`} onClick={() => setFiltro(f => (f === estado ? 'todas' : estado))}>
+        <span className="ic"><span className={`ti ${icono}`} /></span>
+        <span><div className="lb">{titulo}</div><div className="nu">{cuenta(estado)}</div><div className="pt">{etiqueta[estado]}</div></span>
+      </button>
+    );
+    return (
+      <div>
+        <div className="fj-top">
+          <div>
+            <h2>{profile.rolDb === 'padre' ? 'Justificaciones' : 'Mis justificaciones'}</h2>
+            <div style={{ fontSize: 14, color: 'var(--slate)' }}>Consulta y gestiona las justificaciones de inasistencia{profile.rolDb === 'padre' ? ' de tus representados' : ''}.</div>
+          </div>
+          <button className="btn btn-primary" onClick={abrirCrear}><span className="ti ti-plus" /> Nueva justificación</button>
+        </div>
+
+        <div className="fj-stats">
+          {tarjeta('p', 'pen', 'ti-clock', 'Pendientes', 'pendiente')}
+          {tarjeta('a', 'apr', 'ti-circle-check', 'Aprobadas', 'aprobada')}
+          {tarjeta('r', 'rec', 'ti-circle-x', 'Rechazadas', 'rechazada')}
+        </div>
+
+        <div className="fj-barra">
+          {[['todas', 'Todas'], ['pendiente', 'Pendientes'], ['aprobada', 'Aprobadas'], ['rechazada', 'Rechazadas']].map(([k, t]) => (
+            <button key={k} type="button" className={'fj-filtro' + (filtro === k ? ' on' : '')} onClick={() => setFiltro(k)}>{t}</button>
+          ))}
+          <label className="fj-buscar"><span className="ti ti-search" style={{ color: 'var(--slate)' }} /><input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar por fecha o motivo…" /></label>
+        </div>
+
+        {visibles.length === 0 ? (
+          <div className="empty"><span className="ti ti-file-check" /><p>{lista.length ? 'No hay justificaciones con ese filtro.' : 'Aún no tienes justificaciones registradas.'}</p></div>
+        ) : visibles.map(j => {
+          const d = dia(j.fecha);
+          return (
+            <div className="fj-fila" key={j.id}>
+              <div className="fj-fecha">
+                <span className="fj-ico f"><span className="ti ti-calendar" /></span>
+                <div>
+                  <div className="fj-pq">Fecha de inasistencia</div>
+                  <div className="fj-gr">{d.toLocaleDateString('es-EC', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                  <div className="fj-pq" style={{ textTransform: 'capitalize' }}>{d.toLocaleDateString('es-EC', { weekday: 'long' })}{profile.rolDb === 'padre' ? ` · ${nombreEst(j.estudiante_id)}` : ''}</div>
+                </div>
+              </div>
+              <div className="fj-motivo">
+                <span className="fj-ico"><span className={`ti ${iconoMotivo(j.motivo)}`} /></span>
+                <div style={{ minWidth: 0 }}>
+                  <div className="fj-pq">Motivo</div>
+                  <div className="fj-gr" style={{ fontSize: 15, wordBreak: 'break-word' }}>{j.motivo}</div>
+                  {j.archivo_url && <div className="fj-pq">Documento adjunto</div>}
+                </div>
+              </div>
+              <div className="fj-der">
+                <span className={'badge ' + (j.estado === 'pendiente' ? 'b-warn' : j.estado === 'aprobada' ? 'b-ok' : 'b-err')}>
+                  <span className={'ti ' + (j.estado === 'pendiente' ? 'ti-clock' : j.estado === 'aprobada' ? 'ti-circle-check' : 'ti-circle-x')} /> {etiqueta[j.estado] || j.estado}
+                </span>
+                <button className="btn btn-secondary btn-sm" onClick={() => setDetalle(j)}>Ver detalles <span className="ti ti-chevron-right" /></button>
+              </div>
+            </div>
+          );
+        })}
+
+        {cuenta('pendiente') === 0 && lista.length > 0 && (
+          <div className="fj-pie"><span className="ti ti-sparkles" /><span>No tienes justificaciones pendientes. Un registro de asistencia al día refleja compromiso y responsabilidad.</span></div>
+        )}
+
+        {detalle && (
+          <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget) setDetalle(null); }}>
+            <div className="modal" style={{ maxWidth: 480 }}>
+              <div className="modal-h"><h3>Detalle de la justificación</h3></div>
+              <div className="modal-b">
+                <div className="form-grid">
+                  <div className="full"><div className="fj-pq">Estudiante</div><strong>{nombreEst(detalle.estudiante_id)}</strong></div>
+                  <div><div className="fj-pq">Fecha de la falta</div><strong>{dia(detalle.fecha).toLocaleDateString('es-EC', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</strong></div>
+                  <div><div className="fj-pq">Estado</div><span className={'badge ' + (detalle.estado === 'pendiente' ? 'b-warn' : detalle.estado === 'aprobada' ? 'b-ok' : 'b-err')}>{etiqueta[detalle.estado] || detalle.estado}</span></div>
+                  <div className="full"><div className="fj-pq">Motivo</div>{detalle.motivo}</div>
+                  {detalle.archivo_url && <div className="full"><a className="btn btn-secondary btn-sm" href={detalle.archivo_url} target="_blank" rel="noopener noreferrer"><span className="ti ti-paperclip" /> Ver documento adjunto</a></div>}
+                  {detalle.estado === 'rechazada' && detalle.decision_motivo && <div className="full"><div className="fj-pq">Motivo del rechazo</div>{detalle.decision_motivo}</div>}
+                  {detalle.estado === 'pendiente' && <div className="full fj-pq">Esperando la revisión del docente tutor o del inspector.</div>}
+                  {detalle.revisado_at && <div className="full fj-pq">Revisada el {new Date(detalle.revisado_at).toLocaleDateString('es-EC', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Guayaquil' })}</div>}
+                </div>
+              </div>
+              <div className="modal-f"><button type="button" className="btn btn-secondary" onClick={() => setDetalle(null)}>Cerrar</button></div>
+            </div>
+          </div>
+        )}
+        {modalCrear}
+        {toastEl}
+      </div>
+    );
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
@@ -152,37 +299,9 @@ export default function Justificaciones() {
         </div></div>
       )}
 
-      {modalOpen && (
-        <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget) setModalOpen(false); }}>
-          <form className="modal" onSubmit={crear} style={{ maxWidth: 460 }}>
-            <div className="modal-h"><h3>Nueva justificación</h3></div>
-            <div className="modal-b">
-              <div className="form-grid">
-                <div className="full">
-                  <label className="fl">Estudiante</label>
-                  <select className="fc" value={form.estudiante_id} onChange={e => setForm(f => ({ ...f, estudiante_id: e.target.value }))}>
-                    {estudiantes.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="fl">Fecha de la falta</label>
-                  <input className="fc" type="date" value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} />
-                </div>
-                <div className="full">
-                  <label className="fl">Motivo</label>
-                  <textarea className="fc" rows={3} value={form.motivo} onChange={e => setForm(f => ({ ...f, motivo: e.target.value }))} />
-                </div>
-              </div>
-            </div>
-            <div className="modal-f">
-              <button type="button" className="btn btn-secondary" onClick={() => setModalOpen(false)}>Cancelar</button>
-              <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Guardando…' : 'Registrar'}</button>
-            </div>
-          </form>
-        </div>
-      )}
+      {modalCrear}
 
-      {toast && <div className={'toast ' + (toast.tipo === 'ok' ? 'ok' : 'err')}>{toast.msg}</div>}
+      {toastEl}
     </div>
   );
 }
