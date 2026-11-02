@@ -156,7 +156,8 @@ export const NAV_BY_ROL = {
   alumno: [
     { cat: 'Principal', items: [
       { to: '/', label: 'Inicio', icon: 'ti ti-layout-dashboard' },
-      { to: '/comunicados', label: 'Comunicados', icon: 'ti ti-speakerphone' }
+      { to: '/comunicados', label: 'Comunicados', icon: 'ti ti-speakerphone' },
+      { to: '/mi-ficha', label: 'Mi perfil', icon: 'ti ti-user-circle' }
     ]},
     { cat: 'Académico', items: [
       { to: '/horario', label: 'Horario', icon: 'ti ti-clock' },
@@ -172,7 +173,8 @@ export const NAV_BY_ROL = {
   padre: [
     { cat: 'Principal', items: [
       { to: '/', label: 'Inicio', icon: 'ti ti-layout-dashboard' },
-      { to: '/comunicados', label: 'Comunicados', icon: 'ti ti-speakerphone' }
+      { to: '/comunicados', label: 'Comunicados', icon: 'ti ti-speakerphone' },
+      { to: '/mi-ficha', label: 'Mi perfil', icon: 'ti ti-user-circle' }
     ]},
     { cat: 'Académico', items: [
       { to: '/horario', label: 'Horario', icon: 'ti ti-clock' },
