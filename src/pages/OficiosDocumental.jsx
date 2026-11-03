@@ -14,13 +14,11 @@ import {
 import { cargaPorEstado, cargosEnCola, filtrarCola, filtrarOficios, filtrarTab, ordenarPorEspera, relacionados, resumenDespacho, resumenEmisor, seguimientosDe, TABS } from '../lib/oficiosVista.js';
 import { useEstudiantesEmisor } from '../lib/useEstudiantesEmisor.js';
 import { useImpresionOficio } from '../lib/useImpresionOficio.js';
-import { armarDocumentoOficio, tieneConstructor } from '../lib/documentoOficio.js';
 import { TableroDespacho, TableroEmisor, TableroTodos } from '../components/oficios/OficiosTableros.jsx';
 import { ColumnasMenu, useColumnas } from '../components/oficios/OficiosTabla.jsx';
 import { etiquetaCargo } from '../lib/oficiosDocumental.js';
 import OficiosTabla from '../components/oficios/OficiosTabla.jsx';
 import OficioDetalle from '../components/oficios/OficioDetalle.jsx';
-import OficioNuevoModal from '../components/oficios/OficioNuevoModal.jsx';
 import OficioImpresion from '../components/oficios/OficioImpresion.jsx';
 
 const VEN_TODO = ['admin_plantel', 'secretario', 'inspector_general', 'supervisor_plantel', 'supervisor_general', 'administrativo', 'contador_plantel', 'super_admin'];
@@ -41,7 +39,6 @@ export default function OficiosDocumental() {
   const [estado, setEstado] = useState('');
   const [ocupado, setOcupado] = useState(false);
   const [toast, setToast] = useState(null);
-  const [nuevo, setNuevo] = useState(false);
   const { modo: imprimir, imprimir: setImprimir } = useImpresionOficio();
   const [extra, setExtra] = useState(null);
   const [seleccion, setSeleccion] = useState(() => new Set());
@@ -125,30 +122,6 @@ export default function OficiosDocumental() {
     if (fallos.length) avisar(`${ok} aprobados, ${fallos.length} no se pudieron aprobar: ${fallos[0]}`, 'warn'); else avisar(`${ok} documento(s) aprobados.`);
   }
 
-  async function onCrear(f) {
-    setOcupado(true);
-    try {
-      const doc = await crearBorradorOficio({
-        institucionId, tipo: f.tipo, titulo: f.titulo.trim(), estudianteId: f.estudiante?.id || null,
-        curso: f.curso || null, paralelo: f.paralelo || null, periodo: f.periodo || null, asunto: f.titulo.trim(),
-        datosPlantilla: { notas: '' }
-      });
-      // Hoja oficial con las notas reales del estudiante (mismos constructores de las fichas de SIGEE)
-      let aviso = 'Borrador creado con su hoja oficial. Revísala y envíala a ruta.';
-      try {
-        const tutorNombre = profile?.rolDb === 'docente' ? `${profile?.apellidos || ''} ${profile?.nombres || ''}`.trim() : '';
-        const est = f.estudiante ? { ...f.estudiante, curso: f.curso || f.estudiante.curso, paralelo: f.paralelo || '' } : { nombre: '', curso: f.curso, paralelo: f.paralelo };
-        const { documento, notas } = await armarDocumentoOficio({
-          tipo: f.tipo, estudiante: est, institucion, trimestre: f.trimestre, numero: doc.numero, titulo: f.titulo.trim(), asunto: f.titulo.trim(), tutorNombre
-        });
-        await guardarBorradorOficio(doc.id, { datos_plantilla: { documento, notas } });
-        if (tieneConstructor(f.tipo) && !f.estudiante) aviso = 'Borrador creado. Elige un estudiante para que la hoja traiga sus notas.';
-      } catch (e) { aviso = 'Borrador creado, pero no se pudo armar la hoja con las notas: ' + (e.message || 'error'); }
-      setNuevo(false); setTab('mios'); await cargar(); abrir(doc.id); avisar(aviso);
-    } catch (e) { avisar(e.message || 'No se pudo crear.', 'err'); }
-    setOcupado(false);
-  }
-
   function onAccion(nombre, a, b) {
     const d = seleccionado; if (!d) return undefined;
     switch (nombre) {
@@ -188,7 +161,6 @@ export default function OficiosDocumental() {
           <h2>Oficios y tráfico documental</h2>
           <p className="ofd-sub">Un caso, un documento, un PDF por versión de contenido.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setNuevo(true)}><span className="ti ti-plus" /> Nuevo documento</button>
       </div>
 
       {!cargando && tab === 'mios' && <TableroEmisor r={resEmisor} onAbrir={id => abrir(id)} onEstado={e => setEstado(estado === e ? '' : e)} />}
@@ -270,7 +242,6 @@ export default function OficiosDocumental() {
           </div>
         </div>
       )}
-      {nuevo && <OficioNuevoModal estudiantes={estudiantes} guardando={ocupado} onCrear={onCrear} onCerrar={() => setNuevo(false)} />}
       {imprimir && seleccionado && <OficioImpresion doc={seleccionado} modo={imprimir} nombreEstudiante={nombreEst(seleccionado.estudiante_id)} institucion={institucion} />}
       {toast && <div className={'toast ' + toast.tipo} role="status">{toast.msg}</div>}
     </div>
