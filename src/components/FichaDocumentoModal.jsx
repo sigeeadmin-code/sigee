@@ -1,11 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { useSession } from '../lib/SessionContext.jsx';
 import { fetchDetalleEstudianteCalificaciones, fetchRepresentanteDe, fetchPeriodoActivoNombre, guardarFichaControl } from '../lib/data.js';
 import { parcialDesdeActividades } from '../lib/rendimiento.js';
 import { construirDocumento, TIPOS_FICHA, OPCIONES_FICHA } from '../lib/fichasRendimiento.js';
 import DocumentoEditable from './DocumentoEditable.jsx';
 import { usarMargenesA4 } from '../lib/impresion.js';
+import { enviarFichaATramite } from '../lib/oficiosDocumental.js';
+import { TIPO_TRAMITE_DE_FICHA, aplicarNumeroTramite } from '../lib/numeroTramite.js';
+
+const ROLES_TRAMITE = ['docente', 'inspector_general', 'admin_plantel', 'secretario', 'supervisor_plantel', 'supervisor_general', 'super_admin'];
+const ETIQUETA_TRAMITE = { borrador: 'borrador en Oficios', en_ruta: 'en ruta', observado: 'observado', aprobado_final: 'aprobado', entregado: 'entregado', archivado: 'archivado' };
 
 const CLAVE = 'sigee_ficha_opciones_';
 const ESTADO_TXT = { borrador: ['Borrador', '#64748b'], impresa: ['Impresa', '#0369a1'], revisada: ['Revisada por la autoridad', '#15803d'], observada: ['Observada por la autoridad', '#b91c1c'] };
@@ -19,6 +25,9 @@ const hoyISO = () => new Date().toISOString().slice(0, 10);
  */
 export default function FichaDocumentoModal({ estudiante, institucion, trimestre, tipoInicial = 'oficio_rendimiento', tipos = Object.keys(TIPOS_FICHA), registro = null, asistencia = null, periodoAsistencia = '', tutorNombreDefault = '', onClose, onGuardado }) {
   const { profile } = useSession();
+  const navegar = useNavigate();
+  const [tramite, setTramite] = useState(null);       // { id, numero, estado } del trámite en Oficios
+  const [enviando, setEnviando] = useState(false);
   const idInst = institucion?.id || '';
   const [tipo, setTipo] = useState(registro?.tipo || tipoInicial);
   const [base, setBase] = useState(null);          // { materias, representante, periodoLectivo }
@@ -84,6 +93,22 @@ export default function FichaDocumentoModal({ estudiante, institucion, trimestre
   useEffect(() => { docRef.current = doc; }, [doc]);
 
   async function imprimir() { if (await guardar(true)) setImprimiendo(true); }
+
+  /** Lleva el documento al módulo Oficios (fuente de verdad del seguimiento). Un caso = un trámite. */
+  async function aTramite(enviar) {
+    if (enviar && !window.confirm('El documento pasará a la ruta de aprobación (Inspector, Rector, etc.) y quedará registrado en Oficios. ¿Enviar a trámite?')) return;
+    setEnviando(true); setError(''); setMsg('');
+    try {
+      if (!(await guardar(false))) return;             // mantiene también el control de fichas de la institución
+      const actual = docRef.current ?? doc;
+      const fila = await enviarFichaATramite({ institucionId: idInst, tipoFicha: tipo, trimestre, estudiante, documento: actual, periodo: base?.periodoLectivo || '', enviar });
+      setTramite({ id: fila.id, numero: fila.numero, estado: fila.estado });
+      setDocs(d => ({ ...d, [tipo]: aplicarNumeroTramite(actual, fila.numero) }));   // la hoja del editor lleva el número oficial
+      setMsg(enviar ? `Enviado a trámite · N.° ${fila.numero}. Las autoridades lo verán en su cola de despacho.` : `Guardado en Oficios como borrador · N.° ${fila.numero}.`);
+    } catch (e) { setError(e.message || 'No se pudo registrar en Oficios.'); }
+    finally { setEnviando(false); }
+  }
+  const puedeTramite = ROLES_TRAMITE.includes(profile?.rolDb) && !!TIPO_TRAMITE_DE_FICHA[tipo];
   useEffect(() => {
     if (!imprimiendo) return undefined;
     document.body.classList.add('imprimiendo-oficio');
@@ -106,6 +131,9 @@ export default function FichaDocumentoModal({ estudiante, institucion, trimestre
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             {est && <span style={{ background: est[1] + '1a', color: est[1], border: `1px solid ${est[1]}44`, borderRadius: 999, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>{est[0]}</span>}
             <button className="btn btn-secondary btn-sm" onClick={() => guardar(false)} disabled={!doc || guardando}>{guardando ? 'Guardando…' : '💾 Guardar borrador'}</button>
+            {puedeTramite && <button className="btn btn-secondary btn-sm" onClick={() => aTramite(false)} disabled={!doc || guardando || enviando} title="Crea el documento en Oficios (Bandeja del emisor) sin enviarlo a la ruta">📥 Guardar en Oficios</button>}
+            {puedeTramite && <button className="btn btn-success btn-sm" onClick={() => aTramite(true)} disabled={!doc || guardando || enviando} title="Registra el documento en Oficios y lo envía a la ruta de aprobación">{enviando ? 'Enviando…' : '📨 Enviar a trámite'}</button>}
+            {tramite && <button className="btn btn-ghost btn-sm" onClick={() => { onClose(); navegar(`/oficios?doc=${tramite.id}`); }}>Ver en Oficios · {tramite.numero} ({ETIQUETA_TRAMITE[tramite.estado] || tramite.estado})</button>}
             <button className="btn btn-primary btn-sm" onClick={imprimir} disabled={!doc || guardando}>🖨️ Imprimir</button>
             <button className="btn btn-ghost btn-sm" onClick={onClose}>✕ Cerrar</button>
           </div>

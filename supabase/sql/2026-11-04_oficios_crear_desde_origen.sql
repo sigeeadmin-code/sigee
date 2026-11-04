@@ -1,0 +1,8 @@
+-- SIGEE · Oficios · los documentos nacen de Análisis de calificaciones / Asistencia — ya aplicado en producción
+-- (migración oficios_crear_desde_origen). Crea o actualiza el trámite de un CASO sin duplicarlo:
+--   no existe → crea borrador con número · borrador → actualiza · observado → corrige (versión solo si cambió)
+--   en ruta / aprobado / entregado → rechaza indicando el N.° existente · otro emisor → rechaza.
+-- Firma: oficios_crear_desde_origen(p_institucion uuid, p_tipo text, p_titulo text, p_estudiante_id uuid, p_curso text,
+--        p_paralelo text, p_periodo text, p_datos_plantilla jsonb, p_origen_ref text) returns jsonb
+-- Caso = estudiante + tipo + datos_plantilla->'origen'->>'ref' (p. ej. 'oficio_rendimiento:T1').
+-- El texto completo de la función está en la migración de Supabase del mismo nombre.

@@ -4,6 +4,8 @@
  * Principio: un caso = un documento = un PDF por versión de contenido.
  */
 import { supabase } from './supabase.js';
+import { aplicarNumeroTramite, refOrigen, TIPO_TRAMITE_DE_FICHA } from './numeroTramite.js';
+import { textoCompleto } from './fichasRendimiento.js';
 
 export const TIPOS_DOCUMENTO = {
   oficio_alerta:       { nombre: 'Oficio de alerta',        uso: 'Bajo rendimiento; citación a reunión' },
@@ -190,4 +192,37 @@ export async function fetchHojaRutaFamilia(estudianteId) {
   const { data, error } = await supabase.rpc('oficios_hoja_ruta_familia', { p_estudiante: estudianteId });
   if (error) throw new Error(error.message || 'No se pudo cargar el seguimiento.');
   return data || { documentos: [], oficios_faltas: [], avisos: [] };
+}
+
+/**
+ * Lleva un documento del editor de fichas (Análisis de calificaciones) al módulo Oficios.
+ *  · enviar=false → queda como borrador en la «Bandeja del emisor»
+ *  · enviar=true  → pasa a la ruta (cola de despacho del primer cargo)
+ * Es idempotente por caso (estudiante + tipo + trimestre): volver a llamar actualiza el mismo trámite.
+ * Devuelve el trámite ({ id, numero, estado, … }).
+ */
+export async function enviarFichaATramite({ institucionId, tipoFicha, trimestre, estudiante, documento, periodo, enviar }) {
+  const tipo = TIPO_TRAMITE_DE_FICHA[tipoFicha];
+  if (!tipo) throw new Error('Este tipo de documento no se puede enviar a trámite.');
+  const ref = refOrigen(tipoFicha, trimestre);
+  const base = { origen: { modulo: 'analisis_calificaciones', ref, trimestre }, notas: textoCompleto(documento) };
+  const titulo = (documento.titulo || 'Documento').slice(0, 160);
+  const rpc = (doc) => supabase.rpc('oficios_crear_desde_origen', {
+    p_institucion: institucionId, p_tipo: tipo, p_titulo: titulo, p_estudiante_id: estudiante.id,
+    p_curso: estudiante.curso || null, p_paralelo: estudiante.paralelo || null, p_periodo: periodo || null,
+    p_datos_plantilla: { ...base, documento: doc, notas: textoCompleto(doc) }, p_origen_ref: ref
+  });
+  // 1) crear/actualizar → devuelve el número oficial del trámite
+  let { data: fila, error } = await rpc(documento);
+  if (error) throw new Error(error.message || 'No se pudo registrar en Oficios.');
+  // 2) la hoja lleva el número del trámite
+  const conNumero = aplicarNumeroTramite(documento, fila.numero);
+  if (JSON.stringify(conNumero) !== JSON.stringify(fila.datos_plantilla?.documento)) {
+    const r2 = await rpc(conNumero);
+    if (r2.error) throw new Error(r2.error.message || 'No se pudo actualizar el documento.');
+    fila = r2.data;
+  }
+  // 3) envío a la ruta
+  if (enviar && ['borrador', 'observado'].includes(fila.estado)) fila = await enviarOficio(fila.id);
+  return fila;
 }
