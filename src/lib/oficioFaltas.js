@@ -93,3 +93,29 @@ export function numeroCorrelativo(base, desplazamiento) {
   const nuevo = String(Number(m[0]) + desplazamiento).padStart(m[0].length, '0');
   return t.slice(0, m.index) + nuevo + t.slice(m.index + m[0].length);
 }
+
+/**
+ * Convierte el oficio de inasistencias (construirOficio) al documento estructurado del módulo Oficios
+ * (bloques editables), para registrarlo como trámite «oficio_faltas». El texto legal es el mismo.
+ */
+export function oficioADocumento(of, nombreAlumno = '') {
+  let n = 0;
+  const id = () => `f${++n}`;
+  const texto = (t, extra = {}) => ({ id: id(), t: 'texto', texto: t, ...extra });
+  const bloques = [texto(of.lugarFecha, { alin: 'derecha' }), texto(of.titulo, { negrita: true }), texto(of.destinatario.join('\n')), texto(`Asunto: ${of.asunto}`, { negrita: true }), texto(of.saludo)];
+  if (of.advertencia) bloques.push(texto(of.advertencia));
+  for (const p of of.parrafos) bloques.push(texto(p));
+  if (of.filas.length) bloques.push({ id: id(), t: 'tabla', cols: ['N°', 'Fecha', 'Día', 'Situación'], filas: of.filas.map(f => [String(f.n), f.fecha, f.dia, f.situacion]) });
+  bloques.push(texto(of.totales + (of.racha ? ' ' + of.racha : ''), { negrita: true }));
+  if (of.baseLegal) bloques.push(texto(of.baseLegal));
+  bloques.push(texto(of.solicitud + (of.dece ? ' ' + of.dece : '')));
+  if (of.notaAdicional) bloques.push(texto(of.notaAdicional));
+  bloques.push(texto(of.cierre.join('\n')));
+  bloques.push({ id: id(), t: 'firmas', firmas: [{ nombre: of.firmante.nombre, cargo: of.firmante.cargo }] });
+  bloques.push({ id: id(), t: 'campos', cols: 1, filas: [['Recibí conforme: nombre del representante', ''], ['C.I.', ''], ['Fecha de recepción', '']] });
+  return {
+    tipo: 'oficio_faltas', titulo: `Oficio de inasistencias${nombreAlumno ? ' — ' + nombreAlumno : ''}`, numero: of.numero || '', trimestre: null,
+    cabecera: { institucion: of.encabezado.institucion, amie: of.encabezado.amie ? `AMIE ${of.encabezado.amie}` : '', subtitulo: of.encabezado.ubicacion || '' },
+    bloques, pie: of.baseNormativa ? `Base normativa: ${of.baseNormativa}.` : '', aviso: ''
+  };
+}

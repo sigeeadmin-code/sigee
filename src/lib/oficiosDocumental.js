@@ -195,22 +195,17 @@ export async function fetchHojaRutaFamilia(estudianteId) {
 }
 
 /**
- * Lleva un documento del editor de fichas (Análisis de calificaciones) al módulo Oficios.
- *  · enviar=false → queda como borrador en la «Bandeja del emisor»
- *  · enviar=true  → pasa a la ruta (cola de despacho del primer cargo)
- * Es idempotente por caso (estudiante + tipo + trimestre): volver a llamar actualiza el mismo trámite.
- * Devuelve el trámite ({ id, numero, estado, … }).
+ * Lleva un documento (de calificaciones o de asistencia) al módulo Oficios, fuente de verdad del seguimiento.
+ *  · enviar=false → borrador en la «Bandeja del emisor»   · enviar=true → pasa a la ruta (cola de despacho)
+ * Idempotente por caso (estudiante + tipo + origen.ref): volver a llamar actualiza el mismo trámite.
+ * origen: { modulo, ref, ...datos }. Devuelve el trámite ({ id, numero, estado, … }).
  */
-export async function enviarFichaATramite({ institucionId, tipoFicha, trimestre, estudiante, documento, periodo, enviar }) {
-  const tipo = TIPO_TRAMITE_DE_FICHA[tipoFicha];
-  if (!tipo) throw new Error('Este tipo de documento no se puede enviar a trámite.');
-  const ref = refOrigen(tipoFicha, trimestre);
-  const base = { origen: { modulo: 'analisis_calificaciones', ref, trimestre }, notas: textoCompleto(documento) };
+export async function enviarDocumentoATramite({ institucionId, tipo, origen, estudiante, documento, periodo, enviar }) {
   const titulo = (documento.titulo || 'Documento').slice(0, 160);
   const rpc = (doc) => supabase.rpc('oficios_crear_desde_origen', {
     p_institucion: institucionId, p_tipo: tipo, p_titulo: titulo, p_estudiante_id: estudiante.id,
     p_curso: estudiante.curso || null, p_paralelo: estudiante.paralelo || null, p_periodo: periodo || null,
-    p_datos_plantilla: { ...base, documento: doc, notas: textoCompleto(doc) }, p_origen_ref: ref
+    p_datos_plantilla: { origen, documento: doc, notas: textoCompleto(doc) }, p_origen_ref: origen.ref
   });
   // 1) crear/actualizar → devuelve el número oficial del trámite
   let { data: fila, error } = await rpc(documento);
@@ -225,4 +220,19 @@ export async function enviarFichaATramite({ institucionId, tipoFicha, trimestre,
   // 3) envío a la ruta
   if (enviar && ['borrador', 'observado'].includes(fila.estado)) fila = await enviarOficio(fila.id);
   return fila;
+}
+
+/** Desde el editor de fichas de Análisis de calificaciones. */
+export function enviarFichaATramite({ institucionId, tipoFicha, trimestre, estudiante, documento, periodo, enviar }) {
+  const tipo = TIPO_TRAMITE_DE_FICHA[tipoFicha];
+  if (!tipo) return Promise.reject(new Error('Este tipo de documento no se puede enviar a trámite.'));
+  return enviarDocumentoATramite({ institucionId, tipo, estudiante, documento, periodo, enviar, origen: { modulo: 'analisis_calificaciones', ref: refOrigen(tipoFicha, trimestre), trimestre } });
+}
+
+/** Desde el oficio de inasistencias (Asistencia). Un oficio por estudiante y período. */
+export function enviarOficioFaltasATramite({ institucionId, estudiante, documento, periodo, enviar }) {
+  return enviarDocumentoATramite({
+    institucionId, tipo: 'oficio_faltas', estudiante, documento, enviar, periodo: null,
+    origen: { modulo: 'asistencia', ref: `oficio_faltas:${periodo.desde}_${periodo.hasta}`, desde: periodo.desde, hasta: periodo.hasta }
+  });
 }

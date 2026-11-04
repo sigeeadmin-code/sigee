@@ -1,9 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { construirOficio, OPCIONES_OFICIO, numeroCorrelativo } from '../lib/oficioFaltas.js';
+import { useNavigate } from 'react-router-dom';
+import { useSession } from '../lib/SessionContext.jsx';
+import { construirOficio, OPCIONES_OFICIO, numeroCorrelativo, oficioADocumento } from '../lib/oficioFaltas.js';
+import { enviarOficioFaltasATramite } from '../lib/oficiosDocumental.js';
 import { usarMargenesA4 } from '../lib/impresion.js';
 
 const CLAVE = 'sigee_oficio_faltas_';
+const ROLES_TRAMITE = ['docente', 'inspector_general', 'admin_plantel', 'secretario', 'supervisor_plantel', 'supervisor_general', 'super_admin'];
 const hoyISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
 export function Hoja({ of }) {
@@ -50,6 +54,9 @@ export function Hoja({ of }) {
 // Vista previa editable del oficio de inasistencias, uno por estudiante, con impresión / guardado en PDF.
 export default function OficioFaltasModal({ alumnos, institucion, periodo, onClose, onRegistrar, onEnviarCorreo }) {
   const idInst = institucion?.id || 'x';
+  const { profile } = useSession();
+  const navegar = useNavigate();
+  const [tramite, setTramite] = useState({ enviando: false, msg: '', error: false, ultimo: null });
   const [indice, setIndice] = useState(0);
   const [imprimiendo, setImprimiendo] = useState(null);   // null | 'uno' | 'todos'
   const [correlativo, setCorrelativo] = useState(true);
@@ -105,6 +112,26 @@ export default function OficioFaltasModal({ alumnos, institucion, periodo, onClo
     } catch (e) { setConstancia('No se pudo registrar en el historial: ' + (e.message || e)); }
   }
 
+
+  /** Registra el oficio (uno o todos) en el módulo Oficios: borrador en la bandeja del emisor o enviado a la ruta. */
+  async function aTramite(modo, enviar) {
+    const idx = modo === 'todos' ? alumnos.map((_, i) => i) : [actual];
+    if (enviar && !window.confirm(`${idx.length === 1 ? 'El oficio pasará' : `Los ${idx.length} oficios pasarán`} a la ruta de aprobación y quedará${idx.length === 1 ? '' : 'n'} registrado${idx.length === 1 ? '' : 's'} en Oficios. ¿Enviar a trámite?`)) return;
+    setTramite({ enviando: true, msg: 'Registrando en Oficios…', error: false, ultimo: null });
+    let ok = 0; const fallos = []; let ultimo = null;
+    for (const i of idx) {
+      const a = alumnos[i];
+      try {
+        const fila = await enviarOficioFaltasATramite({ institucionId: institucion.id, estudiante: { id: a.id, curso: a.curso, paralelo: '' }, documento: oficioADocumento(oficios[i], a.nombre), periodo, enviar });
+        ok++; ultimo = fila;
+      } catch (e) { fallos.push(`${a.nombre}: ${e.message || e}`); }
+    }
+    const plural = ok !== 1;
+    const accion = enviar ? (plural ? 'enviados a trámite' : 'enviado a trámite') : (plural ? 'guardados en Oficios como borrador' : 'guardado en Oficios como borrador');
+    setTramite({ enviando: false, error: fallos.length > 0 && !ok, ultimo: ok === 1 || idx.length === 1 ? ultimo : null,
+      msg: [ok ? `${ok} ${ok === 1 ? 'oficio' : 'oficios'} ${accion}${ultimo && idx.length === 1 ? ` · N.° ${ultimo.numero}` : ''}.` : '', fallos.length ? 'No se pudo registrar: ' + fallos.join(' | ') : ''].filter(Boolean).join(' ') });
+  }
+  const puedeTramite = ROLES_TRAMITE.includes(profile?.rolDb) && !!institucion?.id;
 
   // Envío por correo: el servidor toma el destinatario de los representantes del estudiante; aquí solo se pide el envío.
   async function enviarPorCorreo(modo) {
@@ -188,6 +215,9 @@ export default function OficioFaltasModal({ alumnos, institucion, periodo, onClo
               <span style={{ flex: 1 }} />
               {onEnviarCorreo && <button className="btn btn-success btn-sm" disabled={correo.enviando} onClick={() => enviarPorCorreo('uno')} title={alumnos[actual]?.correoRep ? `Se envía a ${alumnos[actual].correoRep}` : 'El representante no tiene correo registrado'}>✉️ Enviar por correo</button>}
               {onEnviarCorreo && oficios.length > 1 && <button className="btn btn-success btn-sm" disabled={correo.enviando} onClick={() => enviarPorCorreo('todos')}>✉️ Enviar los {oficios.length}</button>}
+              {puedeTramite && <button className="btn btn-secondary btn-sm" disabled={tramite.enviando} onClick={() => aTramite('uno', false)} title="Crea el oficio en Oficios (Bandeja del emisor) sin enviarlo a la ruta">📥 Guardar en Oficios</button>}
+              {puedeTramite && <button className="btn btn-success btn-sm" disabled={tramite.enviando} onClick={() => aTramite('uno', true)} title="Registra el oficio en Oficios y lo envía a la ruta de aprobación">📨 Enviar a trámite</button>}
+              {puedeTramite && oficios.length > 1 && <button className="btn btn-success btn-sm" disabled={tramite.enviando} onClick={() => aTramite('todos', true)}>📨 Enviar los {oficios.length} a trámite</button>}
               <button className="btn btn-secondary btn-sm" onClick={() => iniciarImpresion('uno')}>🖨️ Imprimir este</button>
               {oficios.length > 1 && <button className="btn btn-primary btn-sm" onClick={() => iniciarImpresion('todos')}>🖨️ Imprimir los {oficios.length}</button>}
             </div>
@@ -197,6 +227,11 @@ export default function OficioFaltasModal({ alumnos, institucion, periodo, onClo
               {onRegistrar && <label style={{ marginLeft: 12 }}><input type="checkbox" checked={registrar} onChange={e => setRegistrar(e.target.checked)} /> Registrar en el historial del estudiante al imprimir</label>}
               {constancia && <strong style={{ marginLeft: 12 }}>{constancia}</strong>}
             </div>
+            {tramite.msg && (
+              <div style={{ fontSize: 12.5, padding: '4px 2px', fontWeight: 700, color: tramite.error ? '#b91c1c' : '#15803d' }}>
+                {tramite.msg} {tramite.ultimo && <button type="button" className="btn btn-ghost btn-sm" onClick={() => { onClose(); navegar(`/oficios?doc=${tramite.ultimo.id}`); }}>Ver en Oficios</button>}
+              </div>
+            )}
             {onEnviarCorreo && (
               <div style={{ fontSize: 12, padding: '2px 2px 6px', color: correo.error ? '#b91c1c' : 'var(--slate)' }}>
                 {alumnos[actual]?.correoRep ? <>Correo del representante: <strong>{alumnos[actual].correoRep}</strong>. El oficio llega con tu correo como “Responder a” y con el acuse de recibo en el cuerpo del mensaje.</> : <span style={{ color: '#b45309' }}>Este estudiante no tiene correo de representante registrado.</span>}
