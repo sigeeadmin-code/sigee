@@ -85,3 +85,8 @@ borrador → en_ruta ⇄ observado → aprobado_final → entregado → archivad
 - Soporte TIC: `tic_cerrar_sesion`, `tic_iniciar_sesion`, `tic_latido` y `tic_reportar_denegado` ya no son ejecutables sin sesión; `tic_login_fallido` sigue abierta (se llama antes de entrar) pero con tope global de 300 eventos por minuto.
 - Las 16 funciones del módulo financiero y utilitarias quedaron con `search_path` fijo. Sin SQL pendiente de aplicar: todo lo de `supabase/sql` ya existe en la base.
 - Pendiente fuera del código: activar la protección de contraseñas filtradas (Auth, panel de Supabase) y mover `pg_net` fuera del esquema público.
+
+## Reporte mensual de asistencia (guía CLAUDE.md del portal, 6 nov 2026)
+- El reporte mensual es **Análisis de asistencia** (`/analisis-asistencia`): período Mes / Mes anterior / Personalizado, curso, por estudiante y por curso, Excel y CSV. Se agregó: estado **Art. 172** (alerta preventiva ≥ 8 %, riesgo ≥ 10 % de faltas injustificadas) como columna, KPI, filtro y hoja de Excel, y **🖨️ Imprimir / PDF** (hoja A4 con los filtros actuales, `ReporteAsistenciaImpresion`).
+- Los % son sobre los días con registro del período; la reprobación del Art. 172 se evalúa sobre el año lectivo completo (usar período «Todo»).
+- Mi Perfil de solo lectura (estudiante y representante) ya existía en `/mi-ficha`. No se adoptó el plan Next.js ni las tablas nuevas de ese repositorio: SIGEE ya tiene sus equivalentes en producción.

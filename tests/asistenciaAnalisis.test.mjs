@@ -101,3 +101,18 @@ assert.deepEqual(rangoPeriodo('mes_anterior', hoy), { desde: '2026-09-01', hasta
 assert.equal(diaSemana('2026-10-08'), 'Jueves');
 
 console.log('OK asistenciaAnalisis: todas las pruebas pasaron');
+
+// ── Art. 171–172 ──
+import { estado172, resumen172, ETIQUETA_172, UMBRAL_ALERTA_172, UMBRAL_RIESGO_172 } from '../src/lib/asistenciaAnalisis.js';
+assert.equal(UMBRAL_ALERTA_172, 8); assert.equal(UMBRAL_RIESGO_172, 10);
+assert.equal(estado172(0, 20), 'normal');
+assert.equal(estado172(7.9, 20), 'normal');
+assert.equal(estado172(8, 20), 'alerta');
+assert.equal(estado172(9.9, 20), 'alerta');
+assert.equal(estado172(10, 20), 'riesgo');
+assert.equal(estado172(35, 20), 'riesgo');
+assert.equal(estado172(null, 20), 'sin_datos');
+assert.equal(estado172(12, 0), 'sin_datos');
+assert.deepEqual(resumen172([{ pctFaltas: 3, dias: 10 }, { pctFaltas: 8.5, dias: 10 }, { pctFaltas: 12, dias: 10 }, { pctFaltas: 10, dias: 10 }, { pctFaltas: null, dias: 0 }]), { alerta: 1, riesgo: 2 });
+assert.equal(ETIQUETA_172.riesgo, 'Riesgo Art. 172');
+console.log('asistenciaAnalisis (Art. 172): OK');

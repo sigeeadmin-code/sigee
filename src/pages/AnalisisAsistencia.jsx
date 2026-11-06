@@ -6,12 +6,16 @@ import OficioFaltasModal from '../components/OficioFaltasModal.jsx';
 import { descargarLibro, descargarCsv } from '../lib/exportLibro.js';
 import {
   UMBRALES_DEFECTO, ETIQUETA_CLASE, RACHA_ALERTA, rangoPeriodo, analizarEstudiantes, diasHabiles, coberturaPorCurso,
-  resumenPorCurso, totalesGenerales, umbralesValidos, diaSemana, ymd
+  resumenPorCurso, totalesGenerales, umbralesValidos, diaSemana, ymd, estado172, resumen172, ETIQUETA_172, UMBRAL_ALERTA_172, UMBRAL_RIESGO_172
 } from '../lib/asistenciaAnalisis.js';
+import ReporteAsistenciaImpresion from '../components/ReporteAsistenciaImpresion.jsx';
+import { useImpresionOficio } from '../lib/useImpresionOficio.js';
 import { candidatosOficio, fechaCorta } from '../lib/oficioFaltas.js';
 
 const COLOR = { excelente: ['#dcfce7', '#15803d'], buena: ['#dbeafe', '#1d4ed8'], en_riesgo: ['#fef3c7', '#b45309'], critica: ['#fee2e2', '#b91c1c'], sin_datos: ['#e2e8f0', '#475569'] };
 const CLAVE_UMBRALES = 'sigee_umbrales_asistencia';
+const COLOR_172 = { normal: ['#dcfce7', '#15803d'], alerta: ['#fef3c7', '#b45309'], riesgo: ['#fee2e2', '#b91c1c'], sin_datos: ['#e2e8f0', '#475569'] };
+const Chip172 = ({ e }) => <span style={{ background: COLOR_172[e][0], color: COLOR_172[e][1], borderRadius: 999, padding: '2px 10px', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap' }}>{ETIQUETA_172[e]}</span>;
 const PERIODOS = [['todo', 'Todo'], ['semana', 'Semana'], ['mes', 'Mes'], ['mes_anterior', 'Mes anterior'], ['custom', 'Personalizado']];
 
 const Chip = ({ clase }) => <span style={{ background: COLOR[clase][0], color: COLOR[clase][1], borderRadius: 999, padding: '2px 10px', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap' }}>{ETIQUETA_CLASE[clase]}</span>;
@@ -35,6 +39,8 @@ export default function AnalisisAsistencia() {
   const [curso, setCurso] = useState('');
   const [clase, setClase] = useState('');
   const [soloFaltas, setSoloFaltas] = useState(false);
+  const [art172, setArt172] = useState('');
+  const { modo: imprimiendo, imprimir } = useImpresionOficio();
   const [busqueda, setBusqueda] = useState('');
   const [umbrales, setUmbrales] = useState(() => {
     try { const u = JSON.parse(localStorage.getItem(CLAVE_UMBRALES) || 'null'); if (umbralesValidos(u)) return u; } catch { /* sin almacenamiento */ }
@@ -59,8 +65,9 @@ export default function AnalisisAsistencia() {
   const filas = useMemo(() => (datos ? analizarEstudiantes(datos.alumnos, datos.registros, umbrales) : []), [datos, umbrales]);
   const cursos = useMemo(() => [...new Set(filas.map(f => f.curso))].filter(Boolean).sort(), [filas]);
   const visibles = useMemo(() => filas.filter(f =>
-    (!curso || f.curso === curso) && (!clase || f.clase === clase) && (!soloFaltas || f.faltas > 0) &&
-    (!busqueda || `${f.nombre} ${f.cedula}`.toLowerCase().includes(busqueda.toLowerCase()))), [filas, curso, clase, soloFaltas, busqueda]);
+    (!curso || f.curso === curso) && (!clase || f.clase === clase) && (!soloFaltas || f.faltas > 0) && (!art172 || estado172(f.pctFaltas, f.dias) === art172) &&
+    (!busqueda || `${f.nombre} ${f.cedula}`.toLowerCase().includes(busqueda.toLowerCase()))), [filas, curso, clase, soloFaltas, art172, busqueda]);
+  const r172 = useMemo(() => resumen172(filas.filter(f => !curso || f.curso === curso)), [filas, curso]);
 
   // cobertura: 'Todo' se mide desde el primer día con asistencia (no desde hace un año)
   const habiles = useMemo(() => {
@@ -87,7 +94,7 @@ export default function AnalisisAsistencia() {
   const filasEstudiante = () => visibles.map(f => ({
     Estudiante: f.nombre, Cédula: f.cedula, Curso: f.curso, 'Días con registro': f.dias, Presentes: f.presentes, Atrasos: f.atrasos,
     'Faltas injustificadas': f.faltas, Justificadas: f.justificadas, '% asistencia': f.pctAsistencia ?? '', '% faltas injustificadas': f.pctFaltas ?? '',
-    'Faltas consecutivas (máx.)': f.rachaMax, 'Clasificación': ETIQUETA_CLASE[f.clase],
+    'Faltas consecutivas (máx.)': f.rachaMax, 'Clasificación': ETIQUETA_CLASE[f.clase], 'Art. 172': ETIQUETA_172[estado172(f.pctFaltas, f.dias)],
     Representante: f.representante ? `${f.representante.nombres} ${f.representante.apellidos}`.trim() : '', 'Teléfono representante': f.representante?.telefono || ''
   }));
   function exportarExcel() {
@@ -96,6 +103,7 @@ export default function AnalisisAsistencia() {
         { Indicador: 'Período', Valor: `${fechaCorta(desde)} al ${fechaCorta(hasta)}` },
         { Indicador: 'Estudiantes', Valor: totales.estudiantes }, { Indicador: '% de asistencia', Valor: totales.pctAsistencia ?? '' },
         { Indicador: 'Estudiantes en riesgo', Valor: totales.enRiesgo }, { Indicador: 'Estudiantes en situación crítica', Valor: totales.criticos },
+        { Indicador: `Alerta preventiva Art. 172 (≥ ${UMBRAL_ALERTA_172}%)`, Valor: r172.alerta }, { Indicador: `Riesgo Art. 172 (≥ ${UMBRAL_RIESGO_172}%)`, Valor: r172.riesgo },
         { Indicador: `Con ${RACHA_ALERTA}+ faltas consecutivas`, Valor: totales.conRacha }, { Indicador: 'Cobertura de registro (%)', Valor: totales.pctCobertura ?? '' },
         { Indicador: 'Umbrales (% faltas injustificadas)', Valor: `Excelente ≤ ${umbrales.excelente} · Buena ≤ ${umbrales.buena} · En riesgo ≤ ${umbrales.riesgo} · Crítica > ${umbrales.riesgo}` }
       ] },
@@ -118,6 +126,7 @@ export default function AnalisisAsistencia() {
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-secondary" onClick={exportarExcel} disabled={!datos || !filas.length}>⬇️ Excel (5 hojas)</button>
+          <button className="btn btn-secondary" onClick={() => imprimir('reporte')} disabled={!datos || !visibles.length} title="Hoja A4 con los filtros actuales; elige «Guardar como PDF» en el cuadro de impresión">🖨️ Imprimir / PDF</button>
           <button className="btn btn-secondary" onClick={exportarCsv} disabled={!datos || !visibles.length}>⬇️ CSV</button>
           <button className="btn btn-primary" onClick={() => setOficio(conOficio)} disabled={!conOficio.length} title="Un oficio por cada estudiante con faltas injustificadas en la lista actual">📄 Oficios ({conOficio.length})</button>
         </div>
@@ -141,6 +150,8 @@ export default function AnalisisAsistencia() {
             <select className="fc" value={curso} onChange={e => setCurso(e.target.value)}><option value="">Todos los cursos</option>{cursos.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
           <div><div className="fl">Clasificación</div>
             <select className="fc" value={clase} onChange={e => setClase(e.target.value)}><option value="">Todas</option>{['critica', 'en_riesgo', 'buena', 'excelente'].map(c => <option key={c} value={c}>{ETIQUETA_CLASE[c]}</option>)}</select></div>
+          <div><div className="fl">Art. 172</div>
+            <select className="fc" value={art172} onChange={e => setArt172(e.target.value)}><option value="">Todos</option><option value="riesgo">{ETIQUETA_172.riesgo} (≥ {UMBRAL_RIESGO_172}%)</option><option value="alerta">{ETIQUETA_172.alerta} ({UMBRAL_ALERTA_172}–{UMBRAL_RIESGO_172}%)</option><option value="normal">{ETIQUETA_172.normal}</option></select></div>
           <div style={{ flex: '1 1 180px' }}><div className="fl">Buscar</div><input className="fc" placeholder="Nombre o cédula…" value={busqueda} onChange={e => setBusqueda(e.target.value)} /></div>
           <label style={{ fontSize: 12.5, display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={soloFaltas} onChange={e => setSoloFaltas(e.target.checked)} /> Solo con faltas</label>
         </div>
@@ -161,6 +172,7 @@ export default function AnalisisAsistencia() {
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
             <Tarjeta valor={pct(totales.pctAsistencia)} etiqueta="Asistencia general" sub={`${totales.estudiantes} estudiantes`} color="#2563eb" />
             <Tarjeta valor={totales.criticos} etiqueta="En situación crítica" sub={`${totales.enRiesgo} más en riesgo`} color="#dc2626" />
+            <Tarjeta valor={r172.riesgo} etiqueta="Riesgo Art. 172" sub={`${r172.alerta} en alerta preventiva (≥ ${UMBRAL_ALERTA_172}%)`} color="#b91c1c" />
             <Tarjeta valor={totales.conRacha} etiqueta={`Con ${RACHA_ALERTA}+ faltas seguidas`} sub={totales.rachaMax ? `máximo ${totales.rachaMax} días seguidos` : 'ninguno'} color="#d97706" />
             <Tarjeta valor={pct(totales.pctCobertura)} etiqueta="Cobertura de registro" sub={`${habiles.length} días hábiles${totales.cursosSinRegistro ? ` · ${totales.cursosSinRegistro} curso(s) sin registro` : ''}`} color="#7c3aed" />
           </div>
@@ -184,9 +196,9 @@ export default function AnalisisAsistencia() {
             <div className="ch"><h3>Estudiantes ({visibles.length})</h3></div>
             <div className="cb" style={{ overflowX: 'auto' }}>
               <table className="tbl" style={{ width: '100%' }}>
-                <thead><tr><th>#</th><th>Estudiante</th><th>Curso</th><th>Días</th><th>Faltas inj.</th><th>Justif.</th><th>% asist.</th><th>Seguidas</th><th>Clasificación</th><th /></tr></thead>
+                <thead><tr><th>#</th><th>Estudiante</th><th>Curso</th><th>Días</th><th>Faltas inj.</th><th>Justif.</th><th>% asist.</th><th>Seguidas</th><th>Clasificación</th><th>Art. 172</th><th /></tr></thead>
                 <tbody>
-                  {visibles.length === 0 && <tr><td colSpan={10} style={{ textAlign: 'center', padding: 22, color: 'var(--slate)' }}>Sin estudiantes con esos filtros.</td></tr>}
+                  {visibles.length === 0 && <tr><td colSpan={11} style={{ textAlign: 'center', padding: 22, color: 'var(--slate)' }}>Sin estudiantes con esos filtros.</td></tr>}
                   {visibles.slice(0, 300).map((f, i) => (
                     <tr key={f.id}>
                       <td>{i + 1}</td>
@@ -196,6 +208,7 @@ export default function AnalisisAsistencia() {
                       <td>{pct(f.pctAsistencia)}</td>
                       <td style={{ fontWeight: f.rachaMax >= RACHA_ALERTA ? 800 : 400, color: f.rachaMax >= RACHA_ALERTA ? '#b45309' : undefined }}>{f.rachaMax || '—'}</td>
                       <td><Chip clase={f.clase} /></td>
+                      <td><Chip172 e={estado172(f.pctFaltas, f.dias)} /></td>
                       <td>{f.faltas > 0 && <button className="btn btn-secondary btn-sm" onClick={() => setOficio([f])}>📄 Oficio</button>}</td>
                     </tr>
                   ))}
@@ -234,6 +247,8 @@ export default function AnalisisAsistencia() {
         </>
       )}
 
+      {imprimiendo && datos && <ReporteAsistenciaImpresion institucion={institucion} desde={desde} hasta={hasta} umbrales={umbrales} totales={totales} art172={r172} porCurso={porCurso} estudiantes={visibles}
+        filtros={[curso && `Curso: ${curso}`, clase && `Clasificación: ${ETIQUETA_CLASE[clase]}`, art172 && `Art. 172: ${ETIQUETA_172[art172]}`, soloFaltas && 'Solo con faltas', busqueda && `Búsqueda: ${busqueda}`].filter(Boolean)} />}
       {oficio && <OficioFaltasModal alumnos={oficio} institucion={institucion} periodo={{ desde, hasta }} onClose={() => setOficio(null)} onRegistrar={items => registrarOficiosEmitidos(institucionId, items, profile.id)} />}
       {fichaDe && <FichaAsistenciaModal estudiante={fichaDe} puedeJustificar onClose={() => setFichaDe(null)} />}
     </div>

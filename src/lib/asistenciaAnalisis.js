@@ -205,3 +205,21 @@ export function rangoPeriodo(clave, hoy = new Date()) {
   }
   return { desde: ymd(new Date(Date.UTC(h.getUTCFullYear() - 1, 0, 1, 12))), hasta };   // 'todo': hasta 1 año atrás (cubre el año lectivo)
 }
+
+// ── Art. 171–172 (LOEI): faltas injustificadas ──
+export const UMBRAL_ALERTA_172 = 8;     // % → alerta preventiva
+export const UMBRAL_RIESGO_172 = 10;    // % → riesgo de reprobación
+export const ETIQUETA_172 = { normal: 'Normal', alerta: 'Alerta preventiva', riesgo: 'Riesgo Art. 172', sin_datos: 'Sin datos' };
+
+/** Estado normativo según el % de faltas injustificadas del período (sobre los días con registro). */
+export function estado172(pctFaltas, dias) {
+  if (!dias || pctFaltas === null || pctFaltas === undefined) return 'sin_datos';
+  if (pctFaltas >= UMBRAL_RIESGO_172) return 'riesgo';
+  if (pctFaltas >= UMBRAL_ALERTA_172) return 'alerta';
+  return 'normal';
+}
+
+/** Cuenta de estudiantes en alerta preventiva y en riesgo. */
+export function resumen172(filas) {
+  return filas.reduce((a, f) => { const e = estado172(f.pctFaltas, f.dias); if (e === 'alerta') a.alerta++; else if (e === 'riesgo') a.riesgo++; return a; }, { alerta: 0, riesgo: 0 });
+}
