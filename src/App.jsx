@@ -5,6 +5,7 @@ import { rolesConAcceso, rutaPermitidaParaRolDb } from './lib/nav.js';
 import AvisoVersionNueva from './components/AvisoVersionNueva.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import Login from './pages/Login.jsx';
+import RestablecerClave from './pages/RestablecerClave.jsx';
 import Shell from './pages/Shell.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 // Carga por pantalla: cada página se descarga solo cuando se entra a ella.
@@ -89,8 +90,9 @@ function BaseDocentesRuta() {
 }
 
 function Gate() {
-  const { loading, profile } = useSession();
+  const { loading, profile, recuperando } = useSession();
   const { pathname } = useLocation();
+  if (recuperando) return <RestablecerClave />;     // llegó por el enlace del correo: primero elige su nueva contraseña
   if (loading) return <div className="splash">Cargando SIGEE…</div>;
   if (!profile) return <Login />;
   return (

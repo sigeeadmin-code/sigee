@@ -90,3 +90,10 @@ borrador → en_ruta ⇄ observado → aprobado_final → entregado → archivad
 - El reporte mensual es **Análisis de asistencia** (`/analisis-asistencia`): período Mes / Mes anterior / Personalizado, curso, por estudiante y por curso, Excel y CSV. Se agregó: estado **Art. 172** (alerta preventiva ≥ 8 %, riesgo ≥ 10 % de faltas injustificadas) como columna, KPI, filtro y hoja de Excel, y **🖨️ Imprimir / PDF** (hoja A4 con los filtros actuales, `ReporteAsistenciaImpresion`).
 - Los % son sobre los días con registro del período; la reprobación del Art. 172 se evalúa sobre el año lectivo completo (usar período «Todo»).
 - Mi Perfil de solo lectura (estudiante y representante) ya existía en `/mi-ficha`. No se adoptó el plan Next.js ni las tablas nuevas de ese repositorio: SIGEE ya tiene sus equivalentes en producción.
+
+## Recuperar y cambiar contraseña con confirmación por correo (6 nov 2026)
+- **Login**: «¿Olvidaste tu contraseña?» → `solicitarRecuperacion(correo)` (`supabase.auth.resetPasswordForEmail`, `redirectTo` = raíz del sitio). Respuesta idéntica exista o no el correo; espera de 60 s para reenviar.
+- **Enlace del correo** → evento `PASSWORD_RECOVERY` → `SessionContext.recuperando` → `Gate` muestra `RestablecerClave` (no entra a la app hasta elegir la contraseña). Al guardar: `updateUser({password})` + `signOut({scope:'others'})`.
+- **Configuración** (antes era un marcador): «Mi cuenta» y «Contraseña», que envía el mismo enlace de confirmación al correo de la cuenta.
+- Reglas en `src/lib/claveSegura.js` (≥ 10 caracteres, mayúscula, minúscula, número, sin el usuario del correo), con pruebas.
+- **Requiere en Supabase → Authentication**: *URL Configuration* con el dominio de producción como Site URL y en Redirect URLs; y correo saliente funcionando (el SMTP incluido limita a pocos correos por hora: conviene un SMTP propio).

@@ -34,7 +34,19 @@ function guardarEstadoIntentos(estado) {
 }
 
 export default function Login() {
-  const { login, error } = useSession();
+  const { login, error, solicitarRecuperacion } = useSession();
+  const [modo, setModo] = useState('entrar');                       // 'entrar' | 'recuperar'
+  const [envio, setEnvio] = useState({ estado: 'inicio', msg: '', hasta: 0 });   // inicio | enviando | enviado | error
+  const [ahora, setAhora] = useState(Date.now());
+  useEffect(() => { if (envio.estado !== 'enviado') return undefined; const t = setInterval(() => setAhora(Date.now()), 1000); return () => clearInterval(t); }, [envio.estado]);
+  const esperaReenvio = Math.max(0, Math.ceil((envio.hasta - ahora) / 1000));
+  async function pedirEnlace(e) {
+    e.preventDefault();
+    if (!email.trim() || envio.estado === 'enviando' || esperaReenvio > 0) return;
+    setEnvio({ estado: 'enviando', msg: '', hasta: 0 });
+    try { await solicitarRecuperacion(email); setAhora(Date.now()); setEnvio({ estado: 'enviado', msg: '', hasta: Date.now() + 60000 }); }
+    catch (err) { setEnvio({ estado: 'error', msg: err.message, hasta: 0 }); }
+  }
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
@@ -138,6 +150,28 @@ export default function Login() {
       )}
 
       <div className="l-right">
+        {modo === 'recuperar' ? (
+        <form onSubmit={pedirEnlace} className="lcard">
+          <div className="lbrand">
+            <div className="ltitle">Recuperar contraseña</div>
+            <div className="lsub">Te enviaremos un enlace al correo para confirmar que eres tú y elegir una nueva contraseña.</div>
+          </div>
+          {envio.estado === 'error' && <div className="lerr" style={{ display: 'flex' }}>{envio.msg}</div>}
+          {envio.estado === 'enviado' && (
+            <div className="cn-ok" role="status">
+              Si el correo está registrado, recibirás un enlace en unos minutos. Revisa también la carpeta de spam. El enlace vence en 1 hora y solo funciona una vez.
+            </div>
+          )}
+          <div className="lfield">
+            <label htmlFor="rec-email">Correo electrónico</label>
+            <input id="rec-email" type="email" placeholder="usuario@colegio.edu.ec" value={email} onChange={e => setEmail(e.target.value)} autoFocus required />
+          </div>
+          <button className="lbtn" type="submit" disabled={envio.estado === 'enviando' || esperaReenvio > 0}>
+            {envio.estado === 'enviando' ? 'Enviando…' : esperaReenvio > 0 ? `Reenviar en ${esperaReenvio}s` : envio.estado === 'enviado' ? 'Reenviar enlace' : 'Enviar enlace al correo'}
+          </button>
+          <button type="button" className="cn-enlace" onClick={() => { setModo('entrar'); setEnvio({ estado: 'inicio', msg: '', hasta: 0 }); }}>Volver a iniciar sesión</button>
+        </form>
+        ) : (
         <form onSubmit={onSubmit} className="lcard">
           <div className="lbrand">
             <div className="ltitle">Bienvenido de vuelta</div>
@@ -163,6 +197,9 @@ export default function Login() {
             </button>
           </div>
 
+          <div style={{ textAlign: 'right', marginTop: -6, marginBottom: 12 }}>
+            <button type="button" className="cn-enlace" onClick={() => setModo('recuperar')}>¿Olvidaste tu contraseña?</button>
+          </div>
           <button className="lbtn" type="submit" disabled={busy || segundosRestantes > 0}>
             {segundosRestantes > 0
               ? `Bloqueado (${segundosRestantes}s)`
@@ -189,6 +226,7 @@ export default function Login() {
             Cuentas de demostración reales · un clic te deja listo para ingresar
           </div>
         </form>
+        )}
       </div>
     </div>
   );

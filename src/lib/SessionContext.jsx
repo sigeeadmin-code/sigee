@@ -12,6 +12,7 @@ export function SessionProvider({ children }) {
   const [institucion, setInstitucion] = useState(null);
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  const [recuperando, setRecuperando] = useState(false);   // el usuario llegó por el enlace del correo y debe elegir su nueva contraseña
   // Permisos y módulos del plantel (los fija el Admin global / el admin del plantel). Todo desactivado por defecto.
   const [permisos, setPermisos] = useState({ baseDocentes: false, docentesEditanPerfil: false, tutoresEditanEstudiantes: false });
   const [esTutor, setEsTutor] = useState(false);
@@ -70,6 +71,7 @@ export function SessionProvider({ children }) {
       else setLoading(false);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') setRecuperando(true);
       if (session?.user) {
         // Supabase vuelve a avisar "sesión iniciada" cada vez que la pestaña recupera el foco y al renovar el token (cada hora).
         // Si es el MISMO usuario ya cargado, no se recarga nada ni se muestra "Cargando…": hacerlo destruía la pantalla abierta
@@ -88,6 +90,22 @@ export function SessionProvider({ children }) {
       try { supabase.rpc('tic_login_fallido', { p_email: email }).then(() => {}, () => {}); } catch { /* sin registro */ }
       setError('Correo o contraseña incorrectos.'); throw authErr;
     }
+  }, []);
+  // Recuperar / cambiar contraseña con confirmación por correo: el enlace del correo abre una sesión de recuperación
+  // y la app pide la nueva contraseña (RestablecerClave). Nunca revela si el correo existe.
+  const solicitarRecuperacion = useCallback(async (email) => {
+    const { error: e } = await supabase.auth.resetPasswordForEmail(String(email || '').trim(), { redirectTo: window.location.origin });
+    if (e && /rate|limit|seconds|many/i.test(e.message || '')) throw new Error('Ya se envió un enlace hace poco. Espera unos minutos antes de pedir otro.');
+    // cualquier otro resultado se trata igual (existe o no): así no se puede averiguar qué correos están registrados
+  }, []);
+  const cambiarClave = useCallback(async (nueva) => {
+    const { error: e } = await supabase.auth.updateUser({ password: nueva });
+    if (e) throw new Error(/same|different/i.test(e.message || '') ? 'La nueva contraseña debe ser distinta de la anterior.' : /weak|short|least/i.test(e.message || '') ? 'La contraseña no cumple los requisitos de seguridad.' : (e.message || 'No se pudo cambiar la contraseña.'));
+    try { await supabase.auth.signOut({ scope: 'others' }); } catch { /* cerrar las demás sesiones es un refuerzo; no impide el cambio */ }
+  }, []);
+  const terminarRecuperacion = useCallback(() => {
+    setRecuperando(false);
+    try { window.history.replaceState(null, '', window.location.pathname); } catch { /* sin history */ }
   }, []);
   // scope 'local': cerrar sesión aquí NO invalida las sesiones de la misma cuenta abiertas en otras pestañas o dispositivos
   const monitorTic = useRef(null);
@@ -111,7 +129,7 @@ export function SessionProvider({ children }) {
     if (profile?.rolDb === 'super_admin') setData(await fetchDatosGlobales(instituciones));
   }, [profile, instituciones]);
   return (
-    <SessionCtx.Provider value={{ loading, profile, instituciones, institucion, data, error, login, logout, refrescarDatos, permisos, esTutor, recargarPermisos: () => cargarPermisos(profile, profile?.institucion_id) }}>
+    <SessionCtx.Provider value={{ loading, profile, instituciones, institucion, data, error, login, logout, recuperando, solicitarRecuperacion, cambiarClave, terminarRecuperacion, refrescarDatos, permisos, esTutor, recargarPermisos: () => cargarPermisos(profile, profile?.institucion_id) }}>
       {children}
     </SessionCtx.Provider>
   );

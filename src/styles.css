@@ -786,3 +786,14 @@ button.ofd-kpi:focus-visible,button.ofd-kpi.on{outline:2px solid var(--brand);ou
 .ofd-rep-tb th,.ofd-rep-tb td{padding:3px 4px}
 .ofd-rep-tb th:nth-child(2){width:30%}
 .ofd-rep-tb td:nth-child(3),.ofd-rep-tb td:nth-child(10),.ofd-rep-tb td:nth-child(11){white-space:nowrap}
+
+/* Recuperar / cambiar contraseña */
+.cn-enlace{background:none;border:none;color:#67e8f9;font:inherit;font-size:12.5px;cursor:pointer;padding:6px 2px;text-decoration:underline;text-underline-offset:3px}
+.cn-enlace:hover{color:#fff}.cn-enlace:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:3px}
+#login .lcard>.cn-enlace{display:block;margin:12px auto 0}
+.cn-ok{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.35);color:#bbf7d0;border-radius:var(--r);padding:10px 12px;font-size:12.5px;line-height:1.5;margin-bottom:14px}
+.cn-aviso{display:block;color:#fca5a5;font-size:12px;margin-top:5px}
+.cn-fuerza{display:flex;align-items:center;gap:10px;font-size:12px;font-weight:700;margin:-6px 0 8px}
+.cn-barra{flex:1;height:5px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden}.cn-barra i{display:block;height:100%;transition:width .2s}
+.cn-reglas{list-style:none;margin:0 0 16px;padding:0;display:flex;flex-direction:column;gap:4px;font-size:12px;color:rgba(255,255,255,.5)}
+.cn-reglas li.ok{color:#86efac}
