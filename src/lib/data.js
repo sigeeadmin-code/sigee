@@ -2632,6 +2632,8 @@ async function rpcTic(nombre, args) {
 }
 export const fetchTicTiempoReal = () => rpcTic('tic_tiempo_real', {});
 export const fetchTicHistorial = ({ q = null, desde = null, hasta = null, inst = null, user = null, limite = 300 } = {}) => rpcTic('tic_historial', { p_q: q, p_desde: desde, p_hasta: hasta, p_inst: inst, p_user: user, p_limite: limite });
+export const fetchTicIpsCompartidas = ({ desde = null, hasta = null, inst = null, min = 2, ip = null, limite = 200 } = {}) => rpcTic('tic_ips_compartidas', { p_desde: desde, p_hasta: hasta, p_inst: inst, p_min: min, p_ip: ip, p_limite: limite });
+export const fetchTicSesionesIp = ({ ip, desde = null, hasta = null, q = null, inst = null, limite = 300 } = {}) => rpcTic('tic_sesiones_ip', { p_ip: ip, p_desde: desde, p_hasta: hasta, p_q: q, p_inst: inst, p_limite: limite });
 export const fetchTicResumenUsuarios = ({ q = null, desde = null, hasta = null, inst = null, limite = 200 } = {}) => rpcTic('tic_resumen_usuarios', { p_q: q, p_desde: desde, p_hasta: hasta, p_inst: inst, p_limite: limite });
 export const fetchTicUso = (dias = 14, inst = null) => rpcTic('tic_uso_estadisticas', { p_dias: dias, p_inst: inst });
 export const fetchTicConexiones = (dias = 30, limite = 500) => rpcTic('tic_conexiones_diarias', { p_dias: dias, p_limite_rt: limite });

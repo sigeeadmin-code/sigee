@@ -124,3 +124,77 @@ export function limiteValido(v, porDefecto = LIMITE_REALTIME_PLAN_PRO) {
   const n = Math.floor(Number(v));
   return Number.isFinite(n) && n >= 10 && n <= 1000000 ? n : porDefecto;
 }
+
+// ───────────────────────── IPs compartidas por varias cuentas ─────────────────────────
+/** Roles de alto privilegio: una IP compartida con ellos merece más rigor. */
+export const ROLES_SENSIBLES = ['super_admin', 'admin_plantel', 'supervisor_general', 'supervisor_plantel', 'contador_general', 'contador_plantel', 'inspector_general'];
+export const NIVELES_IP = {
+  info: { texto: 'Info', color: '#0369a1', fondo: '#e0f2fe', ayuda: 'Probable red compartida del plantel.' },
+  alerta: { texto: 'Alerta', color: '#b45309', fondo: '#fef3c7', ayuda: 'Varias cuentas o roles sensibles distintos en la misma IP.' },
+  critico: { texto: 'Crítico', color: '#b91c1c', fondo: '#fee2e2', ayuda: 'Planteles distintos o roles sensibles en horario atípico.' }
+};
+
+/**
+ * Severidad de una IP usada por varios usuarios (regla de docs/SOPORTE-TIC-ACCESOS-SEGURIDAD.md):
+ *  · info    → 2 usuarios, mismo plantel, sin señales raras
+ *  · alerta  → 3 o más usuarios, o 2+ roles sensibles distintos
+ *  · crítico → planteles distintos, o un rol sensible conectado de madrugada (00:00–04:59, hora de Ecuador)
+ * ip = { n_usuarios, n_planteles, nocturnas, usuarios: [{ rol }] }
+ */
+export function clasificarIpCompartida(ip) {
+  const roles = (ip.usuarios || []).map(u => u.rol);
+  const sensibles = new Set(roles.filter(r => ROLES_SENSIBLES.includes(r)));
+  if ((ip.n_planteles || 0) >= 2) return { nivel: 'critico', motivo: `Usada por cuentas de ${ip.n_planteles} planteles distintos.` };
+  if (sensibles.size >= 1 && (ip.nocturnas || 0) > 0) return { nivel: 'critico', motivo: 'Rol sensible conectado en horario atípico (madrugada).' };
+  if ((ip.n_usuarios || 0) >= 3) return { nivel: 'alerta', motivo: `${ip.n_usuarios} cuentas distintas usan esta IP.` };
+  if (sensibles.size >= 2) return { nivel: 'alerta', motivo: 'Roles sensibles distintos comparten esta IP.' };
+  return { nivel: 'info', motivo: NIVELES_IP.info.ayuda };
+}
+
+/** Coincidencia exacta o por prefijo («190.110.»). Vacío = todo. */
+export function coincideIp(ip, filtro) {
+  const f = String(filtro || '').trim();
+  if (!f) return true;
+  const v = String(ip || '');
+  return v === f || v.startsWith(f);
+}
+
+/** Orden de gravedad para listar primero lo más urgente. */
+const PESO = { critico: 3, alerta: 2, info: 1 };
+export function ordenarIpsPorRiesgo(ips) {
+  return [...ips].map(i => ({ ...i, riesgo: clasificarIpCompartida(i) }))
+    .sort((a, b) => PESO[b.riesgo.nivel] - PESO[a.riesgo.nivel] || b.n_usuarios - a.n_usuarios || String(b.ultima).localeCompare(String(a.ultima)));
+}
+
+/** Indicadores de la cabecera de Accesos a partir de las sesiones cargadas y las IPs compartidas. */
+export function resumenAccesos(sesiones, ips) {
+  const abiertas = sesiones.filter(s => s.abierta);
+  return {
+    activas: abiertas.length,
+    usuariosUnicos: new Set(sesiones.map(s => s.user_id).filter(Boolean)).size,
+    ipsCompartidas: ips.length,
+    ipsCriticas: ips.filter(i => i.riesgo?.nivel === 'critico').length,
+    largas: abiertas.filter(s => Number(s.minutos) > 480).length      // más de 8 h abiertas
+  };
+}
+
+const horaEcuador = iso => { const h = Number(new Date(iso).toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Guayaquil' })); return Number.isFinite(h) ? h % 24 : null; };
+
+/** Resume una IP a partir de sus sesiones (misma forma que devuelve tic_ips_compartidas) para clasificarla en el panel. */
+export function resumirIpDesdeSesiones(sesiones) {
+  const porUsuario = new Map();
+  for (const s of sesiones) {
+    const k = s.user_id || s.email;
+    const u = porUsuario.get(k) || { user_id: s.user_id, nombre: s.nombre, email: s.email, rol: s.rol, plantel: s.plantel, sesiones: 0, ultima: s.inicio };
+    u.sesiones++; if (String(s.inicio) > String(u.ultima)) u.ultima = s.inicio;
+    porUsuario.set(k, u);
+  }
+  const usuarios = [...porUsuario.values()].sort((a, b) => String(b.ultima).localeCompare(String(a.ultima)));
+  const inicios = sesiones.map(s => s.inicio).filter(Boolean).sort();
+  return {
+    n_usuarios: usuarios.length, n_sesiones: sesiones.length,
+    n_planteles: new Set(sesiones.map(s => s.institucion_id).filter(Boolean)).size,
+    nocturnas: sesiones.filter(s => { const h = horaEcuador(s.inicio); return h !== null && h >= 0 && h <= 4; }).length,
+    primera: inicios[0] || null, ultima: inicios[inicios.length - 1] || null, usuarios
+  };
+}

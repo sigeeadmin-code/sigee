@@ -1,0 +1,8 @@
+-- SIGEE · Soporte TIC · IPs compartidas y sesiones por IP — ya aplicado en producción
+-- (migración tic_ips_compartidas_y_sesiones_por_ip). Solo Super Administrador (es_super_admin()).
+--   tic_ips_compartidas(p_desde, p_hasta, p_inst, p_min=2, p_ip=null, p_limite=200) → jsonb por IP:
+--       { ip, n_usuarios, n_sesiones, n_planteles, primera, ultima, nocturnas (00–04 h Ecuador), bloqueada, usuarios[] }
+--   tic_sesiones_ip(p_ip, p_desde, p_hasta, p_q, p_inst, p_limite=300) → sesiones de esa IP (exacta o por prefijo).
+-- La severidad (info / alerta / crítico) se calcula en src/lib/tic.js (clasificarIpCompartida).
+-- País, ciudad e ISP NO se calculan: requieren un servicio GeoIP externo (pendiente).
+-- El texto completo de las funciones está en la migración de Supabase del mismo nombre.

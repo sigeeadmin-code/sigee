@@ -81,3 +81,42 @@ assert.equal(normalizarIp('::ffff:10.0.0.1'), '10.0.0.1'); assert.equal(normaliz
   assert.ok(tipos.includes('rate_limit')); assert.equal(filas.some(f => JSON.stringify(f).includes('secreto')), false);
 }
 console.log('tic.test.mjs OK');
+
+// ── IPs compartidas ──
+import { clasificarIpCompartida, coincideIp, ordenarIpsPorRiesgo, resumenAccesos, ROLES_SENSIBLES } from '../src/lib/tic.js';
+const ipx = (extra) => ({ n_usuarios: 2, n_planteles: 1, nocturnas: 0, usuarios: [{ rol: 'docente' }, { rol: 'docente' }], ...extra });
+assert.equal(clasificarIpCompartida(ipx({})).nivel, 'info');
+assert.equal(clasificarIpCompartida(ipx({ n_usuarios: 3 })).nivel, 'alerta');
+assert.equal(clasificarIpCompartida(ipx({ usuarios: [{ rol: 'admin_plantel' }, { rol: 'contador_plantel' }] })).nivel, 'alerta');
+assert.equal(clasificarIpCompartida(ipx({ usuarios: [{ rol: 'admin_plantel' }, { rol: 'docente' }] })).nivel, 'info', 'un solo rol sensible de día es red compartida');
+assert.equal(clasificarIpCompartida(ipx({ n_planteles: 2 })).nivel, 'critico');
+assert.equal(clasificarIpCompartida(ipx({ nocturnas: 1, usuarios: [{ rol: 'contador_plantel' }, { rol: 'docente' }] })).nivel, 'critico');
+assert.equal(clasificarIpCompartida(ipx({ nocturnas: 3 })).nivel, 'info', 'madrugada sin rol sensible no escala');
+assert.ok(ROLES_SENSIBLES.includes('super_admin') && !ROLES_SENSIBLES.includes('docente'));
+assert.equal(coincideIp('190.110.44.218', ''), true);
+assert.equal(coincideIp('190.110.44.218', '190.110.44.218'), true);
+assert.equal(coincideIp('190.110.44.218', '190.110.'), true);
+assert.equal(coincideIp('190.110.44.218', '190.111'), false);
+assert.equal(coincideIp('190.110.44.218', ' 190.110 '), true, 'se ignoran espacios');
+const ord = ordenarIpsPorRiesgo([
+  { ip: 'a', n_usuarios: 2, n_planteles: 1, nocturnas: 0, usuarios: [], ultima: '2026-10-01' },
+  { ip: 'b', n_usuarios: 5, n_planteles: 1, nocturnas: 0, usuarios: [], ultima: '2026-10-02' },
+  { ip: 'c', n_usuarios: 2, n_planteles: 2, nocturnas: 0, usuarios: [], ultima: '2026-09-01' }]);
+assert.deepEqual(ord.map(i => i.ip), ['c', 'b', 'a']);
+assert.equal(ord[0].riesgo.nivel, 'critico');
+const ra = resumenAccesos([{ user_id: 'u1', abierta: true, minutos: 600 }, { user_id: 'u1', abierta: false, minutos: 20 }, { user_id: 'u2', abierta: true, minutos: 30 }], ord);
+assert.deepEqual(ra, { activas: 2, usuariosUnicos: 2, ipsCompartidas: 3, ipsCriticas: 1, largas: 1 });
+console.log('tic (IPs compartidas): OK');
+
+import { resumirIpDesdeSesiones } from '../src/lib/tic.js';
+const ses = [
+  { user_id: 'u1', nombre: 'Ana', email: 'a@x', rol: 'admin_plantel', institucion_id: 'i1', plantel: 'P1', inicio: '2026-10-20T15:00:00Z' },   // 10:00 Ecuador
+  { user_id: 'u1', nombre: 'Ana', email: 'a@x', rol: 'admin_plantel', institucion_id: 'i1', plantel: 'P1', inicio: '2026-10-21T07:30:00Z' },   // 02:30 Ecuador → madrugada
+  { user_id: 'u2', nombre: 'Beto', email: 'b@x', rol: 'docente', institucion_id: 'i2', plantel: 'P2', inicio: '2026-10-22T16:00:00Z' }];
+const r = resumirIpDesdeSesiones(ses);
+assert.equal(r.n_usuarios, 2); assert.equal(r.n_sesiones, 3); assert.equal(r.n_planteles, 2); assert.equal(r.nocturnas, 1);
+assert.equal(r.primera, '2026-10-20T15:00:00Z'); assert.equal(r.ultima, '2026-10-22T16:00:00Z');
+assert.equal(r.usuarios[0].nombre, 'Beto'); assert.equal(r.usuarios.find(u => u.user_id === 'u1').sesiones, 2);
+assert.equal(clasificarIpCompartida(r).nivel, 'critico');
+assert.equal(resumirIpDesdeSesiones([]).n_usuarios, 0);
+console.log('resumirIpDesdeSesiones: OK');

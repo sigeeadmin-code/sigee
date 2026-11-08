@@ -2,13 +2,15 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchTicTiempoReal, fetchTicHistorial, fetchTicResumenUsuarios, fetchTicUso, fetchTicLatenciaUsuarios,
-  fetchTicEventos, marcarTicEvento, bloquearTicIp, desbloquearTicIp, fetchTicIpsBloqueadas, fetchTicConexiones
+  fetchTicEventos, marcarTicEvento, bloquearTicIp, desbloquearTicIp, fetchTicIpsBloqueadas, fetchTicConexiones, fetchTicIpsCompartidas, fetchTicSesionesIp
 } from '../lib/data.js';
+import PanelOrigenIp from '../components/PanelOrigenIp.jsx';
 import { descargarLibro } from '../lib/exportLibro.js';
 import GraficoLineas from '../components/GraficoLineas.jsx';
 import {
   clasificarLatencia, usuarioConProblema, formatoDuracion, navegadorCorto, etiquetaEvento, esEventoExterno,
   ESTADOS_RED, DIAS_SEMANA, horaPico, intensidadCalor,
+  clasificarIpCompartida, ordenarIpsPorRiesgo, resumenAccesos, coincideIp, NIVELES_IP,
   LIMITE_REALTIME_PLAN_PRO, UMBRAL_ATENCION, UMBRAL_CRITICO, semaforoConexiones, resumenConexiones, limiteValido, porcentajeLimite
 } from '../lib/tic.js';
 
@@ -121,37 +123,72 @@ function Accesos({ instituciones }) {
   const hoy = new Date().toISOString().slice(0, 10); const hace7 = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
   const [q, setQ] = useState(''); const [desde, setDesde] = useState(hace7); const [hasta, setHasta] = useState(hoy); const [inst, setInst] = useState('');
   const [vista, setVista] = useState('sesiones'); const [filas, setFilas] = useState([]); const [err, setErr] = useState(''); const [cargando, setCargando] = useState(false);
+  const [ipf, setIpf] = useState(''); const [soloCompartidas, setSoloCompartidas] = useState(false);
+  const [ses, setSes] = useState([]); const [ips, setIps] = useState([]); const [panelIp, setPanelIp] = useState(null);
+  const compartidas = useMemo(() => new Set(ips.map(i => i.ip)), [ips]);
   const cargar = useCallback(async () => {
     setCargando(true); setErr('');
     const base = { q: q.trim() || null, desde: new Date(desde + 'T00:00:00-05:00').toISOString(), hasta: new Date(hasta + 'T23:59:59-05:00').toISOString(), inst: inst || null };
-    try { setFilas(vista === 'sesiones' ? await fetchTicHistorial({ ...base, limite: 500 }) : await fetchTicResumenUsuarios(base)); } catch (e) { setErr(e.message); }
+    try {
+      // sesiones (con filtro de IP exacta o por prefijo) + IPs compartidas del mismo rango, en paralelo
+      const [sesiones, compart, resumenU] = await Promise.all([
+        ipf.trim() ? fetchTicSesionesIp({ ip: ipf.trim(), ...base, limite: 500 }) : fetchTicHistorial({ ...base, limite: 500 }),
+        fetchTicIpsCompartidas({ desde: base.desde, hasta: base.hasta, inst: base.inst, ip: ipf.trim() || null }),
+        vista === 'usuarios' ? fetchTicResumenUsuarios(base) : Promise.resolve(null)
+      ]);
+      setSes(sesiones); setIps(ordenarIpsPorRiesgo(compart));
+      setFilas(vista === 'usuarios' ? (resumenU || []) : []);
+    } catch (e) { setErr(e.message); }
     setCargando(false);
-  }, [q, desde, hasta, inst, vista]);
+  }, [q, desde, hasta, inst, vista, ipf]);
   useEffect(() => { cargar(); }, [vista]); // eslint-disable-line react-hooks/exhaustive-deps
   function exportar() {
-    if (vista === 'sesiones') descargarLibro(`accesos_${hoy}.xlsx`, [{ nombre: 'Accesos', cols: ['Usuario', 'Correo', 'Rol', 'Plantel', 'IP', 'Navegador', 'Entrada', 'Salida', 'Minutos', 'Cierre'], filas: filas.map(s => ({ Usuario: s.nombre, Correo: s.email, Rol: ROL[s.rol] || s.rol, Plantel: s.plantel || '', IP: s.ip || '', Navegador: navegadorCorto(s.user_agent), Entrada: fHora(s.inicio), Salida: s.abierta ? 'conectado' : fHora(s.fin || s.ultimo_latido), Minutos: s.minutos, Cierre: s.motivo_fin || '' })) }]);
+    if (vista === 'compartidas') descargarLibro(`ips_compartidas_${hoy}.xlsx`, [{ nombre: 'IPs compartidas', cols: ['IP', 'Severidad', 'Motivo', 'Usuarios', 'Planteles', 'Sesiones', 'Madrugada', 'Primera', 'Última', 'Bloqueada', 'Cuentas'],
+      filas: ips.map(i => ({ IP: i.ip, Severidad: NIVELES_IP[i.riesgo.nivel].texto, Motivo: i.riesgo.motivo, Usuarios: i.n_usuarios, Planteles: i.n_planteles, Sesiones: i.n_sesiones, Madrugada: i.nocturnas, Primera: fHora(i.primera), 'Última': fHora(i.ultima), Bloqueada: i.bloqueada ? 'Sí' : 'No', Cuentas: (i.usuarios || []).map(u => `${u.nombre || u.email} (${ROL[u.rol] || u.rol})`).join('; ') })) }]);
+    else if (vista === 'sesiones') descargarLibro(`accesos_${hoy}.xlsx`, [{ nombre: 'Accesos', cols: ['Usuario', 'Correo', 'Rol', 'Plantel', 'IP', 'Navegador', 'Entrada', 'Salida', 'Minutos', 'Cierre'], filas: visibles.map(s => ({ Usuario: s.nombre, Correo: s.email, Rol: ROL[s.rol] || s.rol, Plantel: s.plantel || '', IP: s.ip || '', Navegador: navegadorCorto(s.user_agent), Entrada: fHora(s.inicio), Salida: s.abierta ? 'conectado' : fHora(s.fin || s.ultimo_latido), Minutos: s.minutos, Cierre: s.motivo_fin || '' })) }]);
     else descargarLibro(`tiempo_por_usuario_${hoy}.xlsx`, [{ nombre: 'Por usuario', cols: ['Usuario', 'Correo', 'Rol', 'Plantel', 'Ingresos', 'Minutos totales', 'Promedio por ingreso', 'Última entrada', 'IP distintas'], filas: filas.map(u => ({ Usuario: u.nombre, Correo: u.email, Rol: ROL[u.rol] || u.rol, Plantel: u.plantel || '', Ingresos: u.ingresos, 'Minutos totales': u.minutos, 'Promedio por ingreso': u.promedio_min, 'Última entrada': fHora(u.ultima_entrada), 'IP distintas': u.ips })) }]);
   }
+  const visibles = useMemo(() => (vista === 'sesiones' ? ses.filter(x => coincideIp(x.ip, ipf) && (!soloCompartidas || compartidas.has(x.ip))) : vista === 'compartidas' ? ips : filas), [vista, ses, ipf, soloCompartidas, compartidas, filas, ips]);
+  const kp = useMemo(() => resumenAccesos(ses, ips), [ses, ips]);
   return (
     <div>
       <div className="card" style={{ padding: 14, marginBottom: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10, alignItems: 'end' }}>
         <div><label className="fl">Buscar usuario</label><input className="fc" placeholder="Nombre o correo" value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && cargar()} /></div>
+        <div><label className="fl" htmlFor="tic-ip">IP</label><input id="tic-ip" className="fc" placeholder="Exacta o prefijo (190.110.)" value={ipf} onChange={e => setIpf(e.target.value)} onKeyDown={e => e.key === 'Enter' && cargar()} inputMode="decimal" /></div>
         <div><label className="fl">Desde</label><input className="fc" type="date" value={desde} onChange={e => setDesde(e.target.value)} /></div>
         <div><label className="fl">Hasta</label><input className="fc" type="date" value={hasta} onChange={e => setHasta(e.target.value)} /></div>
         <div><label className="fl">Plantel</label><select className="fc" value={inst} onChange={e => setInst(e.target.value)}><option value="">Todos</option>{(instituciones || []).map(i => <option key={i.id} value={i.id}>{i.nombre}</option>)}</select></div>
-        <div style={{ display: 'flex', gap: 8 }}><button className="btn btn-primary" onClick={cargar} disabled={cargando}>{cargando ? 'Buscando…' : 'Buscar'}</button><button className="btn btn-secondary" onClick={exportar} disabled={!filas.length}>⬇️ Excel</button></div>
+        <div style={{ display: 'flex', gap: 8 }}><button className="btn btn-primary" onClick={cargar} disabled={cargando}>{cargando ? 'Buscando…' : 'Buscar'}</button><button className="btn btn-secondary" onClick={exportar} disabled={!visibles.length}>⬇️ Excel</button></div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10, marginBottom: 12 }}>
+        <Kpi icono="ti ti-plug-connected" titulo="Sesiones activas ahora" valor={fmt(kp.activas)} nota="Entre las cargadas" />
+        <Kpi icono="ti ti-users" titulo="Usuarios únicos" valor={fmt(kp.usuariosUnicos)} nota="En el rango y filtros" />
+        <Kpi icono="ti ti-network" titulo="IPs con 2 o más usuarios" valor={fmt(kp.ipsCompartidas)} nota={kp.ipsCriticas ? `${kp.ipsCriticas} en nivel crítico` : 'Ninguna crítica'} color={kp.ipsCriticas ? 'var(--red)' : undefined} />
+        <Kpi icono="ti ti-hourglass" titulo="Sesiones de más de 8 h abiertas" valor={fmt(kp.largas)} nota="Posible abandono o sesión ajena" color={kp.largas ? 'var(--amberD)' : undefined} />
       </div>
       <div className="tabs" style={{ marginBottom: 10 }}>
-        {[['sesiones', 'Entradas y salidas'], ['usuarios', 'Tiempo por usuario']].map(([v, l]) => <button key={v} className={'tab' + (vista === v ? ' on' : '')} onClick={() => setVista(v)}>{l}</button>)}
+        {[['sesiones', 'Entradas y salidas'], ['usuarios', 'Tiempo por usuario'], ['compartidas', `IPs compartidas (${ips.length})`]].map(([v, l]) => <button key={v} className={'tab' + (vista === v ? ' on' : '')} onClick={() => setVista(v)}>{l}</button>)}
       </div>
       <Err e={err} />
+      {vista === 'sesiones' && <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, margin: '0 0 8px' }}><input type="checkbox" checked={soloCompartidas} onChange={e => setSoloCompartidas(e.target.checked)} /> Solo IPs compartidas por 2 o más cuentas</label>}
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        {!filas.length ? <Vacio>{cargando ? 'Cargando…' : 'No hay accesos en este período. Los accesos se registran desde que se publicó este módulo.'}</Vacio> : (
+        {!visibles.length ? <Vacio>{cargando ? 'Cargando…' : 'No hay accesos en este período. Los accesos se registran desde que se publicó este módulo.'}</Vacio> : (
           <div style={{ overflowX: 'auto', maxHeight: 560, overflowY: 'auto' }}>
-            {vista === 'sesiones' ? (
+            {vista === 'compartidas' ? (
+              <table className="data" style={{ width: '100%' }}>
+                <thead><tr><th>IP</th><th>Riesgo</th><th>Usuarios</th><th>Planteles</th><th>Sesiones</th><th>Última</th><th>Cuentas</th></tr></thead>
+                <tbody>{visibles.map(i => { const nv = NIVELES_IP[i.riesgo.nivel]; return (
+                  <tr key={i.ip}>
+                    <td><button type="button" className="ip-link" onClick={() => setPanelIp(i)}>{i.ip}</button>{i.bloqueada && <span className="badge b-err" style={{ marginLeft: 6 }}>Bloqueada</span>}</td>
+                    <td title={i.riesgo.motivo}><span style={{ background: nv.fondo, color: nv.color, borderRadius: 999, padding: '2px 10px', fontWeight: 700, fontSize: 12 }}>{nv.texto}</span></td>
+                    <td><strong>{i.n_usuarios}</strong></td><td>{i.n_planteles}</td><td>{i.n_sesiones}</td><td style={{ fontSize: 12 }}>{fHora(i.ultima)}</td>
+                    <td style={{ fontSize: 12, maxWidth: 360 }}>{(i.usuarios || []).slice(0, 4).map(u => `${u.nombre || u.email} (${ROL[u.rol] || u.rol})`).join(', ')}{(i.usuarios || []).length > 4 ? ` y ${(i.usuarios || []).length - 4} más` : ''}</td>
+                  </tr>); })}</tbody>
+              </table>
+            ) : vista === 'sesiones' ? (
               <table className="data" style={{ width: '100%' }}>
                 <thead><tr><th>Usuario</th><th>Rol</th><th>Plantel</th><th>Entrada</th><th>Salida</th><th>Tiempo dentro</th><th>IP</th><th>Navegador</th></tr></thead>
-                <tbody>{filas.map(s => <tr key={s.id}><td style={{ fontSize: 12.5 }}><strong>{s.nombre || '—'}</strong><div style={{ fontSize: 11, color: 'var(--slate)' }}>{s.email}</div></td><td style={{ fontSize: 12 }}>{ROL[s.rol] || s.rol}</td><td style={{ fontSize: 12 }}>{s.plantel || '—'}</td><td style={{ fontSize: 12 }}>{fHora(s.inicio)}</td><td style={{ fontSize: 12 }}>{s.abierta ? <span className="badge" style={{ background: 'var(--greenL, #ecfdf5)', color: 'var(--green)' }}>● conectado</span> : fHora(s.fin || s.ultimo_latido)}</td><td style={{ fontSize: 12.5, fontWeight: 600 }}>{formatoDuracion(s.minutos)}</td><td style={{ fontSize: 12 }}>{s.ip || '—'}</td><td style={{ fontSize: 12 }}>{navegadorCorto(s.user_agent)}</td></tr>)}</tbody>
+                <tbody>{visibles.map(s => <tr key={s.id}><td style={{ fontSize: 12.5 }}><strong>{s.nombre || '—'}</strong><div style={{ fontSize: 11, color: 'var(--slate)' }}>{s.email}</div></td><td style={{ fontSize: 12 }}>{ROL[s.rol] || s.rol}</td><td style={{ fontSize: 12 }}>{s.plantel || '—'}</td><td style={{ fontSize: 12 }}>{fHora(s.inicio)}</td><td style={{ fontSize: 12 }}>{s.abierta ? <span className="badge" style={{ background: 'var(--greenL, #ecfdf5)', color: 'var(--green)' }}>● conectado</span> : fHora(s.fin || s.ultimo_latido)}</td><td style={{ fontSize: 12.5, fontWeight: 600 }}>{formatoDuracion(s.minutos)}</td><td style={{ fontSize: 12 }}>{s.ip ? <>{<button type="button" className="ip-link" onClick={() => setPanelIp({ ip: s.ip })} title="Ver origen de la IP">{s.ip}</button>}{compartidas.has(s.ip) && <span className="ti ti-users" style={{ marginLeft: 6, color: 'var(--amberD)' }} title="IP compartida por varias cuentas" />}</> : '—'}</td><td style={{ fontSize: 12 }}>{navegadorCorto(s.user_agent)}</td></tr>)}</tbody>
               </table>
             ) : (
               <table className="data" style={{ width: '100%' }}>
@@ -162,6 +199,7 @@ function Accesos({ instituciones }) {
           </div>
         )}
       </div>
+      {panelIp && <PanelOrigenIp ip={panelIp.ip} bloqueada={panelIp.bloqueada} inst={inst || null} desde={new Date(desde + 'T00:00:00-05:00').toISOString()} hasta={new Date(hasta + 'T23:59:59-05:00').toISOString()} onClose={() => setPanelIp(null)} onBloqueada={() => cargar()} />}
       <div style={{ fontSize: 11.5, color: 'var(--slate)', marginTop: 6 }}>El tiempo dentro se mide por latidos cada ~90 s; el margen de error es de aproximadamente 1,5 minutos por sesión. Si un usuario cierra la pestaña sin salir, la sesión se cierra sola al dejar de reportar.</div>
     </div>
   );

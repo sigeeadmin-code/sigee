@@ -97,3 +97,7 @@ borrador → en_ruta ⇄ observado → aprobado_final → entregado → archivad
 - **Configuración** (antes era un marcador): «Mi cuenta» y «Contraseña», que envía el mismo enlace de confirmación al correo de la cuenta.
 - Reglas en `src/lib/claveSegura.js` (≥ 10 caracteres, mayúscula, minúscula, número, sin el usuario del correo), con pruebas.
 - **Requiere en Supabase → Authentication**: *URL Configuration* con el dominio de producción como Site URL y en Redirect URLs; y correo saliente funcionando (el SMTP incluido limita a pocos correos por hora: conviene un SMTP propio).
+
+## Soporte TIC · IPs compartidas (docs/SOPORTE-TIC-ACCESOS-SEGURIDAD.md del portal, 6 nov 2026)
+- **Accesos**: filtro por IP (exacta o prefijo), indicadores (sesiones activas, usuarios únicos, IPs con 2+ usuarios, sesiones de más de 8 h), casilla «solo IPs compartidas» y pestaña **IPs compartidas** con severidad (Info / Alerta / Crítico, `clasificarIpCompartida`). Clic en una IP → panel **Origen de la IP** (cuentas, entradas y salidas, bloquear con motivo y duración, Excel).
+- Pendiente: geolocalización/ISP (servicio externo) y forzar cierre de sesiones (afecta a todas las cuentas de una red compartida).
