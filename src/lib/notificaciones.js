@@ -11,12 +11,13 @@ export const GRUPOS_DESTINO = [
   { id: 'padre', label: 'Padres y representantes', icon: 'ti ti-users-group' },
   { id: 'secretario', label: 'Secretaría y administrativos', icon: 'ti ti-file-text' },
   { id: 'inspector', label: 'Inspección', icon: 'ti ti-shield-check' },
+  { id: 'dece', label: 'DECE', icon: 'ti ti-heart-handshake' },
   { id: 'admin_plantel', label: 'Administración', icon: 'ti ti-building' }
 ];
 export const ETIQUETA_GRUPO = Object.fromEntries(GRUPOS_DESTINO.map(g => [g.id, g.label]));
 
 // Cómo se muestra quién envía cuando no se conoce su nombre (la familia no ve nombres del personal)
-export const ETIQUETA_ROL = { super_admin: 'SIGEE', admin_plantel: 'Administración', supervisor_plantel: 'Administración', secretario: 'Secretaría', contador_plantel: 'Secretaría', administrativo: 'Secretaría', inspector_general: 'Inspección General', docente: 'Docente' };
+export const ETIQUETA_ROL = { super_admin: 'SIGEE', admin_plantel: 'Administración', supervisor_plantel: 'Administración', secretario: 'Secretaría', contador_plantel: 'Secretaría', administrativo: 'Secretaría', inspector_general: 'Inspección General', dece: 'DECE', docente: 'Docente' };
 
 export const PRIORIDADES = [
   { id: 'normal', label: 'Normal', color: '#64748b', fondo: '#f1f5f9', icon: 'ti ti-bell' },
@@ -67,6 +68,7 @@ export function grupoDeRol(rolDb) {
     case 'admin_plantel': case 'supervisor_general': case 'contador_general': case 'supervisor_plantel': return 'admin_plantel';
     case 'secretario': case 'contador_plantel': case 'administrativo': return 'secretario';
     case 'inspector_general': return 'inspector';
+    case 'dece': return 'dece';
     case 'docente': return 'docente';
     case 'estudiante': return 'alumno';
     case 'padre': return 'padre';

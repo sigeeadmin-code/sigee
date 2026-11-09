@@ -10,7 +10,7 @@ const caja = { background: 'var(--card, #fff)', borderRadius: 14, width: '100%',
 const ROL = {
   super_admin: 'Super Administrador', supervisor_general: 'Supervisor General', contador_general: 'Contador General',
   admin_plantel: 'Administrador de Plantel', secretario: 'Secretario/a', supervisor_plantel: 'Supervisor de Plantel',
-  contador_plantel: 'Contador de Plantel', administrativo: 'Administrativo', inspector_general: 'Inspector General',
+  contador_plantel: 'Contador de Plantel', administrativo: 'Administrativo', inspector_general: 'Inspector General', dece: 'DECE',
   docente: 'Docente', estudiante: 'Estudiante', padre: 'Padre/Madre de familia'
 };
 const ROLES_SIGEE = ['super_admin', 'supervisor_general', 'contador_general'];

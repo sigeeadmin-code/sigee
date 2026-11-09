@@ -101,3 +101,10 @@ borrador → en_ruta ⇄ observado → aprobado_final → entregado → archivad
 ## Soporte TIC · IPs compartidas (docs/SOPORTE-TIC-ACCESOS-SEGURIDAD.md del portal, 6 nov 2026)
 - **Accesos**: filtro por IP (exacta o prefijo), indicadores (sesiones activas, usuarios únicos, IPs con 2+ usuarios, sesiones de más de 8 h), casilla «solo IPs compartidas» y pestaña **IPs compartidas** con severidad (Info / Alerta / Crítico, `clasificarIpCompartida`). Clic en una IP → panel **Origen de la IP** (cuentas, entradas y salidas, bloquear con motivo y duración, Excel).
 - Pendiente: geolocalización/ISP (servicio externo) y forzar cierre de sesiones (afecta a todas las cuentas de una red compartida).
+
+## Roles DECE y Secretaría (docs ROL-DECE / ROL-SECRETARIA del portal, 6 nov 2026)
+- **DECE**: grupo de menú `dece` (Dashboard, Notificaciones, Estudiantes de solo lectura, Justificaciones de consulta, Oficios solo donde la ruta tiene paso DECE, Configuración). Alta de usuarios con rol DECE (`admin-create-user` v4). Inicio con oficios en su paso y `dece_estadisticas()`.
+- **Estudiantes** es de solo lectura para quien no puede escribir (`super_admin`, `admin_plantel`, `secretario` escriben; el resto consulta), igual que la base.
+- **Secretaría**: Oficios sí (solo actúa en su paso); «Licencias y activación» (finanzas) solo Contador y Administrativo.
+- NO se ampliaron permisos de calificaciones ni asistencia para DECE (la base se los niega); el contexto del estudiante para el DECE va por `dece_contexto_estudiante`.
+- Pendiente: pantallas del módulo de casos DECE (la base ya tiene casos, intervenciones, derivaciones y actividades) y decidir si Secretaría pasa a solo lectura en Estudiantes y Asistencia.

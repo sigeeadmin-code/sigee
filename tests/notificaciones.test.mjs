@@ -7,7 +7,9 @@ const AHORA = new Date('2026-10-26T15:00:00Z').getTime();   // 10:00 en Ecuador
 for (const r of ['super_admin', 'admin_plantel', 'secretario', 'inspector_general', 'docente']) assert.equal(N.puedeEnviar(r), true, r);
 for (const r of ['padre', 'estudiante', 'contador_plantel', 'administrativo', 'supervisor_plantel']) assert.equal(N.puedeEnviar(r), false, r);
 assert.deepEqual(N.gruposPermitidos('docente').map(g => g.id), ['alumno', 'padre']);
-assert.equal(N.gruposPermitidos('admin_plantel').length, 6);
+assert.equal(N.gruposPermitidos('admin_plantel').length, 7);          // incluye DECE
+assert.ok(N.gruposPermitidos('admin_plantel').some(g => g.id === 'dece'));
+assert.equal(N.grupoDeRol('dece'), 'dece');
 assert.ok(!N.prioridadesPermitidas('docente').some(p => p.id === 'urgente')); assert.ok(N.prioridadesPermitidas('admin_plantel').some(p => p.id === 'urgente'));
 assert.ok(!N.categoriasPermitidas('docente').some(c => c.id === 'emergencia'));
 

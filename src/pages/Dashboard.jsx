@@ -10,6 +10,7 @@ import { usaEvaluacionNumerica } from '../lib/calificaciones.js';
 import { Link } from 'react-router-dom';
 import HistorialAsistencia from '../components/HistorialAsistencia.jsx';
 import MiSeguimiento from '../components/MiSeguimiento.jsx';
+import DashboardDece from './DashboardDece.jsx';
 import RecordatorioRendimiento from '../components/RecordatorioRendimiento.jsx';
 import AvisosJustificacion from '../components/AvisosJustificacion.jsx';
 
@@ -714,5 +715,6 @@ export default function Dashboard() {
   if (profile.rolDb === 'padre' || profile.rolDb === 'estudiante') return <DashboardEstudiante />;
   if (profile.rolDb === 'docente') return <DashboardDocente />;
   if (profile.rolDb === 'inspector_general') return <DashboardInspector />;
+  if (profile.rolDb === 'dece') return <DashboardDece />;
   return <DashboardInstitucion />;
 }

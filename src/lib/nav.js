@@ -97,13 +97,27 @@ export const NAV_BY_ROL = {
       { to: '/analisis-asistencia', label: 'Análisis de asistencia', icon: 'ti ti-chart-dots' },
       { to: '/boletas', label: 'Boletas', icon: 'ti ti-report-analytics' },
       { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' },
-      { to: '/oficios', label: 'Oficios / documental', icon: 'ti ti-file-description' },
+      { to: '/oficios', label: 'Oficios / documental', icon: 'ti ti-file-description', soloRolDb: ['secretario', 'administrativo'] },
       { to: '/calendario', label: 'Calendario académico', icon: 'ti ti-calendar' },
       { to: '/aulas', label: 'Aulas', icon: 'ti ti-door' },
       { to: '/horario', label: 'Horario', icon: 'ti ti-clock' }
     ]},
     { cat: 'Finanzas', items: [
-      { to: '/licencias', label: 'Licencias y activación', icon: 'ti ti-credit-card' }
+      { to: '/licencias', label: 'Licencias y activación', icon: 'ti ti-credit-card', soloRolDb: ['contador_plantel', 'administrativo'] }
+    ]},
+    { cat: 'Sistema', items: [
+      { to: '/configuracion', label: 'Configuración', icon: 'ti ti-settings' }
+    ]}
+  ],
+  dece: [
+    { cat: 'Principal', items: [
+      { to: '/', label: 'Dashboard', icon: 'ti ti-layout-dashboard' },
+      { to: '/notificaciones', label: 'Notificaciones', icon: 'ti ti-bell' }
+    ]},
+    { cat: 'Consejería estudiantil', items: [
+      { to: '/estudiantes', label: 'Estudiantes', icon: 'ti ti-users' },
+      { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' },
+      { to: '/oficios', label: 'Oficios / documental', icon: 'ti ti-file-description' }
     ]},
     { cat: 'Sistema', items: [
       { to: '/configuracion', label: 'Configuración', icon: 'ti ti-settings' }

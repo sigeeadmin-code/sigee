@@ -1,0 +1,8 @@
+-- SIGEE · Matriz de roles (docs ROL-SECRETARIA / ROL-DECE del portal) — ya aplicado en producción
+-- (migración roles_matriz_secretaria_dece_oficios). El rol 'dece' y su módulo de casos los creó otra sesión el 2 nov.
+--  · oficios_puede_actuar: Secretaría solo en SU paso; DECE solo en el suyo; Contador y Administrativo no deciden.
+--  · oficios_puede_ver: el Contador no ve oficios pedagógicos; DECE solo ve los que tienen paso DECE en su ruta.
+--  · oficios_registrar_entrega: ya no la registra el Administrativo.
+--  · justificaciones_select: DECE consulta (solo lectura).
+-- No se quitó nada de Estudiantes, Asistencia ni Matrículas a Secretaría (la base permite hoy a Secretaría crear y editar estudiantes).
+-- Función de Supabase admin-create-user v4: agrega 'dece' a los roles válidos (alta de usuarios).

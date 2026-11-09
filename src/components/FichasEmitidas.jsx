@@ -5,7 +5,7 @@ import { normalizar } from '../lib/rendimiento.js';
 import FichaDocumentoModal from './FichaDocumentoModal.jsx';
 
 const ESTADOS = { borrador: ['Borrador', '#64748b'], impresa: ['Impresa · por revisar', '#0369a1'], revisada: ['Revisada', '#15803d'], observada: ['Observada', '#b91c1c'] };
-const ROLES = { docente: 'Docente', admin_plantel: 'Administración', supervisor_plantel: 'Supervisión', inspector_general: 'Inspección general', secretario: 'Secretaría', super_admin: 'Super Admin', supervisor_general: 'Supervisión general' };
+const ROLES = { docente: 'Docente', admin_plantel: 'Administración', supervisor_plantel: 'Supervisión', inspector_general: 'Inspección general', dece: 'DECE', secretario: 'Secretaría', super_admin: 'Super Admin', supervisor_general: 'Supervisión general' };
 const fecha = iso => (iso ? new Date(iso).toLocaleString('es-EC', { timeZone: 'America/Guayaquil', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '—');
 
 function Chip({ estado }) { const [t, c] = ESTADOS[estado] || [estado, '#64748b']; return <span style={{ background: c + '1a', color: c, border: `1px solid ${c}44`, borderRadius: 999, padding: '1px 9px', fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{t}</span>; }

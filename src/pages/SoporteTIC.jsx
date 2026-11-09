@@ -19,7 +19,7 @@ const fmt = n => Number(n || 0).toLocaleString('es-EC');
 const fHora = iso => (iso ? new Date(iso).toLocaleString('es-EC', { timeZone: TZ, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }) : '—');
 const fSoloHora = iso => new Date(iso).toLocaleTimeString('es-EC', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false });
 const SEV = { alta: { c: 'var(--red)', f: 'var(--redL)' }, media: { c: 'var(--amberD)', f: 'var(--amberL)' }, baja: { c: 'var(--blue)', f: 'var(--blueL)' } };
-const ROL = { super_admin: 'Super Admin', admin_plantel: 'Admin plantel', secretario: 'Secretaría', supervisor_general: 'Supervisor', supervisor_plantel: 'Supervisor plantel', contador_general: 'Contador', contador_plantel: 'Contador plantel', administrativo: 'Administrativo', inspector_general: 'Inspector', docente: 'Docente', estudiante: 'Estudiante', padre: 'Padre/Madre' };
+const ROL = { super_admin: 'Super Admin', admin_plantel: 'Admin plantel', secretario: 'Secretaría', supervisor_general: 'Supervisor', supervisor_plantel: 'Supervisor plantel', contador_general: 'Contador', contador_plantel: 'Contador plantel', administrativo: 'Administrativo', inspector_general: 'Inspector', dece: 'DECE', docente: 'Docente', estudiante: 'Estudiante', padre: 'Padre/Madre' };
 
 function Kpi({ icono, titulo, valor, nota, color }) {
   return (

@@ -21,7 +21,7 @@ import OficiosTabla from '../components/oficios/OficiosTabla.jsx';
 import OficioDetalle from '../components/oficios/OficioDetalle.jsx';
 import OficioImpresion from '../components/oficios/OficioImpresion.jsx';
 
-const VEN_TODO = ['admin_plantel', 'secretario', 'inspector_general', 'supervisor_plantel', 'supervisor_general', 'administrativo', 'contador_plantel', 'super_admin'];
+const VEN_TODO = ['admin_plantel', 'secretario', 'inspector_general', 'dece', 'supervisor_plantel', 'supervisor_general', 'administrativo', 'super_admin'];
 
 export default function OficiosDocumental() {
   const { profile, institucion, data } = useSession();

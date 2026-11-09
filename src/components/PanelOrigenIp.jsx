@@ -4,7 +4,7 @@ import { descargarLibro } from '../lib/exportLibro.js';
 import { clasificarIpCompartida, NIVELES_IP, resumirIpDesdeSesiones, formatoDuracion, navegadorCorto } from '../lib/tic.js';
 
 const fmtF = v => (v ? new Date(v).toLocaleString('es-EC', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Guayaquil' }) : '—');
-const ROLES = { super_admin: 'Super Admin', admin_plantel: 'Admin plantel', secretario: 'Secretaría', supervisor_general: 'Supervisor', supervisor_plantel: 'Supervisor plantel', contador_general: 'Contador', contador_plantel: 'Contador plantel', administrativo: 'Administrativo', inspector_general: 'Inspector', docente: 'Docente', estudiante: 'Estudiante', padre: 'Representante' };
+const ROLES = { super_admin: 'Super Admin', admin_plantel: 'Admin plantel', secretario: 'Secretaría', supervisor_general: 'Supervisor', supervisor_plantel: 'Supervisor plantel', contador_general: 'Contador', contador_plantel: 'Contador plantel', administrativo: 'Administrativo', inspector_general: 'Inspector', dece: 'DECE', docente: 'Docente', estudiante: 'Estudiante', padre: 'Representante' };
 
 /**
  * Panel lateral «Origen de la IP»: quién la usó, cuándo, con qué riesgo y qué se puede hacer.

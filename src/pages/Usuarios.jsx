@@ -17,7 +17,7 @@ const ROLE_LABEL = {
   supervisor_plantel: 'Supervisor de Plantel',
   contador_plantel: 'Contador de Plantel',
   administrativo: 'Administrativo',
-  inspector_general: 'Inspector General',
+  inspector_general: 'Inspector General', dece: 'DECE (Consejería estudiantil)',
   docente: 'Docente',
   estudiante: 'Estudiante',
   padre: 'Padre/Madre de familia'

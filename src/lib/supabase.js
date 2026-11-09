@@ -13,6 +13,7 @@ export const ROLE_GROUP = {
   contador_plantel: 'secretario',
   administrativo: 'secretario',
   inspector_general: 'inspector',
+  dece: 'dece',
   docente: 'docente',
   estudiante: 'alumno',
   padre: 'padre'
@@ -26,6 +27,7 @@ export const ROLE_LABELS = {
   admin_plantel: 'Administrador de Plantel',
   secretario: 'Secretario/a',
   inspector: 'Inspector General',
+  dece: 'DECE (Consejería estudiantil)',
   docente: 'Docente',
   alumno: 'Estudiante',
   padre: 'Padre / Madre'

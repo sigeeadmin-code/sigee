@@ -43,6 +43,8 @@ function calcularEdad(fechaNacimiento) {
 export default function Estudiantes() {
   const { data, institucion, profile, refrescarDatos } = useSession();
   const puedeActivarDesactivar = ['super_admin', 'admin_plantel'].includes(profile.rolDb);
+  // Coincide con la regla de la base (política de escritura de «estudiantes»): el resto de roles con acceso a la pantalla solo consulta.
+  const puedeEscribir = ['super_admin', 'admin_plantel', 'secretario'].includes(profile.rolDb);
   const [estudiantes, setEstudiantes] = useState(data?.estudiantes || []);
   const [busqueda, setBusqueda] = useState('');
   const [fCurso, setFCurso] = useState('');
@@ -377,7 +379,7 @@ export default function Estudiantes() {
           {esSuperAdmin && <button className="btn btn-secondary" onClick={exportarLista} disabled={filtrados.length === 0} title="Descarga en Excel la lista que ves ahora (con los filtros aplicados)">⬇️ Exportar Excel</button>}
           {!global && <button className="btn btn-primary" onClick={() => setInteligente(true)} title="Sube tu lista con las columnas en cualquier orden: yo las detecto y las acomodo">✨ Carga inteligente</button>}
           {!global && <button className="btn btn-ghost" onClick={abrirCargaMasiva}>📥 Carga con plantilla (Excel)</button>}
-          {!global && <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo estudiante</button>}
+          {!global && puedeEscribir && <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo estudiante</button>}
         </div>
       </div>
 
@@ -439,7 +441,7 @@ export default function Estudiantes() {
                     : puedeActivarDesactivar ? <button className="btn btn-primary btn-sm" onClick={() => abrirDarAcceso(e)}>🔑 Dar acceso</button>
                     : <span className="badge b-muted">Sin acceso</span>}
                 </td>
-                <td>{global ? <span className="muted" style={{ fontSize: 11 }}>—</span> : <button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(e.id)}>✏️ Editar</button>}</td>
+                <td>{global ? <span className="muted" style={{ fontSize: 11 }}>—</span> : <button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(e.id)}>{puedeEscribir ? '✏️ Editar' : '👁️ Ver'}</button>}</td>
               </tr>
             ))}
           </tbody>
@@ -462,12 +464,13 @@ export default function Estudiantes() {
         <div className="modal-bg" onClick={cerrar}>
           <div className="modal wide" onClick={e => e.stopPropagation()}>
             <div className="modal-h">
-              <h3>{modal.id ? '✏️ Editar estudiante' : '➕ Nuevo estudiante'}{modal.nombres ? ' — ' + modal.nombres + ' ' + modal.apellidos : ''}</h3>
+              <h3>{modal.id ? (puedeEscribir ? '✏️ Editar estudiante' : '👁️ Ficha del estudiante (solo lectura)') : '➕ Nuevo estudiante'}{modal.nombres ? ' — ' + modal.nombres + ' ' + modal.apellidos : ''}</h3>
               <button className="btn btn-ghost btn-sm" onClick={cerrar}><span className="ti ti-x" /></button>
             </div>
 
             {error && <div className="lerr">{error}</div>}
 
+            <fieldset className="fs-plano" disabled={!puedeEscribir}>
             <div className="tabs">
               {['alumno', 'representantes', 'academico', 'hermanos'].map(t => (
                 <button key={t} className={'tab' + (tab === t ? ' on' : '')} onClick={() => setTab(t)}>
@@ -585,11 +588,12 @@ export default function Estudiantes() {
               )}
             </div>
 
+            </fieldset>
             <div className="modal-f">
-              <button className="btn btn-secondary" onClick={cerrar}>Cancelar</button>
-              <button className="btn btn-primary" disabled={guardando} onClick={guardar}>
+              <button className="btn btn-secondary" onClick={cerrar}>{puedeEscribir ? 'Cancelar' : 'Cerrar'}</button>
+              {puedeEscribir && <button className="btn btn-primary" disabled={guardando} onClick={guardar}>
                 {guardando ? 'Guardando…' : '💾 Guardar'}
-              </button>
+              </button>}
             </div>
           </div>
         </div>
