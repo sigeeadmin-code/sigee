@@ -116,7 +116,7 @@ export const NAV_BY_ROL = {
     ]},
     { cat: 'Consejería estudiantil', items: [
       { to: '/estudiantes', label: 'Estudiantes', icon: 'ti ti-users' },
-      { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' },
+      { to: '/informes-dece', label: 'Informes Individuales', icon: 'ti ti-file-analytics' },
       { to: '/oficios', label: 'Oficios / documental', icon: 'ti ti-file-description' }
     ]},
     { cat: 'Sistema', items: [
