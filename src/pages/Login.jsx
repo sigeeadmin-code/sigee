@@ -10,6 +10,7 @@ const DEMO_ROLES = [
   { key: 'supervisor_plantel', title: 'Supervisor Plantel', desc: 'Supervisión académica del plantel', bg: '#0891b2', fg: '#fff', email: 'demo.supervisorplantel@sigee.test' },
   { key: 'contador_plantel', title: 'Contador Plantel', desc: 'Finanzas del plantel', bg: '#b45309', fg: '#fff', email: 'demo.contadorplantel@sigee.test' },
   { key: 'inspector', title: 'Inspector General', desc: 'Asistencia · WhatsApp · Disciplina', bg: '#4338ca', fg: '#fff', email: 'demo.inspector@sigee.test' },
+  { key: 'dece', title: 'DECE', desc: 'Bienestar · Casos · Oficios', bg: '#be185d', fg: '#fff', email: 'demo.dece@sigee.test' },
   { key: 'docente', title: 'Docente', desc: 'Asistencia · Notas · Tareas', bg: '#059669', fg: '#fff', email: 'demo.docente@sigee.test' },
   { key: 'alumno', title: 'Alumno', desc: 'Notas · Horario · Tareas', bg: '#0d9488', fg: '#fff', email: 'demo.estudiante@sigee.test' }
   // El acceso rápido de Padre / Madre se oculta: ve lo mismo que el Alumno. La cuenta y el rol de padre siguen funcionando con su correo y contraseña.
