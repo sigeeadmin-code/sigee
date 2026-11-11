@@ -65,6 +65,7 @@ const CursoTutor = cargar(() => import('./pages/CursoTutor.jsx'));
 const EstadisticasAMIE = cargar(() => import('./pages/EstadisticasAMIE.jsx'));
 const OficiosDocumental = cargar(() => import('./pages/OficiosDocumental.jsx'));
 const InformesDece = cargar(() => import('./pages/InformesDece.jsx'));
+const EstadisticaPlantel = cargar(() => import('./pages/EstadisticaPlantel.jsx'));
 import Placeholder from './pages/Placeholder.jsx';
 function AccesoDenegado() {
   return (
@@ -129,6 +130,7 @@ function Gate() {
         <Route path="/inasistencias" element={<Protegida path="/inasistencias"><Inasistencias /></Protegida>} />
         <Route path="/oficios" element={<Protegida path="/oficios"><OficiosDocumental /></Protegida>} />
         <Route path="/informes-dece" element={<Protegida path="/informes-dece"><InformesDece /></Protegida>} />
+        <Route path="/estadistica-plantel" element={<Protegida path="/estadistica-plantel"><EstadisticaPlantel /></Protegida>} />
         <Route path="/modulos-plantel" element={<Protegida path="/modulos-plantel"><ModulosPlantel /></Protegida>} />
         <Route path="/mi-perfil" element={<Protegida path="/mi-perfil"><MiPerfil /></Protegida>} />
         <Route path="/mi-ficha" element={<Protegida path="/mi-ficha"><MiPerfilFamilia /></Protegida>} />
