@@ -1,19 +1,49 @@
 import { supabase } from './supabase.js';
 
 /**
- * Matriz estadística del plantel: una fila por estudiante con matrícula activa
- * del periodo lectivo activo, con jornada del paralelo y datos demográficos.
+ * Datos AMIE del plantel: matrícula activa + demografía + plantilla (docentes/admin)
+ * + ficha referencial del plantel (num_*_ref, AMIE, sostenimiento).
  */
 export async function fetchMatrizEstadisticaPlantel(institucionId) {
-  if (!institucionId) return [];
+  if (!institucionId) return { filas: [], meta: null, plantilla: { docentes: 0, administrativos: 0 } };
+
+  const { data: plantel, error: ePl } = await supabase
+    .from('instituciones')
+    .select('id, nombre, amie, sostenimiento, canton, parroquia, provincia, zona, regimen, nivel_educativo, jornada, jornadas, num_estudiantes_ref, num_docentes_ref, rector')
+    .eq('id', institucionId)
+    .maybeSingle();
+  if (ePl) throw new Error(ePl.message);
 
   const { data: periodos, error: ePer } = await supabase
     .from('periodos_lectivos')
-    .select('id, activo')
+    .select('id, nombre, activo')
     .eq('institucion_id', institucionId);
   if (ePer) throw new Error(ePer.message);
-  const periodoActivo = (periodos || []).find(p => p.activo) || (periodos || [])[0];
-  if (!periodoActivo) return [];
+  const periodoActivo = (periodos || []).find(p => p.activo) || (periodos || [])[0] || null;
+
+  const { count: nDoc, error: eDoc } = await supabase
+    .from('docentes')
+    .select('id', { count: 'exact', head: true })
+    .eq('institucion_id', institucionId)
+    .eq('activo', true);
+  if (eDoc) throw new Error(eDoc.message);
+
+  const { data: profiles, error: ePr } = await supabase
+    .from('profiles')
+    .select('id, rol, activo')
+    .eq('institucion_id', institucionId)
+    .eq('activo', true);
+  if (ePr) throw new Error(ePr.message);
+  const rolesAdmin = new Set(['admin_plantel', 'secretario', 'inspector', 'dece', 'administrativo', 'contador_plantel', 'supervisor_plantel']);
+  const nAdm = (profiles || []).filter(p => rolesAdmin.has(p.rol) || (!['alumno', 'padre', 'docente'].includes(p.rol))).length;
+
+  if (!periodoActivo) {
+    return {
+      filas: [],
+      meta: plantel ? { ...plantel, periodo: null } : null,
+      plantilla: { docentes: nDoc || 0, administrativos: nAdm },
+    };
+  }
 
   const { data: grados, error: eGr } = await supabase
     .from('grados')
@@ -21,8 +51,15 @@ export async function fetchMatrizEstadisticaPlantel(institucionId) {
     .eq('institucion_id', institucionId);
   if (eGr) throw new Error(eGr.message);
   const gradoIds = (grados || []).map(g => g.id);
-  if (!gradoIds.length) return [];
   const gradoById = Object.fromEntries((grados || []).map(g => [g.id, g]));
+
+  if (!gradoIds.length) {
+    return {
+      filas: [],
+      meta: { ...plantel, periodo: periodoActivo },
+      plantilla: { docentes: nDoc || 0, administrativos: nAdm },
+    };
+  }
 
   const { data: paralelos, error: ePar } = await supabase
     .from('paralelos')
@@ -31,7 +68,14 @@ export async function fetchMatrizEstadisticaPlantel(institucionId) {
   if (ePar) throw new Error(ePar.message);
   const paraleloById = Object.fromEntries((paralelos || []).map(p => [p.id, p]));
   const paraleloIds = (paralelos || []).map(p => p.id);
-  if (!paraleloIds.length) return [];
+
+  if (!paraleloIds.length) {
+    return {
+      filas: [],
+      meta: { ...plantel, periodo: periodoActivo },
+      plantilla: { docentes: nDoc || 0, administrativos: nAdm },
+    };
+  }
 
   const { data: matriculas, error: eMat } = await supabase
     .from('matriculas')
@@ -40,10 +84,16 @@ export async function fetchMatrizEstadisticaPlantel(institucionId) {
     .eq('estado', 'activa')
     .in('paralelo_id', paraleloIds);
   if (eMat) throw new Error(eMat.message);
-  if (!(matriculas || []).length) return [];
+
+  if (!(matriculas || []).length) {
+    return {
+      filas: [],
+      meta: { ...plantel, periodo: periodoActivo },
+      plantilla: { docentes: nDoc || 0, administrativos: nAdm },
+    };
+  }
 
   const estIds = [...new Set(matriculas.map(m => m.estudiante_id))];
-
   let estudiantes = [];
   const { data: estData, error: eEst } = await supabase
     .from('estudiantes')
@@ -65,7 +115,7 @@ export async function fetchMatrizEstadisticaPlantel(institucionId) {
   }
   const estById = Object.fromEntries(estudiantes.map(e => [e.id, e]));
 
-  return matriculas.map(m => {
+  const filas = matriculas.map(m => {
     const est = estById[m.estudiante_id] || {};
     const par = paraleloById[m.paralelo_id] || {};
     const gr = gradoById[m.grado_id] || gradoById[par.grado_id] || {};
@@ -81,4 +131,10 @@ export async function fetchMatrizEstadisticaPlantel(institucionId) {
       estado: m.estado,
     };
   });
+
+  return {
+    filas,
+    meta: { ...plantel, periodo: periodoActivo },
+    plantilla: { docentes: nDoc || 0, administrativos: nAdm },
+  };
 }
