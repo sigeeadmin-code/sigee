@@ -6,6 +6,8 @@ import AvisoVersionNueva from './components/AvisoVersionNueva.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import Login from './pages/Login.jsx';
 import RestablecerClave from './pages/RestablecerClave.jsx';
+import SolicitarDemo from './pages/SolicitarDemo.jsx';
+import ConfirmarDemo from './pages/ConfirmarDemo.jsx';
 import Shell from './pages/Shell.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 function cargar(importar) {
@@ -94,6 +96,8 @@ function Gate() {
   const { pathname } = useLocation();
   if (recuperando) return <RestablecerClave />;
   if (loading) return <div className="splash">Cargando SIGEE…</div>;
+  if (!profile && pathname === '/solicitar-demo') return <SolicitarDemo />;
+  if (!profile && pathname === '/confirmar-demo') return <ConfirmarDemo />;
   if (!profile) return <Login />;
   return (
     <ErrorBoundary reinicio={pathname}>

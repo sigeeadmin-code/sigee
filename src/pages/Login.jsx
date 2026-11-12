@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSession } from '../lib/SessionContext.jsx';
 import PortadaLogin from '../components/PortadaLogin.jsx';
 import { fetchContenidoFrontend } from '../lib/data.js';
@@ -35,6 +36,7 @@ function guardarEstadoIntentos(estado) {
 }
 
 export default function Login() {
+  const navigate = useNavigate();
   const { login, error, solicitarRecuperacion } = useSession();
   const [modo, setModo] = useState('entrar');                       // 'entrar' | 'recuperar'
   const [envio, setEnvio] = useState({ estado: 'inicio', msg: '', hasta: 0 });   // inicio | enviando | enviado | error
@@ -206,6 +208,12 @@ export default function Login() {
               ? `Bloqueado (${segundosRestantes}s)`
               : busy ? 'Ingresando…' : <>Ingresar al sistema <span className="ti ti-arrow-right" /></>}
           </button>
+
+          <div className="l-or">¿Primera vez en SIGEE?</div>
+          <button type="button" className="lbtn" onClick={() => navigate('/solicitar-demo')}>
+            Solicitar demo gratuito <span className="ti ti-arrow-right" />
+          </button>
+          <div style={{ textAlign: 'center', fontSize: 11, color: 'rgba(255,255,255,.35)', marginTop: 8 }}>5 días de acceso completo · sin tarjeta</div>
 
           <div className="l-or">Acceso rápido de demostración</div>
           <div className="demo-grid">
