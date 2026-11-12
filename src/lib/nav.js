@@ -48,6 +48,7 @@ export const NAV_BY_ROL = {
     { cat: 'Principal', items: [
       { to: '/', label: 'Dashboard', icon: 'ti ti-layout-dashboard' },
       { to: '/mi-plantel', label: 'Mi Plantel', icon: 'ti ti-school' },
+      { to: '/estadisticas-amie', label: 'AMIE Zona 7', icon: 'ti ti-chart-pie', soloRolDb: ['supervisor_general'] },
       { to: '/notificaciones', label: 'Notificaciones', icon: 'ti ti-bell' }
     ]},
     { cat: 'Personas', items: [
@@ -133,6 +134,7 @@ export const NAV_BY_ROL = {
     ]},
     { cat: 'Convivencia y asistencia', items: [
       { to: '/estudiantes', label: 'Estudiantes', icon: 'ti ti-users' },
+      { to: '/estadistica-plantel', label: 'Estadísticas AMIE', icon: 'ti ti-chart-bar' },
       { to: '/encadenamiento', label: 'Encadenamiento', icon: 'ti ti-link' },
       { to: '/reportes-asistencia', label: 'Reportes de asistencia', icon: 'ti ti-chart-bar' },
       { to: '/asistencia', label: 'Consultas de asistencia', icon: 'ti ti-calendar-check' },
