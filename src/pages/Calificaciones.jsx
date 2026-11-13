@@ -15,6 +15,8 @@ import { siguienteCelda } from '../lib/navegacionNotas.js';
 import { sanitizarNota, esNotaValida, conCelda, conMejora } from '../lib/notaEntrada.js';
 import { claveBorrador, armarBorrador, aplicarBorrador, borradorVigente, leerBorrador, guardarBorradorLS, borrarBorrador } from '../lib/borradorNotas.js';
 import ConfigEvaluacionModal from '../components/ConfigEvaluacionModal.jsx';
+import ModalSubirPlantilla from '../components/ModalSubirPlantilla.jsx';
+import { generarPlantilla, leerPlantilla, validarPlantilla } from '../lib/plantillaNotas.js';
 
 const ROLES_EDITAN = ['super_admin', 'admin_plantel', 'secretario', 'docente'];
 const ROLES_CONSULTA = ['inspector_general', 'supervisor_plantel', 'supervisor_general', 'contador_general', 'contador_plantel', 'administrativo'];
@@ -76,6 +78,8 @@ function CuadroCalificaciones() {
   const [panelCas, setPanelCas] = useState(false);
   const [bloqueadaCfg, setBloqueadaCfg] = useState(false);
   const [guardandoCas, setGuardandoCas] = useState(false);
+  const [modalSubirOpen, setModalSubirOpen] = useState(false);
+  const [generandoPlantilla, setGenerandoPlantilla] = useState(false);
 
   useEffect(() => { if (institucionId) fetchCatalogoNivel(institucionId).then(setCatalogo); }, [institucionId]);
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t); }, [toast]);
@@ -248,6 +252,49 @@ function CuadroCalificaciones() {
     setGuardando(false);
   };
 
+  // ── Plantilla Excel: descargar con los estudiantes/casilleros actuales y subir las notas llenadas ──
+  const filtrosCompletos = !!(gradoId && paraleloId && cargaId && trim);
+  const gridListo = !!cfgGrid && gridDe.current === `${cargaId}|${trim}` && alumnos.length > 0;
+  const ctxPlantilla = () => ({
+    docenteId: profile.id, docenteNombre: profile.nombre || profile.email || '',
+    cargaId, paraleloId, gradoId, trim, cfg: cfgGrid,
+    materia: cargasParalelo.find(c => c.id === cargaId)?.materiaNombre || '',
+    curso: gradoSel?.nombre || '', paralelo: paralelosVisibles.find(p => p.id === paraleloId)?.nombre || '',
+    alumnos, base: baseRef.current
+  });
+  const descargarPlantilla = async () => {
+    if (!filtrosCompletos) { setToast({ ok: false, t: 'Selecciona Curso, Paralelo, Materia y Trimestre.' }); return; }
+    if (!gridListo) { setToast({ ok: false, t: 'Espera a que terminen de cargar las notas e inténtalo de nuevo.' }); return; }
+    setGenerandoPlantilla(true);
+    try {
+      const c = ctxPlantilla();
+      const { datos, nombreArchivo } = await generarPlantilla({ ctx: c, alumnos: c.alumnos, base: c.base });
+      const url = URL.createObjectURL(new Blob([datos], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      const a = document.createElement('a'); a.href = url; a.download = nombreArchivo; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setToast({ ok: true, t: `Plantilla descargada: ${nombreArchivo}` });
+    } catch (e) { setToast({ ok: false, t: e.message || 'Error al generar la plantilla.' }); }
+    setGenerandoPlantilla(false);
+  };
+  const abrirSubir = () => {
+    if (!filtrosCompletos) { setToast({ ok: false, t: 'Selecciona Curso, Paralelo, Materia y Trimestre primero.' }); return; }
+    if (hayCambios) { setToast({ ok: false, t: 'Tienes notas sin guardar. Guárdalas o descártalas antes de subir una plantilla.' }); return; }
+    if (!gridListo) { setToast({ ok: false, t: 'Espera a que terminen de cargar las notas e inténtalo de nuevo.' }); return; }
+    setModalSubirOpen(true);
+  };
+  // Valida TODO el archivo; solo si no hay ningún error guarda, con el mismo guardado de siempre (el servidor vuelve a validar permisos, calendario y rango).
+  const procesarPlantilla = async file => {
+    try {
+      const v = await validarPlantilla(leerPlantilla(await file.arrayBuffer()), ctxPlantilla());
+      if (!v.ok) return v;
+      if (!v.registros.length) return { ok: true, resumen: { estudiantes: 0, celdas: 0 } };
+      await guardarNotasTrimestre(cargaId, trim, v.registros);
+      await cargarNotas();   // refresca la tabla con lo guardado
+      setToast({ ok: true, t: `Plantilla procesada: ${v.resumen.celdas} nota(s) de ${v.resumen.estudiantes} estudiante(s) guardadas.` });
+      return { ok: true, resumen: v.resumen };
+    } catch (e) { return { ok: false, errores: [e.message || 'No se pudo guardar. Revisa tu conexión e inténtalo de nuevo.'] }; }
+  };
+
   if (loading) return <div className="card"><div className="cb"><p className="muted">Cargando…</p></div></div>;
   if (!periodoActivo) return <div className="card"><div className="cb"><p className="muted">No hay un período lectivo activo. Actívalo primero en Académico → Configuración.</p></div></div>;
 
@@ -267,10 +314,28 @@ function CuadroCalificaciones() {
             <button className="btn btn-secondary btn-sm" onClick={abrirCasilleros}>⚙ Casilleros</button>
           )}
           {vista === 'registro' && editable && (
+            <button className="btn btn-secondary btn-sm" onClick={descargarPlantilla} disabled={!filtrosCompletos || generandoPlantilla}
+              title="Descarga la plantilla Excel con los estudiantes y estructura actual">
+              {generandoPlantilla ? <span className="spin" /> : <span className="ti ti-download" style={{ marginRight: 6 }} />}Descargar plantilla
+            </button>
+          )}
+          {vista === 'registro' && editable && (
+            <button className="btn btn-secondary btn-sm" onClick={abrirSubir} disabled={!filtrosCompletos}
+              title="Sube la plantilla Excel llenada para actualizar las notas">
+              <span className="ti ti-upload" style={{ marginRight: 6 }} />Subir plantilla
+            </button>
+          )}
+          {vista === 'registro' && editable && (
             <button className="btn btn-success btn-sm" disabled={guardando || !hayCambios} onClick={guardar}>{guardando ? 'Guardando…' : '💾 Guardar trimestre'}</button>
           )}
         </div>
       </div>
+
+      {modalSubirOpen && (
+        <ModalSubirPlantilla
+          contexto={{ curso: gradoSel?.nombre || '', paralelo: paralelosVisibles.find(p => p.id === paraleloId)?.nombre || '', materia: cargasParalelo.find(c => c.id === cargaId)?.materiaNombre || '', trimestre: trim }}
+          onProcesar={procesarPlantilla} onCerrar={() => setModalSubirOpen(false)} />
+      )}
 
       {toast && <div className="card" style={{ marginBottom: 12, borderColor: toast.ok ? 'var(--green)' : 'var(--red)' }}>
         <div className="cb" style={{ fontSize: 13, color: toast.ok ? 'var(--green)' : 'var(--red)' }}>{toast.t}</div></div>}
