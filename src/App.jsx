@@ -38,6 +38,7 @@ const ReportesAsistencia = cargar(() => import('./pages/ReportesAsistencia.jsx')
 const Calificaciones = cargar(() => import('./pages/Calificaciones.jsx'));
 const Aulas = cargar(() => import('./pages/Aulas.jsx'));
 const Horario = cargar(() => import('./pages/Horario.jsx'));
+const ConsultaHorarios = cargar(() => import('./pages/ConsultaHorarios.jsx'));
 const Notificaciones = cargar(() => import('./pages/Notificaciones.jsx'));
 const MiPlantel = cargar(() => import('./pages/MiPlantel.jsx'));
 const Configuracion = cargar(() => import('./pages/Configuracion.jsx'));
@@ -104,6 +105,7 @@ function Gate() {
         <Route path="/roles-permisos" element={<Protegida path="/roles-permisos"><RolesPermisos /></Protegida>} />
         <Route path="/diagnostico" element={<Protegida path="/diagnostico"><Diagnostico /></Protegida>} />
         <Route path="/soporte-tic" element={<Protegida path="/soporte-tic"><SoporteTIC /></Protegida>} />
+        <Route path="/consulta-horarios" element={<Protegida path="/consulta-horarios"><ConsultaHorarios /></Protegida>} />
         <Route path="/docentes" element={<Protegida path="/docentes"><Docentes /></Protegida>} />
         <Route path="/academico" element={<Protegida path="/academico"><Academico /></Protegida>} />
         <Route path="/estudiantes" element={<Protegida path="/estudiantes"><Estudiantes /></Protegida>} />

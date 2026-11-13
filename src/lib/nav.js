@@ -29,7 +29,8 @@ export const NAV_BY_ROL = {
       { to: '/oficios', label: 'Oficios / documental', icon: 'ti ti-file-description' },
       { to: '/calendario', label: 'Calendario académico', icon: 'ti ti-calendar' },
       { to: '/aulas', label: 'Aulas', icon: 'ti ti-door' },
-      { to: '/horario', label: 'Horario', icon: 'ti ti-clock' }
+      { to: '/horario', label: 'Horario', icon: 'ti ti-clock' },
+      { to: '/consulta-horarios', label: 'Consulta de horarios', icon: 'ti ti-calendar-search', soloRolDb: ['super_admin'] }
     ]},
     { cat: 'Finanzas', items: [
       { to: '/financiero', label: 'Financiero', icon: 'ti ti-cash' },
@@ -74,7 +75,8 @@ export const NAV_BY_ROL = {
       { to: '/oficios', label: 'Oficios / documental', icon: 'ti ti-file-description' },
       { to: '/calendario', label: 'Calendario académico', icon: 'ti ti-calendar' },
       { to: '/aulas', label: 'Aulas', icon: 'ti ti-door' },
-      { to: '/horario', label: 'Horario', icon: 'ti ti-clock' }
+      { to: '/horario', label: 'Horario', icon: 'ti ti-clock' },
+      { to: '/consulta-horarios', label: 'Consulta de horarios', icon: 'ti ti-calendar-search', soloRolDb: ['admin_plantel', 'supervisor_plantel', 'supervisor_general'] }
     ]},
     { cat: 'Finanzas', items: [
       { to: '/financiero', label: 'Financiero', icon: 'ti ti-cash', wip: true },
@@ -144,7 +146,8 @@ export const NAV_BY_ROL = {
       { to: '/justificaciones', label: 'Justificaciones', icon: 'ti ti-file-check' },
       { to: '/inasistencias', label: 'Inasistencias / WhatsApp', icon: 'ti ti-message-circle' },
       { to: '/oficios', label: 'Oficios / documental', icon: 'ti ti-file-description' },
-      { to: '/calendario', label: 'Calendario académico', icon: 'ti ti-calendar' }
+      { to: '/calendario', label: 'Calendario académico', icon: 'ti ti-calendar' },
+      { to: '/consulta-horarios', label: 'Consulta de horarios', icon: 'ti ti-calendar-search' }
     ]},
     { cat: 'Sistema', items: [
       { to: '/configuracion', label: 'Configuración', icon: 'ti ti-settings' }

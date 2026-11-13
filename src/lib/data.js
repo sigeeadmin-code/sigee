@@ -1028,7 +1028,8 @@ export async function fetchTodasCargas(institucionId) {
       id: c.id, docenteNombre: doc ? `${doc.apellidos || ''} ${doc.nombres || ''}`.trim() : '',
       materiaNombre: matById[c.materia_id]?.nombre || '', paraleloId: c.paralelo_id,
       paraleloNombre: par?.nombre || '', gradoNombre: gr?.nombre || '',
-      periodoId: c.periodo_id, periodoNombre: perById[c.periodo_id]?.nombre || ''
+      periodoId: c.periodo_id, periodoNombre: perById[c.periodo_id]?.nombre || '',
+      docenteId: c.docente_id, materiaId: c.materia_id, horasSemana: c.horas_semana ?? null
     };
   });
 }

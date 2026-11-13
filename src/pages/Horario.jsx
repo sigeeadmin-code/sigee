@@ -15,7 +15,7 @@ const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
 const HOY_NOMBRE = DIAS[new Date().getDay() - 1] || null; // domingo/sábado -> null, no resalta ningún día
 
 /** Jornadas del plantel (franjas de clase y recreos de cada turno). Devuelve { Matutina, Vespertina, Nocturna } con franjas válidas. */
-function useFranjas(institucionId) {
+export function useFranjas(institucionId) {
   const [mapa, setMapa] = useState(() => Object.fromEntries(JORNADAS.map(j => [j, franjasDeJornada(null, j)])));
   const cargar = useCallback(async () => {
     if (!institucionId) return;
@@ -28,7 +28,7 @@ function useFranjas(institucionId) {
   return [mapa, cargar];
 }
 
-function GrillaHorario({ bloques, resolverEtiqueta, aulaEtiqueta, alto = 56, franjas = FRANJAS_DEFAULT }) {
+export function GrillaHorario({ bloques, resolverEtiqueta, aulaEtiqueta, alto = 56, franjas = FRANJAS_DEFAULT }) {
   const bloqueEn = (dia, franja) => bloques.find(b => b.dia === dia && b.franja === franja);
   return (
     <div className="card"><div className="cb" style={{ padding: 0, overflowX: 'auto' }}>
@@ -78,7 +78,7 @@ function GrillaHorario({ bloques, resolverEtiqueta, aulaEtiqueta, alto = 56, fra
   );
 }
 
-function Leyenda({ items }) {
+export function Leyenda({ items }) {
   if (!items.length) return null;
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
