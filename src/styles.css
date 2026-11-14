@@ -822,3 +822,48 @@ button.ofd-kpi:focus-visible,button.ofd-kpi.on{outline:2px solid var(--brand);ou
 .pl-arch .ti{font-size:24px;color:var(--green)}
 .pl-errs{max-height:200px;overflow:auto;margin:8px 0 0;padding-left:18px;font-size:12.5px;color:var(--red)}
 @media (max-width:520px){.pl-ctx{grid-template-columns:1fr}}
+
+/* ── Horario impreso: A4 horizontal, membrete institucional (se muestra solo al imprimir) ── */
+#hor-doc-root{display:none}
+@media print{
+  body.imprimiendo-horario #root{display:none !important}
+  body.imprimiendo-horario #hor-doc-root{display:block !important}
+  body.imprimiendo-horario #hor-doc-root,body.imprimiendo-horario #hor-doc-root *{visibility:visible}
+  body.imprimiendo-horario{background:#fff}
+}
+.hd{font-family:"Segoe UI",Arial,Helvetica,sans-serif;color:#111;font-size:9.5pt;line-height:1.25;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.hd-cab{display:grid;grid-template-columns:20mm 1fr 44mm;gap:6mm;align-items:center;padding-bottom:2mm;border-bottom:.6mm solid #111}
+.hd-logo{width:20mm;height:20mm;object-fit:contain}
+.hd-cen{text-align:center}
+.hd-rep{font-size:7pt;letter-spacing:.2em;text-transform:uppercase;color:#444}
+.hd-min{font-size:9pt;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.hd-zona{font-size:7.5pt;color:#444}
+.hd-ie{font-size:13pt;font-weight:800;text-transform:uppercase;margin:.6mm 0 .3mm}
+.hd-ubi{font-size:8pt;color:#333}
+.hd-der{border:.3mm solid #111;border-radius:1.5mm;padding:2mm 3mm;font-size:8.5pt;font-weight:600}
+.hd-der b,.hd-ficha b{display:block;font-size:6.5pt;text-transform:uppercase;letter-spacing:.06em;color:#555;font-weight:600}
+.hd-titulo{margin:2mm 0 2mm;text-align:center;font-size:12pt;font-weight:800;letter-spacing:.16em;text-transform:uppercase;background:#1e293b;color:#fff;padding:1.2mm 0;border-radius:1mm}
+.hd-sub{text-align:center;font-size:9pt;font-weight:600;margin:-.5mm 0 2mm}
+.hd-ficha{display:grid;grid-template-columns:repeat(4,1fr);border-top:.3mm solid #111;border-left:.3mm solid #111;margin-bottom:2.5mm}
+.hd-ficha>div{padding:.8mm 2mm;border-right:.3mm solid #111;border-bottom:.3mm solid #111;font-size:9pt;font-weight:600}
+.hd-una{break-inside:avoid}
+.hd-t{width:100%;border-collapse:collapse;table-layout:fixed}
+.hd-t th,.hd-t td{border:.25mm solid #333}
+.hd-t th{background:#e5e7eb;font-size:8pt;text-transform:uppercase;padding:1mm;text-align:center}
+.hd-t thead{display:table-header-group}
+.hd-t tr{break-inside:avoid}
+.hd-h{width:24mm;font-size:7.5pt;font-weight:600;text-align:center;background:#f3f4f6;white-space:nowrap}
+.hd-c{height:var(--fila,11mm);padding:.5mm 1.5mm;vertical-align:middle;border-left:1.2mm solid var(--c,#999) !important}
+td.hd-c:empty{border-left:.25mm solid #333 !important}
+.hd-m{font-weight:700;font-size:8pt;line-height:1.15}
+.hd-s{font-size:7pt;color:#222;line-height:1.15}
+.hd-a{font-size:6.5pt;color:#555;line-height:1.15}
+.hd-dia .hd-m{font-size:7.5pt}.hd-dia .hd-s{font-size:6.8pt}
+.hd-rec{background:#e5e7eb;text-align:center;font-size:6.5pt;letter-spacing:.4em;font-weight:700;height:4.5mm;padding:0}
+.hd-firmas{display:grid;grid-template-columns:repeat(auto-fit,minmax(40mm,1fr));gap:10mm;margin-top:8mm;break-inside:avoid}
+.hd-firma{border-top:.3mm solid #111;padding-top:1mm;text-align:center;font-size:8.5pt;font-weight:600}
+.hd-firma small{display:block;color:#555;font-size:7pt;font-weight:400;text-transform:uppercase;letter-spacing:.05em}
+.hd-pie{margin-top:3mm;display:flex;justify-content:space-between;font-size:7pt;color:#666}
+
+.hd-denso .hd-m{font-size:7pt}.hd-denso .hd-s{font-size:6.2pt}.hd-denso .hd-a{font-size:5.8pt}.hd-denso .hd-c{padding:.3mm 1.2mm}
+.hd-una.hd-denso + .hd-firmas{margin-top:4mm}

@@ -4,11 +4,14 @@ import { fetchGradosConParalelos, fetchTodasCargas, fetchHorario, fetchAulas } f
 import { franjasParaBloques } from '../lib/horarioAuto.js';
 import { colorDeMateria } from '../lib/horarioUI.js';
 import { GrillaHorario, Leyenda, useFranjas } from './Horario.jsx';
+import DocumentoHorario from '../components/DocumentoHorario.jsx';
+import { imprimirHorizontal } from '../lib/impresionHorario.js';
 import {
   DIAS, TIPO_LABEL, tipoBachillerato, agruparDocentes, buscarDocentes, horasUbicadas, bloquesDeCargas, cruces, cobertura, matrizDia
 } from '../lib/consultaHorarios.js';
 
 // Consulta de horarios para Rector, Vicerrector e Inspector General. SOLO LECTURA: el horario se edita en "Horario".
+const aulasTxt = (bloques, nombre) => [...new Set(bloques.map(b => b.aula_id).filter(Boolean).map(nombre).filter(Boolean))].join(', ');
 const TIPOS_FILTRO = [['todos', 'Todos'], ['ciencias', 'Ciencias'], ['tecnico', 'Técnico'], ['otro', 'Otros niveles']];
 const COLOR_TIPO = { ciencias: { bg: '#ecfdf5', tx: '#065f46' }, tecnico: { bg: '#fff7ed', tx: '#9a3412' }, otro: { bg: '#f1f5f9', tx: '#475569' } };
 
@@ -30,7 +33,7 @@ function Encabezado({ titulo, sub, children }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 10, margin: '4px 0 12px' }}>
       <div><h3 style={{ margin: 0, fontSize: 16 }}>{titulo}</h3><div style={{ fontSize: 12.5, color: 'var(--slate)' }}>{sub}</div></div>
-      <button className="btn btn-secondary btn-sm print-hide" onClick={() => window.print()}>🖨️ Imprimir</button>
+      <button className="btn btn-secondary btn-sm print-hide" onClick={imprimirHorizontal}>🖨️ Imprimir (A4 horizontal)</button>
       {children}
     </div>
   );
@@ -116,7 +119,7 @@ function VistaDocente({ ctx, docenteInicial = null }) {
             </div></div>
           )}
 
-          <div className="print-area">
+          <div>
             <Encabezado titulo={`Horario de ${docente.nombre}`} sub={`${bloques.length} hora(s) de clase a la semana · ${elegidas.length} de ${ids.length} curso(s) · ${subtitulo}`} />
             <Leyenda items={materias} />
             {bloques.length === 0
@@ -124,6 +127,12 @@ function VistaDocente({ ctx, docenteInicial = null }) {
               : <GrillaHorario franjas={franjas} bloques={bloques} aulaEtiqueta={aulaNombre}
                 resolverEtiqueta={b => { const c = cargaPorId[b.docente_materia_id]; return { materia: c?.materiaNombre || 'Materia', sub: `${c?.gradoNombre || ''} "${c?.paraleloNombre || ''}"` }; }} />}
           </div>
+          <DocumentoHorario institucion={ctx.institucion} periodo={ctx.periodo}
+            titulo="Horario de clases del docente"
+            ficha={[['Docente', docente.nombre, 2], ['Horas de clase semanales', String(bloques.length)], ['Aula(s)', aulasTxt(bloques, aulaNombre)],
+              ['Cursos', [...new Set(elegidas.map(id => cargaPorId[id]).filter(Boolean).map(c => `${c.gradoNombre} "${c.paraleloNombre}"`))].join(' · '), 4]]}
+            firmas={[['Docente', docente.nombre], ['Inspector/a General', ''], ['Vicerrector/a', ''], ['Rector/a', ctx.institucion?.rector || '']]}
+            semana={{ franjas, bloques, aulaEtiqueta: aulaNombre, resolverEtiqueta: b => { const c = cargaPorId[b.docente_materia_id]; return { materia: c?.materiaNombre || 'Materia', sub: `${c?.gradoNombre || ''} "${c?.paraleloNombre || ''}"` }; } }} />
         </>
       )}
     </div>
@@ -165,13 +174,22 @@ function VistaCurso({ ctx }) {
 
       {!par && <div className="empty"><span className="ti ti-school" /><p>No hay cursos para mostrar con este filtro.</p></div>}
       {par && (
-        <div className="print-area">
+        <div>
           <Encabezado titulo={`${grado.nombre} "${par.nombre}"`} sub={`${TIPO_LABEL[tipoBachillerato(grado, par)]}${par.especialidad ? ' · ' + par.especialidad : ''} · ${par.jornada || 'Matutina'} · ${bloques.length} hora(s) a la semana · ${subtitulo}`} />
           <Leyenda items={materias} />
           {bloques.length === 0
             ? <div className="empty"><span className="ti ti-calendar-off" /><p>Este paralelo todavía no tiene horario cargado.</p></div>
             : <GrillaHorario franjas={franjas} bloques={bloques} aulaEtiqueta={aulaNombre}
               resolverEtiqueta={b => { const c = cargaPorId[b.docente_materia_id]; return { materia: c?.materiaNombre || 'Materia', sub: c?.docenteNombre || 'Sin docente' }; }} />}
+          {(() => { const tutor = cargas.find(c => c.docenteId === par.tutor_docente_id)?.docenteNombre || ''; return (
+            <DocumentoHorario institucion={ctx.institucion} periodo={ctx.periodo}
+              titulo="Horario de clases"
+              ficha={[['Curso', grado.nombre, 2], ['Paralelo', par.nombre], ['Aula(s)', aulasTxt(bloques, aulaNombre)],
+                ['Bachillerato', TIPO_LABEL[tipoBachillerato(grado, par)] + (par.especialidad ? ' · ' + par.especialidad : ''), 2], ['Jornada', par.jornada || 'Matutina'], ['Horas semanales', String(bloques.length)],
+                ['Tutor/a', tutor, 4]]}
+              firmas={[['Tutor/a', tutor], ['Inspector/a General', ''], ['Vicerrector/a', ''], ['Rector/a', ctx.institucion?.rector || '']]}
+              semana={{ franjas, bloques, aulaEtiqueta: aulaNombre, resolverEtiqueta: b => { const c = cargaPorId[b.docente_materia_id]; return { materia: c?.materiaNombre || 'Materia', sub: c?.docenteNombre || '' }; } }} />
+          ); })()}
           {cargasPar.length > 0 && (
             <div className="card" style={{ marginTop: 14 }}><div className="cb" style={{ padding: 0, overflowX: 'auto' }}>
               <table className="data" style={{ width: '100%' }}>
@@ -213,7 +231,7 @@ function VistaGeneral({ ctx }) {
         </div>
       </div></div>
 
-      <div className="print-area">
+      <div>
         <Encabezado titulo={`Horario general · ${dia}`} sub={`${cob.conHorario} de ${cob.total} paralelo(s) con horario cargado · ${subtitulo}`} />
         {filas.length === 0 ? <div className="empty"><span className="ti ti-school" /><p>No hay cursos con este filtro.</p></div> : (
           <div className="card"><div className="cb" style={{ padding: 0, overflowX: 'auto' }}>
@@ -242,6 +260,11 @@ function VistaGeneral({ ctx }) {
           </div></div>
         )}
       </div>
+      <DocumentoHorario institucion={ctx.institucion} periodo={ctx.periodo}
+        titulo="Horario general de clases" subtitulo={`${dia} · ${(TIPOS_FILTRO.find(([k]) => k === tipo) || [, 'Todos'])[1]}`}
+        ficha={[['Día', dia], ['Bachillerato', (TIPOS_FILTRO.find(([k]) => k === tipo) || [, 'Todos'])[1]], ['Paralelos con horario', `${cob.conHorario} de ${cob.total}`, 2]]}
+        firmas={[['Inspector/a General', ''], ['Vicerrector/a', ''], ['Rector/a', ctx.institucion?.rector || '']]}
+        dia={{ filas: filas.map(({ g, p, t }) => ({ id: p.id, nombre: `${g.nombre} "${p.nombre}"`, tipo: TIPO_LABEL[t] })), clases, matriz: mz, cargaPorId }} />
     </div>
   );
 }
@@ -282,9 +305,10 @@ export default function ConsultaHorarios() {
       grados, cargas, cargaPorId, bloquesPer, mapaFranjas, horas: horasUbicadas(bloquesPer), docentes: agruparDocentes(cargas),
       tipoDeCarga: c => { const i = infoPar[c.paraleloId]; return i ? tipoBachillerato(i.g, i.p) : 'otro'; },
       aulaNombre: id => { const a = aulaPorId[id]; return a ? (a.nombre || a.codigo || '') : ''; },
+      institucion, periodo: periodoActivo,
       subtitulo: `${institucion?.nombre || ''}${periodoActivo ? ' · ' + periodoActivo.nombre : ''}`
     };
-  }, [estado, mapaFranjas, institucion?.nombre, periodoActivo]);
+  }, [estado, mapaFranjas, institucion, periodoActivo]);
 
   if (!institucionId) return <div className="empty"><span className="ti ti-building" /><p>Selecciona un plantel para consultar sus horarios.</p></div>;
   if (estado.cargando) return <div className="card"><div className="cb"><p className="muted">Cargando horarios…</p></div></div>;
