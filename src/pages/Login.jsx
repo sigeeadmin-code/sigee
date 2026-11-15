@@ -1,25 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
-import PortadaLogin from '../components/PortadaLogin.jsx';
-import { fetchContenidoFrontend } from '../lib/data.js';
-import { CONTENIDO_DEFAULTS, mezclarContenido, portadaActiva } from '../lib/contenidoBase.js';
-
-const DEMO_ROLES = [
-  { key: 'super_admin', title: 'Super Admin', desc: 'Todos los planteles · Global (ingreso manual)', bg: '#f59e0b', fg: '#1e1305', email: null },
-  { key: 'admin_plantel', title: 'Admin Plantel', desc: 'Gestión de su institución', bg: '#2563eb', fg: '#fff', email: 'demo.adminplantel@sigee.test' },
-  { key: 'supervisor_plantel', title: 'Supervisor Plantel', desc: 'Supervisión académica del plantel', bg: '#0891b2', fg: '#fff', email: 'demo.supervisorplantel@sigee.test' },
-  { key: 'contador_plantel', title: 'Contador Plantel', desc: 'Finanzas del plantel', bg: '#b45309', fg: '#fff', email: 'demo.contadorplantel@sigee.test' },
-  { key: 'inspector', title: 'Inspector General', desc: 'Asistencia · WhatsApp · Disciplina', bg: '#4338ca', fg: '#fff', email: 'demo.inspector@sigee.test' },
-  { key: 'dece', title: 'DECE', desc: 'Bienestar · Casos · Oficios', bg: '#be185d', fg: '#fff', email: 'demo.dece@sigee.test' },
-  { key: 'docente', title: 'Docente', desc: 'Asistencia · Notas · Tareas', bg: '#059669', fg: '#fff', email: 'demo.docente@sigee.test' },
-  { key: 'alumno', title: 'Alumno', desc: 'Notas · Horario · Tareas', bg: '#0d9488', fg: '#fff', email: 'demo.estudiante@sigee.test' }
-  // El acceso rápido de Padre / Madre se oculta: ve lo mismo que el Alumno. La cuenta y el rol de padre siguen funcionando con su correo y contraseña.
-];
-const DEMO_PASSWORD = 'Sigee2026Demo!';
+import LoginHero from '../components/LoginHero.jsx';
+import { fetchContenidoFrontend, API_URL } from '../lib/data.js';
+import { CONTENIDO_DEFAULTS, mezclarContenido } from '../lib/contenidoBase.js';
+import { CARGOS_DEMO, validarSolicitudDemo, solicitarDemo } from '../lib/demoApi.js';
+import '../login-nuevo.css';
 
 const INTENTOS_KEY = 'sigee_login_intentos';
 const MAX_INTENTOS = 5;
 const BLOQUEO_BASE_MS = 30_000;
+const WHATSAPP_ADMIN = (import.meta.env.VITE_WHATSAPP_ADMIN || '').replace(/\D/g, '');
 
 function leerEstadoIntentos() {
   try {
@@ -34,29 +24,31 @@ function guardarEstadoIntentos(estado) {
   try { localStorage.setItem(INTENTOS_KEY, JSON.stringify(estado)); } catch { /* ignore */ }
 }
 
+const DEMO_VACIO = { nombre: '', cedula: '', email: '', institucion: '', cargo: '', telefono: '', acepta: false, sitio_web: '' };
+
 export default function Login() {
   const { login, error, solicitarRecuperacion } = useSession();
-  const [modo, setModo] = useState('entrar');                       // 'entrar' | 'recuperar'
-  const [envio, setEnvio] = useState({ estado: 'inicio', msg: '', hasta: 0 });   // inicio | enviando | enviado | error
+  const [modo, setModo] = useState('entrar');                       // 'entrar' | 'recuperar' | 'demo'
+  const [envio, setEnvio] = useState({ estado: 'inicio', msg: '', hasta: 0 });
   const [ahora, setAhora] = useState(Date.now());
-  useEffect(() => { if (envio.estado !== 'enviado') return undefined; const t = setInterval(() => setAhora(Date.now()), 1000); return () => clearInterval(t); }, [envio.estado]);
-  const esperaReenvio = Math.max(0, Math.ceil((envio.hasta - ahora) / 1000));
-  async function pedirEnlace(e) {
-    e.preventDefault();
-    if (!email.trim() || envio.estado === 'enviando' || esperaReenvio > 0) return;
-    setEnvio({ estado: 'enviando', msg: '', hasta: 0 });
-    try { await solicitarRecuperacion(email); setAhora(Date.now()); setEnvio({ estado: 'enviado', msg: '', hasta: Date.now() + 60000 }); }
-    catch (err) { setEnvio({ estado: 'error', msg: err.message, hasta: 0 }); }
-  }
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [busy, setBusy] = useState(false);
   const [bloqueadoHasta, setBloqueadoHasta] = useState(() => leerEstadoIntentos().bloqueadoHasta || 0);
   const [segundosRestantes, setSegundosRestantes] = useState(0);
-  // Textos de la portada: arrancan con los originales y se reemplazan con lo que
-  // el Super Admin haya editado en "Contenido del sitio" (si falla, quedan los originales).
   const [contenido, setContenido] = useState(CONTENIDO_DEFAULTS);
+
+  // Solicitud de demo
+  const [d, setD] = useState(DEMO_VACIO);
+  const [errs, setErrs] = useState({});
+  const [demoEstado, setDemoEstado] = useState({ fase: 'form', msg: '' });   // form | enviando | listo
+  const formDemoRef = useRef(null);
+  const simulado = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('simulado') === '1';
+
+  useEffect(() => { if (envio.estado !== 'enviado') return undefined; const t = setInterval(() => setAhora(Date.now()), 1000); return () => clearInterval(t); }, [envio.estado]);
+  const esperaReenvio = Math.max(0, Math.ceil((envio.hasta - ahora) / 1000));
+
   useEffect(() => {
     let vivo = true;
     fetchContenidoFrontend().then(filas => { if (vivo) setContenido(mezclarContenido(filas)); }).catch(() => {});
@@ -80,9 +72,9 @@ export default function Login() {
     if (fallos >= MAX_INTENTOS) {
       const bloqueos = estado.bloqueos + 1;
       const duracion = BLOQUEO_BASE_MS * Math.pow(2, estado.bloqueos);
-      const bloqueadoHastaNuevo = Date.now() + duracion;
-      guardarEstadoIntentos({ fallos: 0, bloqueos, bloqueadoHasta: bloqueadoHastaNuevo });
-      setBloqueadoHasta(bloqueadoHastaNuevo);
+      const nuevo = Date.now() + duracion;
+      guardarEstadoIntentos({ fallos: 0, bloqueos, bloqueadoHasta: nuevo });
+      setBloqueadoHasta(nuevo);
     } else {
       guardarEstadoIntentos({ ...estado, fallos });
     }
@@ -97,138 +89,207 @@ export default function Login() {
     e.preventDefault();
     if (segundosRestantes > 0) return;
     setBusy(true);
-    try {
-      await login(email, password);
-      registrarExito();
-    } catch {
-      registrarFallo();
-    }
+    try { await login(email, password); registrarExito(); } catch { registrarFallo(); }
     setBusy(false);
   }
 
-  function usarDemo(rol) {
-    if (rol.key === 'super_admin') {
-      // Por seguridad, el acceso de Super Admin usa el correo real del
-      // administrador: no se autocompleta, se ingresa manualmente.
-      setEmail('');
-      setPassword('');
-      return;
-    }
-    setEmail(rol.email);
-    setPassword(DEMO_PASSWORD);
+  async function pedirEnlace(e) {
+    e.preventDefault();
+    if (!email.trim() || envio.estado === 'enviando' || esperaReenvio > 0) return;
+    setEnvio({ estado: 'enviando', msg: '', hasta: 0 });
+    try { await solicitarRecuperacion(email); setAhora(Date.now()); setEnvio({ estado: 'enviado', msg: '', hasta: Date.now() + 60000 }); }
+    catch (err) { setEnvio({ estado: 'error', msg: err.message, hasta: 0 }); }
   }
 
+  function cambiar(campo, valor) {
+    setD(prev => ({ ...prev, [campo]: valor }));
+    if (errs[campo]) setErrs(prev => { const n = { ...prev }; delete n[campo]; return n; });
+  }
+
+  async function enviarDemo(e) {
+    e.preventDefault();
+    if (demoEstado.fase === 'enviando') return;
+    const problemas = validarSolicitudDemo(d);
+    setErrs(problemas);
+    const primero = Object.keys(problemas)[0];
+    if (primero) {
+      const el = formDemoRef.current?.querySelector(`[name="${primero}"]`);
+      if (el) el.focus();
+      return;
+    }
+    setDemoEstado({ fase: 'enviando', msg: '' });
+    const r = await solicitarDemo(d, { apiUrl: API_URL, simulado });
+    if (r.ok) setDemoEstado({ fase: 'listo', msg: '' });
+    else setDemoEstado({ fase: 'form', msg: r.mensaje });
+  }
+
+  function abrirModo(m) {
+    setModo(m);
+    setEnvio({ estado: 'inicio', msg: '', hasta: 0 });
+    setErrs({});
+    setDemoEstado({ fase: 'form', msg: '' });
+    if (m === 'entrar') setD(DEMO_VACIO);
+  }
+
+  const bloqueado = segundosRestantes > 0;
+
   return (
-    <div id="login">
-      {portadaActiva(contenido) ? <PortadaLogin c={contenido} /> : (
-      <div className="l-left">
-        <div className="ll-body">
-          <span className="ll-badge"><span className="ti ti-map-pin" /> Zona 7 · El Oro · Ecuador</span>
-          <div className="ll-logo">S</div>
-          <div className="ll-title">SIGEE</div>
-          <div className="ll-sub">Sistema de Gestión Educativa Pro Max<br />Multi-tenant · Fiscales &amp; Particulares</div>
-          <div className="ll-divider" />
-          <div className="ll-features">
-            <div className="ll-feat">
-              <div className="ll-feat-ico">🏫</div>
-              <div className="ll-feat-txt"><strong>Multi-plantel</strong>Admin global + dashboards por institución</div>
-            </div>
-            <div className="ll-feat">
-              <div className="ll-feat-ico">📊</div>
-              <div className="ll-feat-txt"><strong>Calificaciones &amp; Asistencia</strong>Art. 26 R-LOEI · Reportes MINEDUC</div>
-            </div>
-            <div className="ll-feat">
-              <div className="ll-feat-ico">💰</div>
-              <div className="ll-feat-txt"><strong>Finanzas (solo particulares)</strong>Cuotas, becas, caja y contabilidad</div>
-            </div>
-            <div className="ll-feat">
-              <div className="ll-feat-ico">🎨</div>
-              <div className="ll-feat-txt"><strong>Branding por plantel</strong>Logo, eslogan y AMIE editables</div>
-            </div>
-          </div>
-        </div>
-      </div>
-      )}
+    <div className="lg">
+      <LoginHero c={contenido} />
 
-      <div className="l-right">
-        {modo === 'recuperar' ? (
-        <form onSubmit={pedirEnlace} className="lcard">
-          <div className="lbrand">
-            <div className="ltitle">Recuperar contraseña</div>
-            <div className="lsub">Te enviaremos un enlace al correo para confirmar que eres tú y elegir una nueva contraseña.</div>
-          </div>
-          {envio.estado === 'error' && <div className="lerr" style={{ display: 'flex' }}>{envio.msg}</div>}
-          {envio.estado === 'enviado' && (
-            <div className="cn-ok" role="status">
-              Si el correo está registrado, recibirás un enlace en unos minutos. Revisa también la carpeta de spam. El enlace vence en 1 hora y solo funciona una vez.
+      <main className="lg-panel">
+        {modo === 'entrar' && (
+          <form onSubmit={onSubmit} className="lg-tarjeta" noValidate={false}>
+            <h2>Iniciar sesión</h2>
+            <p className="lg-sub">Ingresa con las credenciales que te entregó tu institución.</p>
+
+            {error && !bloqueado && <div className="lg-aviso lg-aviso-err" role="alert">{error}</div>}
+            {bloqueado && (
+              <div className="lg-aviso lg-aviso-err" role="alert">
+                Demasiados intentos fallidos. Espera {segundosRestantes} s para volver a intentar.
+              </div>
+            )}
+
+            <div className="lg-campo">
+              <label htmlFor="lg-email">Correo electrónico</label>
+              <input id="lg-email" type="email" autoComplete="username" placeholder="usuario@colegio.edu.ec"
+                value={email} onChange={e => setEmail(e.target.value)} required />
             </div>
-          )}
-          <div className="lfield">
-            <label htmlFor="rec-email">Correo electrónico</label>
-            <input id="rec-email" type="email" placeholder="usuario@colegio.edu.ec" value={email} onChange={e => setEmail(e.target.value)} autoFocus required />
-          </div>
-          <button className="lbtn" type="submit" disabled={envio.estado === 'enviando' || esperaReenvio > 0}>
-            {envio.estado === 'enviando' ? 'Enviando…' : esperaReenvio > 0 ? `Reenviar en ${esperaReenvio}s` : envio.estado === 'enviado' ? 'Reenviar enlace' : 'Enviar enlace al correo'}
-          </button>
-          <button type="button" className="cn-enlace" onClick={() => { setModo('entrar'); setEnvio({ estado: 'inicio', msg: '', hasta: 0 }); }}>Volver a iniciar sesión</button>
-        </form>
-        ) : (
-        <form onSubmit={onSubmit} className="lcard">
-          <div className="lbrand">
-            <div className="ltitle">Bienvenido de vuelta</div>
-            <div className="lsub">Ingrese con sus credenciales institucionales</div>
-          </div>
-
-          {error && !segundosRestantes && <div className="lerr" style={{ display: 'flex' }}>{error}</div>}
-          {segundosRestantes > 0 && (
-            <div className="lerr" style={{ display: 'flex' }}>
-              <span className="ti ti-lock" /> Demasiados intentos fallidos. Espera {segundosRestantes}s para volver a intentar.
-            </div>
-          )}
-
-          <div className="lfield">
-            <label>Correo electrónico</label>
-            <input type="email" placeholder="usuario@colegio.edu.ec" value={email} onChange={e => setEmail(e.target.value)} required />
-          </div>
-          <div className="lfield lpass-wrap">
-            <label>Contraseña</label>
-            <input id="login-pass" type={showPass ? 'text' : 'password'} placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required />
-            <button type="button" className="lpass-toggle" onClick={() => setShowPass(s => !s)} aria-label="Mostrar contraseña">
-              <span className={showPass ? 'ti ti-eye-off' : 'ti ti-eye'} />
-            </button>
-          </div>
-
-          <div style={{ textAlign: 'right', marginTop: -6, marginBottom: 12 }}>
-            <button type="button" className="cn-enlace" onClick={() => setModo('recuperar')}>¿Olvidaste tu contraseña?</button>
-          </div>
-          <button className="lbtn" type="submit" disabled={busy || segundosRestantes > 0}>
-            {segundosRestantes > 0
-              ? `Bloqueado (${segundosRestantes}s)`
-              : busy ? 'Ingresando…' : <>Ingresar al sistema <span className="ti ti-arrow-right" /></>}
-          </button>
-
-          <div className="l-or">Acceso rápido de demostración</div>
-          <div className="demo-grid">
-            {DEMO_ROLES.map(r => (
-              <button
-                type="button"
-                key={r.key}
-                className="demo-card"
-                style={{ background: r.bg, color: r.fg, opacity: segundosRestantes > 0 ? 0.5 : 1, cursor: segundosRestantes > 0 ? 'not-allowed' : 'pointer' }}
-                onClick={() => segundosRestantes === 0 && usarDemo(r)}
-                disabled={segundosRestantes > 0}
-              >
-                <div className="dc-title">{r.title}</div>
-                <div className="dc-desc">{r.desc}</div>
+            <div className="lg-campo lg-clave">
+              <label htmlFor="lg-pass">Contraseña</label>
+              <input id="lg-pass" type={showPass ? 'text' : 'password'} autoComplete="current-password"
+                value={password} onChange={e => setPassword(e.target.value)} required />
+              <button type="button" className="lg-ojo" onClick={() => setShowPass(s => !s)}
+                aria-label={showPass ? 'Ocultar contraseña' : 'Mostrar contraseña'} aria-pressed={showPass}>
+                <span className={showPass ? 'ti ti-eye-off' : 'ti ti-eye'} aria-hidden="true" />
               </button>
-            ))}
-          </div>
-          <div style={{ textAlign: 'center', fontSize: 10, color: 'rgba(255,255,255,.25)', marginTop: 14 }}>
-            Cuentas de demostración reales · un clic te deja listo para ingresar
-          </div>
-        </form>
+            </div>
+            <div style={{ textAlign: 'right', margin: '-6px 0 16px' }}>
+              <button type="button" className="lg-link" onClick={() => abrirModo('recuperar')}>¿Olvidaste tu contraseña?</button>
+            </div>
+            <button className="lg-btn" type="submit" disabled={busy || bloqueado}>
+              {bloqueado ? `Bloqueado (${segundosRestantes} s)` : busy ? 'Ingresando…' : 'Ingresar al sistema'}
+            </button>
+
+            <div className="lg-sep">¿Tu institución aún no usa SIGEE?</div>
+            <button type="button" className="lg-btn lg-btn-sec" onClick={() => abrirModo('demo')}>Solicitar demo de 5 días</button>
+            <p className="lg-demo-nota">Recibirás un enlace de activación en tu correo. Los 5 días empiezan en tu primer ingreso.</p>
+          </form>
         )}
-      </div>
+
+        {modo === 'recuperar' && (
+          <form onSubmit={pedirEnlace} className="lg-tarjeta">
+            <h2>Recuperar contraseña</h2>
+            <p className="lg-sub">Te enviaremos un enlace al correo para confirmar que eres tú y elegir una nueva contraseña.</p>
+            {envio.estado === 'error' && <div className="lg-aviso lg-aviso-err" role="alert">{envio.msg}</div>}
+            {envio.estado === 'enviado' && (
+              <div className="lg-aviso lg-aviso-ok" role="status">
+                Si el correo está registrado, recibirás un enlace en unos minutos. Revisa también la carpeta de spam. El enlace vence en 1 hora y solo funciona una vez.
+              </div>
+            )}
+            <div className="lg-campo">
+              <label htmlFor="lg-rec-email">Correo electrónico</label>
+              <input id="lg-rec-email" type="email" autoComplete="email" placeholder="usuario@colegio.edu.ec"
+                value={email} onChange={e => setEmail(e.target.value)} autoFocus required />
+            </div>
+            <button className="lg-btn" type="submit" disabled={envio.estado === 'enviando' || esperaReenvio > 0}>
+              {envio.estado === 'enviando' ? 'Enviando…' : esperaReenvio > 0 ? `Reenviar en ${esperaReenvio} s` : envio.estado === 'enviado' ? 'Reenviar enlace' : 'Enviar enlace al correo'}
+            </button>
+            <button type="button" className="lg-link lg-volver" onClick={() => abrirModo('entrar')}>Volver a iniciar sesión</button>
+          </form>
+        )}
+
+        {modo === 'demo' && demoEstado.fase !== 'listo' && (
+          <form onSubmit={enviarDemo} className="lg-tarjeta" ref={formDemoRef} noValidate>
+            <h2>Solicitar demo de 5 días</h2>
+            <p className="lg-sub">Probarás SIGEE con una institución de ejemplo completa. Usaremos estos datos para enviarte el acceso y controlar el uso de la demostración.</p>
+
+            {demoEstado.msg && <div className="lg-aviso lg-aviso-err" role="alert">{demoEstado.msg}</div>}
+
+            <div className="lg-campo">
+              <label htmlFor="dm-nombre">Nombres y apellidos</label>
+              <input id="dm-nombre" name="nombre" autoComplete="name" value={d.nombre} onChange={e => cambiar('nombre', e.target.value)}
+                aria-invalid={!!errs.nombre} aria-describedby={errs.nombre ? 'dm-nombre-e' : undefined} />
+              {errs.nombre && <span id="dm-nombre-e" className="lg-err-campo">{errs.nombre}</span>}
+            </div>
+            <div className="lg-fila2">
+              <div className="lg-campo">
+                <label htmlFor="dm-cedula">Cédula</label>
+                <input id="dm-cedula" name="cedula" inputMode="numeric" maxLength={10} autoComplete="off" value={d.cedula}
+                  onChange={e => cambiar('cedula', e.target.value.replace(/\D/g, ''))}
+                  aria-invalid={!!errs.cedula} aria-describedby={errs.cedula ? 'dm-cedula-e' : undefined} />
+                {errs.cedula && <span id="dm-cedula-e" className="lg-err-campo">{errs.cedula}</span>}
+              </div>
+              <div className="lg-campo">
+                <label htmlFor="dm-tel">WhatsApp <span style={{ fontWeight: 400, color: 'var(--suave)' }}>(opcional)</span></label>
+                <input id="dm-tel" name="telefono" type="tel" inputMode="tel" autoComplete="tel" value={d.telefono}
+                  onChange={e => cambiar('telefono', e.target.value)}
+                  aria-invalid={!!errs.telefono} aria-describedby={errs.telefono ? 'dm-tel-e' : undefined} />
+                {errs.telefono && <span id="dm-tel-e" className="lg-err-campo">{errs.telefono}</span>}
+              </div>
+            </div>
+            <div className="lg-campo">
+              <label htmlFor="dm-email">Correo electrónico</label>
+              <input id="dm-email" name="email" type="email" autoComplete="email" value={d.email} onChange={e => cambiar('email', e.target.value)}
+                aria-invalid={!!errs.email} aria-describedby={errs.email ? 'dm-email-e' : 'dm-email-a'} />
+              {errs.email ? <span id="dm-email-e" className="lg-err-campo">{errs.email}</span>
+                : <span id="dm-email-a" className="lg-ayuda">Este correo será el administrador de tu demo.</span>}
+            </div>
+            <div className="lg-campo">
+              <label htmlFor="dm-inst">Institución</label>
+              <input id="dm-inst" name="institucion" autoComplete="organization" value={d.institucion} onChange={e => cambiar('institucion', e.target.value)}
+                aria-invalid={!!errs.institucion} aria-describedby={errs.institucion ? 'dm-inst-e' : undefined} />
+              {errs.institucion && <span id="dm-inst-e" className="lg-err-campo">{errs.institucion}</span>}
+            </div>
+            <div className="lg-campo">
+              <label htmlFor="dm-cargo">Cargo</label>
+              <select id="dm-cargo" name="cargo" value={d.cargo} onChange={e => cambiar('cargo', e.target.value)}
+                aria-invalid={!!errs.cargo} aria-describedby={errs.cargo ? 'dm-cargo-e' : undefined}>
+                <option value="">Elige tu cargo</option>
+                {CARGOS_DEMO.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              {errs.cargo && <span id="dm-cargo-e" className="lg-err-campo">{errs.cargo}</span>}
+            </div>
+
+            {/* Trampa para bots: oculta a personas. El servidor descarta toda solicitud que la traiga llena. */}
+            <div className="lg-trampa" aria-hidden="true">
+              <label htmlFor="dm-web">No llenar este campo</label>
+              <input id="dm-web" name="sitio_web" tabIndex={-1} autoComplete="off" value={d.sitio_web} onChange={e => cambiar('sitio_web', e.target.value)} />
+            </div>
+
+            <label className="lg-check">
+              <input type="checkbox" name="acepta" checked={d.acepta} onChange={e => cambiar('acepta', e.target.checked)}
+                aria-invalid={!!errs.acepta} aria-describedby={errs.acepta ? 'dm-acepta-e' : undefined} />
+              <span>Acepto que SIGEE guarde mis datos y la dirección IP desde la que solicito la demo, para controlar el acceso.</span>
+            </label>
+            {errs.acepta && <span id="dm-acepta-e" className="lg-err-campo" style={{ marginTop: -10, marginBottom: 12 }}>{errs.acepta}</span>}
+
+            <button className="lg-btn" type="submit" disabled={demoEstado.fase === 'enviando'}>
+              {demoEstado.fase === 'enviando' ? 'Enviando solicitud…' : 'Solicitar demo de 5 días'}
+            </button>
+            <button type="button" className="lg-link lg-volver" onClick={() => abrirModo('entrar')}>Volver a iniciar sesión</button>
+          </form>
+        )}
+
+        {modo === 'demo' && demoEstado.fase === 'listo' && (
+          <div className="lg-tarjeta lg-exito" role="status">
+            <h2>Revisa tu correo</h2>
+            <p className="lg-sub" style={{ marginBottom: 0 }}>
+              Enviamos un enlace de activación a <strong>{d.email.trim().toLowerCase()}</strong>.
+            </p>
+            <ol className="lg-pasos">
+              <li>Abre el enlace en las próximas 24 horas.</li>
+              <li>Recibirás las credenciales de tu institución de ejemplo.</li>
+              <li>Tus 5 días empiezan en tu primer ingreso.</li>
+            </ol>
+            <p className="lg-sub">
+              Si el enlace vence, comunícate con el administrador
+              {WHATSAPP_ADMIN ? <> por <a className="lg-link" href={`https://wa.me/${WHATSAPP_ADMIN}`} target="_blank" rel="noreferrer">WhatsApp</a></> : ''}.
+            </p>
+            <button type="button" className="lg-btn lg-btn-sec" onClick={() => abrirModo('entrar')}>Volver a iniciar sesión</button>
+          </div>
+        )}
+      </main>
     </div>
   );
 }
