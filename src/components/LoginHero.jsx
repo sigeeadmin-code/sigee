@@ -5,7 +5,8 @@ import { Link } from 'react-router-dom';
 const ENLACES = [
   { test: /asistencia\s+y\s+reportes/i, to: '/asistencia-y-reportes' },
   { test: /portal\s+de\s+acceso\s+al\s+estudiante/i, to: '/portal-estudiante' },
-  { test: /generaci[oó]n\s+de\s+horarios/i, to: '/generacion-de-horarios' }
+  { test: /generaci[oó]n\s+de\s+horarios/i, to: '/generacion-de-horarios' },
+  { test: /calificaciones\s+y\s+cartilla/i, to: '/calificaciones-y-cartilla' }
 ];
 const enlaceDe = (texto) => ENLACES.find(e => e.test.test(texto));
 
