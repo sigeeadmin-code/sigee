@@ -2,7 +2,10 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 
 // Puntos de la portada que llevan a una página pública (se reconocen por su texto, que es editable).
-const ENLACES = [{ test: /asistencia\s+y\s+reportes/i, to: '/asistencia-y-reportes' }];
+const ENLACES = [
+  { test: /asistencia\s+y\s+reportes/i, to: '/asistencia-y-reportes' },
+  { test: /portal\s+de\s+acceso\s+al\s+estudiante/i, to: '/portal-estudiante' }
+];
 const enlaceDe = (texto) => ENLACES.find(e => e.test.test(texto));
 
 // Convierte un celular ecuatoriano escrito como 09XXXXXXXX en enlace a WhatsApp.

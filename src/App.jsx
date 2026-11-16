@@ -25,6 +25,8 @@ function cargar(importar) {
   );
 }
 const AsistenciaReportes = cargar(() => import('./pages/AsistenciaReportes.jsx'));
+const PortalEstudiante = cargar(() => import('./pages/PortalEstudiante.jsx'));
+const PAGINAS_PUBLICAS = { '/asistencia-y-reportes': AsistenciaReportes, '/portal-estudiante': PortalEstudiante };
 const Planteles = cargar(() => import('./pages/Planteles.jsx'));
 const Academico = cargar(() => import('./pages/Academico.jsx'));
 const RolesPermisos = cargar(() => import('./pages/RolesPermisos.jsx'));
@@ -95,8 +97,9 @@ function Gate() {
   const { loading, profile, recuperando } = useSession();
   const { pathname } = useLocation();
   if (recuperando) return <RestablecerClave />;
-  if (pathname === '/asistencia-y-reportes') {
-    return <React.Suspense fallback={<div className="splash">Cargando…</div>}><AsistenciaReportes /></React.Suspense>;
+  const Publica = PAGINAS_PUBLICAS[pathname];
+  if (Publica) {
+    return <React.Suspense fallback={<div className="splash">Cargando…</div>}><Publica /></React.Suspense>;
   }
   if (loading) return <div className="splash">Cargando SIGEE…</div>;
   if (!profile) return <Login />;

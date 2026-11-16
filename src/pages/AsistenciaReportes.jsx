@@ -1,10 +1,6 @@
-import React, { useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { useSession } from '../lib/SessionContext.jsx';
-import '../asistencia-reportes.css';
+import React from 'react';
+import PaginaPublica from '../components/PaginaPublica.jsx';
 
-// Página pública: muestra el módulo de asistencia y reportes con capturas reales de una
-// institución de ejemplo (datos ficticios). No necesita sesión.
 const PANTALLAS = [
   {
     id: 'registro-diario', corto: 'Registro diario', n: '01', quien: 'Docentes',
@@ -60,82 +56,14 @@ const PANTALLAS = [
   }
 ];
 
-export default function AsistenciaReportes() {
-  const { profile } = useSession();
-  useEffect(() => {
-    const previo = document.title;
-    document.title = 'Asistencia y reportes · SIGEE';
-    window.scrollTo(0, 0);
-    return () => { document.title = previo; };
-  }, []);
+const CFG = {
+  titulo: 'Asistencia y reportes · SIGEE',
+  nota: 'Asistencia y reportes',
+  h1: 'Pasa lista en un minuto. Entiende la asistencia de todo el curso.',
+  lede: 'SIGEE registra la asistencia por materia, la compara con los días lectivos del calendario y deja listos los reportes para docentes, tutores, inspectores y representantes.',
+  pantallas: PANTALLAS,
+  familia: { titulo: 'Estudiantes y representantes', texto: 'Cada estudiante y su familia ven su propio historial de asistencia y faltas desde el inicio de clases, sin acceso a datos de otras personas.' },
+  cierre: { titulo: 'Pruébalo con una institución de ejemplo', texto: 'Recibe un acceso de 5 días con cursos, docentes y estudiantes ficticios para recorrer todo el módulo.' }
+};
 
-  return (
-    <div className="ar">
-      <a className="ar-salto" href="#contenido">Saltar al contenido</a>
-      <header className="ar-barra">
-        <Link to="/" className="ar-marca" aria-label="SIGEE, ir al inicio">
-          <span className="ar-logo" aria-hidden="true">S</span><span>SIGEE</span>
-        </Link>
-        <nav className="ar-acciones" aria-label="Acciones">
-          <Link to="/" className="ar-enlace">{profile ? 'Ir al sistema' : 'Iniciar sesión'}</Link>
-          {!profile && <Link to="/?demo=1" className="ar-btn">Solicitar demo</Link>}
-        </nav>
-      </header>
-
-      <main id="contenido">
-        <section className="ar-hero">
-          <div className="ar-hero-int">
-            <p className="ar-nota">Asistencia y reportes</p>
-            <h1>Pasa lista en un minuto. Entiende la asistencia de todo el curso.</h1>
-            <p className="ar-lede">SIGEE registra la asistencia por materia, la compara con los días lectivos del calendario y deja listos los reportes para docentes, tutores, inspectores y representantes.</p>
-            <nav className="ar-indice" aria-label="Pantallas del módulo">
-              {PANTALLAS.map(p => <a key={p.id} href={`#${p.id}`}><span>{p.n}</span>{p.corto}</a>)}
-            </nav>
-          </div>
-        </section>
-
-        {PANTALLAS.map((p, i) => (
-          <section key={p.id} id={p.id} className={'ar-bloque' + (i % 2 ? ' ar-alt' : '')} aria-labelledby={`${p.id}-t`}>
-            <div className="ar-bloque-int">
-              <div className="ar-texto">
-                <p className="ar-num"><span>{p.n}</span> · {p.quien}</p>
-                <h2 id={`${p.id}-t`}>{p.titulo}</h2>
-                <p>{p.texto}</p>
-                <ul>{p.puntos.map(t => <li key={t}>{t}</li>)}</ul>
-              </div>
-              <figure className="ar-fig">
-                <div className="ar-marco">
-                  <div className="ar-marco-barra">{p.barra}</div>
-                  <a href={p.img} target="_blank" rel="noreferrer" aria-label={`Abrir la captura «${p.barra}» en tamaño completo`}>
-                    <img src={p.img} width={p.w} height={p.h} alt={p.alt} loading={i === 0 ? 'eager' : 'lazy'} decoding="async" />
-                  </a>
-                </div>
-                <figcaption>Captura de una institución de ejemplo con datos ficticios.</figcaption>
-              </figure>
-            </div>
-          </section>
-        ))}
-
-        <section className="ar-familia" aria-labelledby="fam-t">
-          <div className="ar-bloque-int ar-familia-int">
-            <h2 id="fam-t">Estudiantes y representantes</h2>
-            <p>Cada estudiante y su familia ven su propio historial de asistencia y faltas desde el inicio de clases, sin acceso a datos de otras personas.</p>
-          </div>
-        </section>
-
-        <section className="ar-cierre" aria-labelledby="cierre-t">
-          <div className="ar-cierre-int">
-            <h2 id="cierre-t">Pruébalo con una institución de ejemplo</h2>
-            <p>Recibe un acceso de 5 días con cursos, docentes y estudiantes ficticios para recorrer todo el módulo.</p>
-            <div className="ar-cierre-btns">
-              <Link to="/?demo=1" className="ar-btn ar-btn-ambar">Solicitar demo de 5 días</Link>
-              <Link to="/" className="ar-enlace ar-enlace-claro">{profile ? 'Ir al sistema' : 'Volver a iniciar sesión'}</Link>
-            </div>
-          </div>
-        </section>
-      </main>
-
-      <footer className="ar-pie">SIGEE · Sistema de gestión educativa</footer>
-    </div>
-  );
-}
+export default function AsistenciaReportes() { return <PaginaPublica cfg={CFG} />; }
