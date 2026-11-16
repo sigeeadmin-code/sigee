@@ -27,6 +27,13 @@
 .lg-puntos li{position:relative;padding-left:22px;font-size:14.5px;color:#e1eaf6}
 .lg-puntos li::before{content:'';position:absolute;left:2px;top:.5em;width:9px;height:9px;background:var(--banano);border-radius:2px}
 
+/* Enlaces dentro de la portada */
+.lg-desc a{color:#fff;text-decoration:underline;text-decoration-color:var(--banano);text-underline-offset:3px}
+.lg-puntos a{color:#fff;text-decoration:none;border-bottom:1px solid var(--banano);padding-bottom:1px}
+.lg-puntos a::after{content:' \2192';color:var(--banano)}
+.lg-puntos a:hover{background:rgba(255,255,255,.08)}
+.lg-hero a:focus-visible{outline-color:var(--banano)}
+
 /* Hoja de asistencia: lo más característico del producto */
 .lg-hoja{margin:auto 0 0;max-width:520px;background:var(--blanco);color:var(--tinta);border-radius:6px;padding:16px 18px 14px;
   box-shadow:0 1px 0 #fff inset,0 18px 40px rgba(0,0,0,.28);transform:rotate(-1.2deg)}
@@ -90,7 +97,9 @@
 @media (max-width:980px){
   .lg{grid-template-columns:1fr}
   .lg-hero{padding:24px 24px 26px;gap:16px}
-  .lg-hoja,.lg-puntos,.lg-desc,.lg-nota{display:none}
+  .lg-hoja,.lg-desc,.lg-nota{display:none}
+  .lg-puntos{display:block;margin-top:2px}
+  .lg-puntos li:not(.lg-es-link){display:none}
   .lg-h1{font-size:28px;max-width:none;margin:0}
   .lg-panel{padding:28px 20px 40px;align-items:flex-start}
 }

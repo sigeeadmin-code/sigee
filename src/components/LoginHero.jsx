@@ -1,4 +1,17 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
+
+// Puntos de la portada que llevan a una página pública (se reconocen por su texto, que es editable).
+const ENLACES = [{ test: /asistencia\s+y\s+reportes/i, to: '/asistencia-y-reportes' }];
+const enlaceDe = (texto) => ENLACES.find(e => e.test.test(texto));
+
+// Convierte un celular ecuatoriano escrito como 09XXXXXXXX en enlace a WhatsApp.
+function linkificarTelefonos(texto) {
+  return String(texto).split(/(\b09\d{8}\b)/g).map((p, i) =>
+    /^09\d{8}$/.test(p)
+      ? <a key={i} href={`https://wa.me/593${p.slice(1)}`} target="_blank" rel="noreferrer">{p}</a>
+      : p);
+}
 
 // Hoja de asistencia de ejemplo (datos ficticios). Es decorativa: el significado va en el texto de al lado.
 const DIAS = ['L', 'M', 'X', 'J', 'V'];
@@ -58,8 +71,13 @@ export default function LoginHero({ c }) {
       <div className="lg-hero-cuerpo">
         {c['login.hero.badge'] && <p className="lg-nota">{c['login.hero.badge']}</p>}
         <h1 className="lg-h1">{titulo}</h1>
-        {c['login.hero.descripcion'] && <p className="lg-desc">{c['login.hero.descripcion']}</p>}
-        {puntos.length > 0 && <ul className="lg-puntos">{puntos.map(p => <li key={p}>{p}</li>)}</ul>}
+        {c['login.hero.descripcion'] && <p className="lg-desc">{linkificarTelefonos(c['login.hero.descripcion'])}</p>}
+        {puntos.length > 0 && <ul className="lg-puntos">{puntos.map(p => {
+          const en = enlaceDe(p);
+          return en
+            ? <li key={p} className="lg-es-link"><Link to={en.to}>{p}</Link></li>
+            : <li key={p}>{p}</li>;
+        })}</ul>}
       </div>
       <HojaAsistencia />
     </section>

@@ -28,7 +28,7 @@ const DEMO_VACIO = { nombre: '', cedula: '', email: '', institucion: '', cargo: 
 
 export default function Login() {
   const { login, error, solicitarRecuperacion } = useSession();
-  const [modo, setModo] = useState('entrar');                       // 'entrar' | 'recuperar' | 'demo'
+  const [modo, setModo] = useState(() => (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('demo') === '1' ? 'demo' : 'entrar'));   // 'entrar' | 'recuperar' | 'demo'
   const [envio, setEnvio] = useState({ estado: 'inicio', msg: '', hasta: 0 });
   const [ahora, setAhora] = useState(Date.now());
   const [email, setEmail] = useState('');
