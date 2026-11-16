@@ -1,8 +1,8 @@
 /* Login rediseñado. Todo va bajo .lg para no afectar al resto del sistema. */
 .lg{
-  --pizarra:#2b2160;--pizarra2:#3a2d82;--pizarra3:#4636a0;--boton:#4636a0;--boton-h:#3a2d82;
-  --banano:#ff6b57;--papel:#f7f6fc;--blanco:#fff;--tinta:#1a1533;--suave:#58537a;
-  --linea:#d6d1ee;--cobalto:#4636a0;--error:#b3261e;--errorbg:#fdeceb;--ok:#1f7a4d;--okbg:#e8f5ee;
+  --pizarra:#0f2a4a;--pizarra2:#1e4c86;--pizarra3:#2f66ad;--boton:#1f5fbf;--boton-h:#184c98;
+  --banano:#f2a93b;--papel:#f4f7fb;--blanco:#fff;--tinta:#0f1f33;--suave:#4a5b73;
+  --linea:#c9d4e3;--cobalto:#1f5fbf;--error:#b3261e;--errorbg:#fdeceb;--ok:#1f7a4d;--okbg:#e8f5ee;
   display:grid;grid-template-columns:minmax(0,1.1fr) minmax(400px,.9fr);min-height:100vh;
   font-family:'Public Sans',system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--tinta);background:var(--papel);
 }
@@ -10,7 +10,7 @@
 .lg :focus-visible{outline:3px solid var(--cobalto);outline-offset:2px;border-radius:4px}
 
 /* ---- Panel izquierdo ---- */
-.lg-hero{position:relative;background:var(--pizarra);color:#f0eefa;padding:44px 56px 48px;display:flex;flex-direction:column;gap:40px;overflow:hidden}
+.lg-hero{position:relative;background:var(--pizarra);color:#eef3fa;padding:44px 56px 48px;display:flex;flex-direction:column;gap:40px;overflow:hidden}
 .lg-hero::before{content:'';position:absolute;inset:0;pointer-events:none;
   background:repeating-linear-gradient(to bottom,transparent 0 35px,rgba(255,255,255,.045) 35px 36px)}
 .lg-hero>*{position:relative}
@@ -18,13 +18,13 @@
 .lg-logo{width:44px;height:44px;border-radius:10px;background:var(--pizarra2);border:1px solid var(--pizarra3);
   display:grid;place-items:center;font:600 26px/1 'Newsreader',Georgia,serif;color:#fff;box-shadow:inset 0 -4px 0 var(--banano)}
 .lg-marca-n{font-weight:700;font-size:18px;letter-spacing:.02em}
-.lg-marca-s{font-size:13px;color:#bdb6e3}
+.lg-marca-s{font-size:13px;color:#9fb6d3}
 .lg-hero-cuerpo{max-width:560px}
-.lg-nota{display:inline-block;margin:0 0 16px;padding:3px 0 3px 12px;border-left:3px solid var(--banano);font-size:14px;color:#ddd9f3}
+.lg-nota{display:inline-block;margin:0 0 16px;padding:3px 0 3px 12px;border-left:3px solid var(--banano);font-size:14px;color:#d6e2f2}
 .lg-h1{margin:0 0 16px;font:500 clamp(34px,3.6vw,52px)/1.08 'Newsreader',Georgia,serif;letter-spacing:-.01em;color:#fff;max-width:15ch}
-.lg-desc{margin:0 0 22px;font-size:17px;line-height:1.55;color:#d3cef0;max-width:46ch}
+.lg-desc{margin:0 0 22px;font-size:17px;line-height:1.55;color:#c9d8ec;max-width:46ch}
 .lg-puntos{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 24px;max-width:520px}
-.lg-puntos li{position:relative;padding-left:22px;font-size:14.5px;color:#e6e3f7}
+.lg-puntos li{position:relative;padding-left:22px;font-size:14.5px;color:#e1eaf6}
 .lg-puntos li::before{content:'';position:absolute;left:2px;top:.5em;width:9px;height:9px;background:var(--banano);border-radius:2px}
 
 /* Hoja de asistencia: lo más característico del producto */
@@ -33,7 +33,7 @@
 .lg-hoja-cab{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-bottom:10px;border-bottom:2px solid var(--tinta);font-size:12.5px}
 .lg-hoja-cab span{color:var(--suave)}
 .lg-hoja table{width:100%;border-collapse:collapse;font-size:12.5px}
-.lg-hoja th,.lg-hoja td{padding:6px 4px;border-bottom:1px solid #e6e2f3;text-align:center}
+.lg-hoja th,.lg-hoja td{padding:6px 4px;border-bottom:1px solid #e3e9f2;text-align:center}
 .lg-hoja thead th{font-weight:600;color:var(--suave)}
 .lg-hoja thead th:first-child{text-align:left}
 .lg-hoja tbody th{text-align:left;font-weight:500;white-space:nowrap}
@@ -55,8 +55,8 @@
 .lg-campo .lg-ayuda{display:block;margin-top:5px;font-size:12.5px;color:var(--suave)}
 .lg-campo input,.lg-campo select{width:100%;min-height:46px;padding:10px 14px;border:1.5px solid var(--linea);border-radius:8px;background:var(--blanco);
   font:400 15px 'Public Sans',sans-serif;color:var(--tinta);transition:border-color .15s}
-.lg-campo input:hover,.lg-campo select:hover{border-color:#a79fd0}
-.lg-campo input:focus,.lg-campo select:focus{border-color:var(--cobalto);outline:none;box-shadow:0 0 0 3px rgba(70,54,160,.2)}
+.lg-campo input:hover,.lg-campo select:hover{border-color:#9db3d1}
+.lg-campo input:focus,.lg-campo select:focus{border-color:var(--cobalto);outline:none;box-shadow:0 0 0 3px rgba(31,95,191,.2)}
 .lg-campo [aria-invalid="true"]{border-color:var(--error)}
 .lg-err-campo{display:block;margin-top:5px;font-size:12.5px;color:var(--error);font-weight:500}
 .lg-fila2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
@@ -69,9 +69,9 @@
 .lg-btn:hover:not(:disabled){background:var(--boton-h)}
 .lg-btn:disabled{opacity:.6;cursor:default}
 .lg-btn-sec{background:var(--blanco);color:var(--boton);border:1.5px solid var(--boton)}
-.lg-btn-sec:hover:not(:disabled){background:#ece9f8}
+.lg-btn-sec:hover:not(:disabled){background:#e6eef9}
 .lg-link{background:none;border:0;padding:6px 2px;font:500 14px 'Public Sans',sans-serif;color:var(--cobalto);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
-.lg-link:hover{color:#2b2160}
+.lg-link:hover{color:#0f2a4a}
 .lg-aviso{display:flex;gap:10px;align-items:flex-start;margin:0 0 16px;padding:11px 13px;border-radius:8px;font-size:14px;line-height:1.45}
 .lg-aviso-err{background:var(--errorbg);color:#7d1a14;border:1px solid #f1b7b3}
 .lg-aviso-ok{background:var(--okbg);color:#15563a;border:1px solid #a9d8bf}
