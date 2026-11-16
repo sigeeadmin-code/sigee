@@ -1,0 +1,51 @@
+/* Tema A — azul marino, azul y acento ámbar. Se carga DESPUÉS de styles.css y solo redefine
+   variables y reglas del marco (menú, cabecera, botones). Para volver al diseño anterior basta
+   quitar el import en main.jsx. Los colores de estado (verde/ámbar/rojo) no se tocan. */
+:root{
+  --ink:#0f1f33;--ink2:#1b2b42;--ink3:#2a3d57;
+  --slate:#52627a;--slateL:#8a9bb3;--slateXL:#c9d4e3;
+  --line:#dde5f0;--lineD:#c9d4e3;
+  --page:#f4f7fb;
+  --brand:#1f5fbf;--brandD:#184c98;--brandL:#e8f0fb;--brandXL:#d3e2f6;
+  --brand2:#2f66ad;--brand2L:#e8f0fb;
+  --acento:#f2a93b;
+  --sb:#0f2a4a;--sb2:#143560;--sb3:#1b4276;
+  --sb-line:rgba(255,255,255,.09);
+  --sb-text:rgba(255,255,255,.72);
+  --shB:0 0 0 3px rgba(31,95,191,.22);
+}
+body{font-family:'Public Sans','DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif}
+:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+.sidebar :focus-visible{outline-color:var(--acento);outline-offset:-2px}
+
+/* Menú lateral */
+.lico{background:var(--sb3);box-shadow:inset 0 -3px 0 var(--acento);border:1px solid rgba(255,255,255,.12)}
+.ltx{font-size:14px;font-weight:700;letter-spacing:.01em;line-height:1.2}
+.sblogo .lsub{color:rgba(255,255,255,.58);font-size:11px}
+.ava{background:var(--sb3);border:1px solid rgba(255,255,255,.14)}
+.topbar .ava{background:var(--brand);border-color:transparent}
+.sbuser{background:rgba(255,255,255,.05)}
+.url{color:rgba(255,255,255,.6);font-size:11px}
+.ctx-global-badge{background:rgba(242,169,59,.16);color:#f6cf86;border:1px solid rgba(242,169,59,.38)}
+.ncat{font-size:11px;font-weight:600;color:rgba(255,255,255,.5);text-transform:none;letter-spacing:.02em;padding:16px 10px 6px}
+.ni{font-size:13px;padding:9px 10px;color:var(--sb-text)}
+.ni:hover{background:rgba(255,255,255,.08);color:#fff}
+.ni.on{background:rgba(255,255,255,.12);color:#fff;font-weight:600}
+.ni.on::before{background:var(--acento);width:3px;left:0}
+.nbadge{background:rgba(255,255,255,.14);color:rgba(255,255,255,.78)}
+.btn-logout{color:rgba(255,255,255,.78)}
+.btn-logout:hover{background:rgba(220,38,38,.2);color:#fecaca;border-color:rgba(248,113,113,.4)}
+.sidebar-backdrop{background:rgba(15,42,74,.55)}
+
+/* Cabecera: el título de página lleva la voz editorial del login */
+.topbar{border-bottom:1px solid var(--line);box-shadow:none}
+.topbar-title{font-family:'Newsreader',Georgia,serif;font-size:20px;font-weight:600;color:var(--sb);letter-spacing:-.005em}
+
+/* Botones, pestañas y chips: planos, sin degradados */
+.btn-primary{background:var(--brand);color:#fff;border:1px solid var(--brand)}
+.btn-primary:hover:not(:disabled){background:var(--brandD);border-color:var(--brandD);opacity:1}
+.lfield input:focus,.lfield select:focus{background:rgba(31,95,191,.06)}
+.card{border-color:var(--line)}
+
+@media (max-width:900px){.topbar-title{font-size:16px}}
+@media (prefers-reduced-motion:reduce){.ni,.btn,.btn-logout{transition:none!important}}
