@@ -20,6 +20,8 @@ assert.equal(normalizarSolicitud({ ...base, sitio_web: 'http://spam' }).sitio_we
 const resp = (status, body) => ({ status, ok: status >= 200 && status < 300, json: async () => body });
 const llamar = r => solicitarDemo(base, { apiUrl: 'https://api.test', fetchFn: async () => { if (r instanceof Error) throw r; return r; } });
 assert.equal((await llamar(resp(200, {}))).ok, true);
+assert.equal((await llamar(resp(200, { entrega: 'manual' }))).entrega, 'manual');
+assert.equal((await llamar(resp(200, { entrega: 'correo' }))).entrega, 'correo');
 assert.equal((await llamar(resp(404, {}))).codigo, 'no_disponible');
 assert.equal((await llamar(resp(429, {}))).codigo, 'limite');
 assert.equal((await llamar(resp(409, { error: 'ya existe' }))).mensaje, 'ya existe');

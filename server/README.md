@@ -28,6 +28,7 @@ npm run dev
 - `DELETE /calendario/eventos/:id`
 - `POST /asistencia` — guarda asistencia; rechaza si el día no es lectivo
 - `GET /asistencia?docente_materia_id=&fecha=`
+- `POST /demo/solicitar` — **pública** (sin sesión): registra una solicitud de demo con validación de cédula, IP y límites; un demo por correo y por cédula
 
 Todas las rutas (salvo `/health`) requieren `Authorization: Bearer <access_token>` con
 el mismo token de sesión que ya emite Supabase Auth en el frontend.

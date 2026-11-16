@@ -39,13 +39,13 @@ export function validarSolicitudDemo(d) {
 // Resultado: { ok, mensaje, codigo } — nunca lanza.
 export async function solicitarDemo(datos, { apiUrl, fetchFn = fetch, simulado = false } = {}) {
   const cuerpo = normalizarSolicitud(datos);
-  if (simulado) return { ok: true, codigo: 'simulado', mensaje: 'Vista previa: no se envió nada.' };
+  if (simulado) return { ok: true, codigo: 'simulado', entrega: 'manual', mensaje: 'Vista previa: no se envió nada.' };
   try {
     const resp = await fetchFn(`${apiUrl}/demo/solicitar`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo)
     });
     const body = await resp.json().catch(() => ({}));
-    if (resp.ok) return { ok: true, codigo: 'enviado', mensaje: body.message || '' };
+    if (resp.ok) return { ok: true, codigo: 'enviado', entrega: body.entrega === 'correo' ? 'correo' : 'manual', mensaje: body.message || '' };
     if (resp.status === 404) return { ok: false, codigo: 'no_disponible', mensaje: 'La solicitud de demos aún no está habilitada. Inténtalo de nuevo más tarde.' };
     if (resp.status === 429) return { ok: false, codigo: 'limite', mensaje: 'Hiciste demasiados intentos. Espera unos minutos o comunícate con el administrador.' };
     if (resp.status === 409) return { ok: false, codigo: 'duplicada', mensaje: body.error || 'Ya existe una demostración para este correo o cédula. Comunícate con el administrador.' };

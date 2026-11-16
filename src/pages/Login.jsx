@@ -119,7 +119,7 @@ export default function Login() {
     }
     setDemoEstado({ fase: 'enviando', msg: '' });
     const r = await solicitarDemo(d, { apiUrl: API_URL, simulado });
-    if (r.ok) setDemoEstado({ fase: 'listo', msg: '' });
+    if (r.ok) setDemoEstado({ fase: 'listo', msg: '', entrega: r.entrega });
     else setDemoEstado({ fase: 'form', msg: r.mensaje });
   }
 
@@ -132,6 +132,8 @@ export default function Login() {
   }
 
   const bloqueado = segundosRestantes > 0;
+  const celularPortada = String(contenido['login.hero.descripcion'] || '').match(/\b09\d{8}\b/)?.[0];
+  const waAdmin = WHATSAPP_ADMIN || (celularPortada ? '593' + celularPortada.slice(1) : '');
 
   return (
     <div className="lg">
@@ -273,18 +275,34 @@ export default function Login() {
 
         {modo === 'demo' && demoEstado.fase === 'listo' && (
           <div className="lg-tarjeta lg-exito" role="status">
-            <h2>Revisa tu correo</h2>
-            <p className="lg-sub" style={{ marginBottom: 0 }}>
-              Enviamos un enlace de activación a <strong>{d.email.trim().toLowerCase()}</strong>.
-            </p>
-            <ol className="lg-pasos">
-              <li>Abre el enlace en las próximas 24 horas.</li>
-              <li>Recibirás las credenciales de tu institución de ejemplo.</li>
-              <li>Tus 5 días empiezan en tu primer ingreso.</li>
-            </ol>
+            {demoEstado.entrega === 'correo' ? (
+              <>
+                <h2>Revisa tu correo</h2>
+                <p className="lg-sub" style={{ marginBottom: 0 }}>
+                  Enviamos un enlace de activación a <strong>{d.email.trim().toLowerCase()}</strong>.
+                </p>
+                <ol className="lg-pasos">
+                  <li>Abre el enlace en las próximas 24 horas.</li>
+                  <li>Recibirás las credenciales de tu institución de ejemplo.</li>
+                  <li>Tus 5 días empiezan en tu primer ingreso.</li>
+                </ol>
+              </>
+            ) : (
+              <>
+                <h2>Solicitud registrada</h2>
+                <p className="lg-sub" style={{ marginBottom: 0 }}>
+                  Recibimos tu solicitud. El administrador se comunicará contigo por WhatsApp al <strong>{d.telefono}</strong> para entregarte el acceso.
+                </p>
+                <ol className="lg-pasos">
+                  <li>Te escribiremos para confirmar tus datos.</li>
+                  <li>Recibirás las credenciales de tu institución de ejemplo.</li>
+                  <li>Tus 5 días empiezan en tu primer ingreso.</li>
+                </ol>
+              </>
+            )}
             <p className="lg-sub">
-              Si el enlace vence, comunícate con el administrador
-              {WHATSAPP_ADMIN ? <> por <a className="lg-link" href={`https://wa.me/${WHATSAPP_ADMIN}`} target="_blank" rel="noreferrer">WhatsApp</a></> : ''}.
+              Si tienes dudas, comunícate con el administrador
+              {waAdmin ? <> por <a className="lg-link" href={`https://wa.me/${waAdmin}`} target="_blank" rel="noreferrer">WhatsApp</a></> : ''}.
             </p>
             <button type="button" className="lg-btn lg-btn-sec" onClick={() => abrirModo('entrar')}>Volver a iniciar sesión</button>
           </div>

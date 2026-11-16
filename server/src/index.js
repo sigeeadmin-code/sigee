@@ -5,6 +5,7 @@ import { calendarioRouter } from './routes/calendario.js';
 import { asistenciaRouter } from './routes/asistencia.js';
 import { calificacionesRouter } from './routes/calificaciones.js';
 import { correosRouter } from './routes/correos.js';
+import { demoRouter } from './routes/demo.js';
 import { requireAuth, requireRole } from './lib/auth.js';
 import { crearContador, registrarPeticion, serieHoraria, leerRecursos } from './lib/metricas.js';
 import { crearVigilante } from './lib/seguridad.js';
@@ -48,6 +49,9 @@ app.use(['/asistencia', '/calendario', '/calificaciones'], rateLimit({
 // Correos: tope aparte y más bajo (cada petición envía un correo real).
 app.use('/correos', rateLimit({ windowMs: 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false, message: { error: 'Demasiados envíos seguidos. Espera un momento.' } }));
 
+// Solicitud pública de demo: tope bajo por IP (el formulario es abierto, sin sesión).
+app.use('/demo', rateLimit({ windowMs: 10 * 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false, message: { error: 'Demasiados intentos seguidos. Espera unos minutos.' } }));
+
 // Cuenta el tráfico por hora (sin contar /health ni /metricas) para el gráfico de horas pico del Diagnóstico.
 const contador = crearContador();
 app.use((req, res, next) => {
@@ -65,6 +69,7 @@ app.use('/calendario', calendarioRouter);
 app.use('/asistencia', asistenciaRouter);
 app.use('/calificaciones', calificacionesRouter);
 app.use('/correos', correosRouter);
+app.use('/demo', demoRouter);
 
 app.use((req, res) => res.status(404).json({ error: 'Ruta no encontrada: ' + req.method + ' ' + req.path }));
 
