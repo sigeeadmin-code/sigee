@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../lib/auth.js';
 import { evaluarDiaInstitucion } from '../lib/calendario.js';
 import { supabase } from '../lib/supabase.js';
+import { notificarFaltasYAtrasos } from '../lib/notificacionesAsistencia.js';
 
 export const asistenciaRouter = Router();
 
@@ -26,6 +27,8 @@ async function cargaDeMiInstitucion(docenteMateriaId) {
 // el frontend ya lo validó. Si el día no es lectivo, rechaza todo el lote.
 // Guarda TODO el curso en una sola escritura (upsert por lote), en vez de
 // una petición por alumno.
+// Tras guardar, si hay faltas (ausente) o atrasos, envía correo automático
+// al representante (Resend) y reporta el resultado en la respuesta.
 asistenciaRouter.post('/', requireAuth, async (req, res) => {
   const { docente_materia_id, fecha, paralelo_id, registros } = req.body || {};
   if (!docente_materia_id || !fecha || !Array.isArray(registros) || registros.length === 0) {
@@ -65,7 +68,32 @@ asistenciaRouter.post('/', requireAuth, async (req, res) => {
     .select();
 
   if (error) return res.status(500).json({ error: error.message });
-  res.status(201).json({ guardados: data.length, registros: data });
+
+  // Notificaciones automáticas (correo). No bloquea la respuesta si falla.
+  let notificaciones = { enviados: 0, fallidos: 0, omitidos: 0, detalle: [] };
+  try {
+    notificaciones = await notificarFaltasYAtrasos({
+      institucionId: carga.institucionId,
+      docenteMateriaId: docente_materia_id,
+      fecha,
+      registrosGuardados: data,
+      registradoPor: req.profile.id
+    });
+  } catch (err) {
+    console.error('[asistencia] error en notificaciones:', err?.message || err);
+    notificaciones = {
+      enviados: 0,
+      fallidos: 0,
+      omitidos: 0,
+      detalle: [{ motivo: 'Error interno al notificar: ' + (err?.message || String(err)) }]
+    };
+  }
+
+  res.status(201).json({
+    guardados: data.length,
+    registros: data,
+    notificaciones
+  });
 });
 
 // GET /asistencia?docente_materia_id=&fecha=
