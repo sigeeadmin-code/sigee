@@ -221,8 +221,8 @@ export default function Login() {
                 {errs.cedula && <span id="dm-cedula-e" className="lg-err-campo">{errs.cedula}</span>}
               </div>
               <div className="lg-campo">
-                <label htmlFor="dm-tel">WhatsApp <span style={{ fontWeight: 400, color: 'var(--suave)' }}>(opcional)</span></label>
-                <input id="dm-tel" name="telefono" type="tel" inputMode="tel" autoComplete="tel" value={d.telefono}
+                <label htmlFor="dm-tel">WhatsApp</label>
+                <input id="dm-tel" name="telefono" type="tel" inputMode="tel" autoComplete="tel" placeholder="09XXXXXXXX" value={d.telefono}
                   onChange={e => cambiar('telefono', e.target.value)}
                   aria-invalid={!!errs.telefono} aria-describedby={errs.telefono ? 'dm-tel-e' : undefined} />
                 {errs.telefono && <span id="dm-tel-e" className="lg-err-campo">{errs.telefono}</span>}

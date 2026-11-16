@@ -30,7 +30,8 @@ export function validarSolicitudDemo(d) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(n.email)) e.email = 'Escribe un correo válido: ahí llegará tu enlace de activación.';
   if (n.institucion.length < 3) e.institucion = 'Escribe el nombre de tu institución.';
   if (!CARGOS_DEMO.includes(n.cargo)) e.cargo = 'Elige tu cargo.';
-  if (n.telefono && !/^\+?\d{7,15}$/.test(n.telefono)) e.telefono = 'Usa solo números, con el código de país si es el caso.';
+  if (!n.telefono) e.telefono = 'Escribe tu número de WhatsApp: será una vía de contacto contigo.';
+  else if (!/^\+?\d{7,15}$/.test(n.telefono)) e.telefono = 'Usa solo números, con el código de país si no es de Ecuador.';
   if (!n.acepta_datos) e.acepta = 'Debes aceptar el uso de tus datos para continuar.';
   return e;
 }
