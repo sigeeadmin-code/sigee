@@ -26,7 +26,8 @@ function cargar(importar) {
 }
 const AsistenciaReportes = cargar(() => import('./pages/AsistenciaReportes.jsx'));
 const PortalEstudiante = cargar(() => import('./pages/PortalEstudiante.jsx'));
-const PAGINAS_PUBLICAS = { '/asistencia-y-reportes': AsistenciaReportes, '/portal-estudiante': PortalEstudiante };
+const GeneracionHorarios = cargar(() => import('./pages/GeneracionHorarios.jsx'));
+const PAGINAS_PUBLICAS = { '/asistencia-y-reportes': AsistenciaReportes, '/portal-estudiante': PortalEstudiante, '/generacion-de-horarios': GeneracionHorarios };
 const Planteles = cargar(() => import('./pages/Planteles.jsx'));
 const Academico = cargar(() => import('./pages/Academico.jsx'));
 const RolesPermisos = cargar(() => import('./pages/RolesPermisos.jsx'));
