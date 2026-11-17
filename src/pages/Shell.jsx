@@ -120,7 +120,34 @@ export default function Shell() {
             </button>
             <div className="topbar-title">{institucion ? institucion.nombre : 'SIGEE'}</div>
           </div>
-          <div className="ava" style={{ width: 32, height: 32 }}>{initials}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {rutaNotif && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => navigate(rutaNotif)}
+                title={noLeidas ? `${noLeidas} notificación${noLeidas === 1 ? '' : 'es'} sin leer` : 'Notificaciones'}
+                aria-label="Notificaciones"
+                style={{ position: 'relative', padding: '6px 10px' }}
+              >
+                <span className="ti ti-bell" style={{ fontSize: 18 }} />
+                {noLeidas > 0 && (
+                  <span
+                    style={{
+                      position: 'absolute', top: 2, right: 2,
+                      minWidth: 16, height: 16, borderRadius: 999,
+                      background: '#dc2626', color: '#fff',
+                      fontSize: 10, fontWeight: 700, lineHeight: '16px',
+                      textAlign: 'center', padding: '0 4px'
+                    }}
+                  >
+                    {noLeidas > 99 ? '99+' : noLeidas}
+                  </span>
+                )}
+              </button>
+            )}
+            <div className="ava" style={{ width: 32, height: 32 }}>{initials}</div>
+          </div>
         </header>
         <div className="content">
           <ErrorBoundary reinicio={location.pathname}><React.Suspense fallback={<div className="splash" style={{ minHeight: 200 }}>Cargando…</div>}><Outlet /></React.Suspense></ErrorBoundary>

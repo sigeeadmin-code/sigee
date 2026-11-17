@@ -1,5 +1,6 @@
 // Notificaciones automáticas al registrar falta (ausente) o atraso.
-// Usa Resend (correo.js). Diseñado para extenderse a In-App y Web Push.
+// - Email al representante (Resend)
+// - Notificación In-App para Inspección y Administración (tabla notificaciones)
 import { supabase } from './supabase.js';
 import { correoConfigurado, enviarCorreo, correoValido } from './correo.js';
 
@@ -15,9 +16,6 @@ function etiquetaEstado(estado) {
   return estado === 'atraso' ? 'atraso' : 'falta';
 }
 
-/**
- * Arma el asunto y el cuerpo del correo de aviso de asistencia.
- */
 export function plantillaAvisoAsistencia({ estudianteNombre, curso, materia, docenteNombre, fecha, estado, institucionNombre }) {
   const tipo = etiquetaEstado(estado);
   const asunto = `Aviso de asistencia – ${estudianteNombre} – ${curso || ''}`.trim().slice(0, 200);
@@ -59,25 +57,69 @@ function escapeHtml(s) {
 }
 
 /**
- * Dado el lote de registros ya guardados, envía correo a los representantes
- * de quienes tienen estado ausente o atraso. No bloquea el guardado si el
- * correo falla: solo reporta resultados.
+ * Crea una notificación In-App para el personal del plantel (inspección + admin).
+ * Una sola notificación por lote de faltas/atrasos del mismo guardado.
+ */
+async function crearNotificacionInApp({ institucionId, fecha, cursoNombre, materiaNombre, docenteNombre, novedades, estById, registradoPor }) {
+  if (!novedades.length) return null;
+
+  const lineas = novedades.map(r => {
+    const est = estById[r.estudiante_id];
+    const nombre = est ? `${est.apellidos || ''} ${est.nombres || ''}`.trim() : 'Estudiante';
+    return `• ${nombre}: ${etiquetaEstado(r.estado)}`;
+  });
+
+  const nFaltas = novedades.filter(r => r.estado === 'ausente').length;
+  const nAtrasos = novedades.filter(r => r.estado === 'atraso').length;
+  const partes = [];
+  if (nFaltas) partes.push(`${nFaltas} falta${nFaltas === 1 ? '' : 's'}`);
+  if (nAtrasos) partes.push(`${nAtrasos} atraso${nAtrasos === 1 ? '' : 's'}`);
+
+  const titulo = `Asistencia ${fechaCorta(fecha)}: ${partes.join(' y ')}` +
+    (cursoNombre ? ` · ${cursoNombre}` : '');
+
+  const cuerpo =
+    (materiaNombre ? `Materia: ${materiaNombre}\n` : '') +
+    (docenteNombre ? `Docente: ${docenteNombre}\n` : '') +
+    (cursoNombre ? `Curso: ${cursoNombre}\n` : '') +
+    `Fecha: ${fechaCorta(fecha)}\n\n` +
+    lineas.join('\n') +
+    '\n\nLos representantes con correo registrado recibieron aviso automático por email.';
+
+  const fila = {
+    institucion_id: institucionId,
+    titulo: titulo.slice(0, 140),
+    cuerpo: cuerpo.slice(0, 4000),
+    para_roles: ['inspector', 'admin_plantel', 'secretario'],
+    para_paralelos: null,
+    categoria: 'convivencia',
+    prioridad: nFaltas >= 3 ? 'importante' : 'normal',
+    fijada: false,
+    creado_por: registradoPor || null
+  };
+
+  const { data, error } = await supabase.from('notificaciones').insert(fila).select('id').single();
+  if (error) {
+    console.warn('[notificacionesAsistencia] no se pudo crear In-App:', error.message);
+    return null;
+  }
+  return data?.id || null;
+}
+
+/**
+ * Dado el lote de registros ya guardados:
+ * 1) Envía correo a representantes (ausente/atraso)
+ * 2) Crea notificación In-App para inspección/admin
  *
- * @returns {{ enviados: number, fallidos: number, omitidos: number, detalle: Array }}
+ * @returns {{ enviados, fallidos, omitidos, detalle, inAppId }}
  */
 export async function notificarFaltasYAtrasos({ institucionId, docenteMateriaId, fecha, registrosGuardados, registradoPor }) {
-  const resultado = { enviados: 0, fallidos: 0, omitidos: 0, detalle: [] };
+  const resultado = { enviados: 0, fallidos: 0, omitidos: 0, detalle: [], inAppId: null };
 
   const novedades = (registrosGuardados || []).filter(r => ESTADOS_AVISO.has(r.estado));
   if (!novedades.length) return resultado;
 
-  if (!correoConfigurado()) {
-    resultado.omitidos = novedades.length;
-    resultado.detalle.push({ motivo: 'Correo no configurado en el servidor (RESEND_API_KEY / MAIL_FROM).' });
-    return resultado;
-  }
-
-  // Contexto de la clase (materia, curso, docente, institución)
+  // Contexto de la clase
   const { data: dm } = await supabase
     .from('docente_materia')
     .select(`
@@ -100,14 +142,35 @@ export async function notificarFaltasYAtrasos({ institucionId, docenteMateriaId,
 
   const estudianteIds = [...new Set(novedades.map(r => r.estudiante_id))];
 
-  // Estudiantes
   const { data: estudiantes } = await supabase
     .from('estudiantes')
     .select('id, nombres, apellidos')
     .in('id', estudianteIds);
   const estById = Object.fromEntries((estudiantes || []).map(e => [e.id, e]));
 
-  // Representantes (email)
+  // —— In-App (siempre, aunque el correo no esté configurado)
+  try {
+    resultado.inAppId = await crearNotificacionInApp({
+      institucionId,
+      fecha,
+      cursoNombre,
+      materiaNombre,
+      docenteNombre,
+      novedades,
+      estById,
+      registradoPor
+    });
+  } catch (e) {
+    console.warn('[notificacionesAsistencia] In-App falló:', e?.message || e);
+  }
+
+  // —— Email
+  if (!correoConfigurado()) {
+    resultado.omitidos = novedades.length;
+    resultado.detalle.push({ motivo: 'Correo no configurado (RESEND_API_KEY / MAIL_FROM).' });
+    return resultado;
+  }
+
   const { data: vinculos } = await supabase
     .from('representantes_estudiantes')
     .select('estudiante_id, representantes(id, nombres, apellidos, email)')
@@ -168,7 +231,6 @@ export async function notificarFaltasYAtrasos({ institucionId, docenteMateriaId,
         ok: true
       });
 
-      // Constancia en avisos_inasistencia (si la tabla existe y acepta el insert)
       try {
         await supabase.from('avisos_inasistencia').insert({
           institucion_id: institucionId,
@@ -180,7 +242,6 @@ export async function notificarFaltasYAtrasos({ institucionId, docenteMateriaId,
           canal: 'email'
         });
       } catch (e) {
-        // No fallar el flujo si el log no se puede guardar
         console.warn('[notificacionesAsistencia] no se pudo registrar aviso:', e?.message || e);
       }
     } catch (err) {
