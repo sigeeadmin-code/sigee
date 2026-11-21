@@ -15,12 +15,19 @@ export function textoAviso(tabla, evento, nuevo) {
   return null;
 }
 
+/** Id del autor de la fila (la tabla puede usar creado_por o created_by). */
+function autorDe(nuevo) {
+  if (!nuevo || typeof nuevo !== 'object') return null;
+  return nuevo.creado_por || nuevo.created_by || null;
+}
+
 export function crearAvisosEnVivo(supabase, { institucionId, perfilId, alAviso, ocultoMs = 120000, doc = (typeof document !== 'undefined' ? document : null), setT = setTimeout, clearT = clearTimeout }) {
   let canal = null; let detenido = true; let timerOculto = null;
   const emitir = (tabla, p) => {
     try {
       const nuevo = p && p.new; const evento = p && p.eventType;
-      if (nuevo && nuevo.created_by && perfilId && nuevo.created_by === perfilId) return;   // lo hizo esta misma persona
+      const autor = autorDe(nuevo);
+      if (autor && perfilId && autor === perfilId) return;   // lo hizo esta misma persona
       const texto = textoAviso(tabla, evento, nuevo);
       if (texto && alAviso) alAviso({ tabla, evento, texto, registro: nuevo || null });
     } catch { /* un aviso nunca debe romper la pantalla */ }
@@ -32,8 +39,16 @@ export function crearAvisosEnVivo(supabase, { institucionId, perfilId, alAviso, 
       canal = supabase.channel(`avisos-${institucionId}-${perfilId || 'x'}`)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notificaciones', filter: filtro }, p => emitir('notificaciones', p))
         .on('postgres_changes', { event: '*', schema: 'public', table: 'justificaciones', filter: filtro }, p => emitir('justificaciones', p))
-        .subscribe();
-    } catch { canal = null; }
+        .subscribe((status, err) => {
+          if (status === 'SUBSCRIBED') return;
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            console.warn('[avisosEnVivo]', status, err?.message || err || '');
+          }
+        });
+    } catch (e) {
+      console.warn('[avisosEnVivo] no se pudo abrir canal', e?.message || e);
+      canal = null;
+    }
   };
   const cerrar = () => { if (!canal) return; try { supabase.removeChannel(canal); } catch { /* ya cerrado */ } canal = null; };
   const alCambiarVisibilidad = () => {
@@ -42,7 +57,7 @@ export function crearAvisosEnVivo(supabase, { institucionId, perfilId, alAviso, 
     else {
       if (timerOculto) { clearT(timerOculto); timerOculto = null; }
       const estabaCerrado = !canal; abrir();
-      if (estabaCerrado && canal && alAviso) { try { alAviso({ tabla: '*', evento: 'RECONECTADO', texto: null, registro: null }); } catch { /* sin efecto */ } }   // por si algo llegó mientras no escuchábamos
+      if (estabaCerrado && canal && alAviso) { try { alAviso({ tabla: '*', evento: 'RECONECTADO', texto: null, registro: null }); } catch { /* sin efecto */ } }
     }
   };
   return {

@@ -87,6 +87,8 @@ async function crearNotificacionInApp({ institucionId, fecha, cursoNombre, mater
     lineas.join('\n') +
     '\n\nLos representantes con correo registrado recibieron aviso automático por email.';
 
+  // Rellenamos creado_por y created_by por compatibilidad con distintas migraciones.
+  const autor = registradoPor || null;
   const fila = {
     institucion_id: institucionId,
     titulo: titulo.slice(0, 140),
@@ -96,10 +98,21 @@ async function crearNotificacionInApp({ institucionId, fecha, cursoNombre, mater
     categoria: 'convivencia',
     prioridad: nFaltas >= 3 ? 'importante' : 'normal',
     fijada: false,
-    creado_por: registradoPor || null
+    creado_por: autor,
+    created_by: autor
   };
 
-  const { data, error } = await supabase.from('notificaciones').insert(fila).select('id').single();
+  let { data, error } = await supabase.from('notificaciones').insert(fila).select('id').single();
+  // Si la columna created_by no existe, reintentar solo con creado_por.
+  if (error && /created_by/i.test(error.message || '')) {
+    const { created_by: _omit, ...sinCreatedBy } = fila;
+    ({ data, error } = await supabase.from('notificaciones').insert(sinCreatedBy).select('id').single());
+  }
+  // Si creado_por tampoco existe (solo created_by), reintentar al revés.
+  if (error && /creado_por/i.test(error.message || '')) {
+    const { creado_por: _omit, ...sinCreadoPor } = fila;
+    ({ data, error } = await supabase.from('notificaciones').insert(sinCreadoPor).select('id').single());
+  }
   if (error) {
     console.warn('[notificacionesAsistencia] no se pudo crear In-App:', error.message);
     return null;
@@ -120,7 +133,6 @@ export async function notificarFaltasYAtrasos({ institucionId, docenteMateriaId,
   const novedades = (registrosGuardados || []).filter(r => ESTADOS_AVISO.has(r.estado));
   if (!novedades.length) return resultado;
 
-  // Contexto de la clase
   const { data: dm } = await supabase
     .from('docente_materia')
     .select(`
@@ -149,7 +161,6 @@ export async function notificarFaltasYAtrasos({ institucionId, docenteMateriaId,
     .in('id', estudianteIds);
   const estById = Object.fromEntries((estudiantes || []).map(e => [e.id, e]));
 
-  // —— In-App (siempre, aunque el correo no esté configurado)
   try {
     resultado.inAppId = await crearNotificacionInApp({
       institucionId,
@@ -165,7 +176,6 @@ export async function notificarFaltasYAtrasos({ institucionId, docenteMateriaId,
     console.warn('[notificacionesAsistencia] In-App falló:', e?.message || e);
   }
 
-  // —— Email (desactivado en demostraciones)
   if ((await estadoDemoInstitucion(institucionId)).es_demo) {
     resultado.omitidos = novedades.length;
     resultado.detalle.push({ motivo: 'El correo está desactivado en la demostración.' });
