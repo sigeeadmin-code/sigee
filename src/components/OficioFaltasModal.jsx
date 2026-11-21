@@ -52,7 +52,9 @@ export function Hoja({ of }) {
 }
 
 // Vista previa editable del oficio de inasistencias, uno por estudiante, con impresión / guardado en PDF.
-export default function OficioFaltasModal({ alumnos, institucion, periodo, onClose, onRegistrar, onEnviarCorreo }) {
+export default function OficioFaltasModal({ alumnos, institucion, periodo, onClose, onRegistrar, onEnviarCorreo: onEnviarCorreoProp }) {
+  const { demo } = useSession();
+  const onEnviarCorreo = demo?.esDemo ? null : onEnviarCorreoProp;   // en una demostración no se envían correos
   const idInst = institucion?.id || 'x';
   const { profile } = useSession();
   const navegar = useNavigate();

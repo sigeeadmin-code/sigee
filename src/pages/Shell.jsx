@@ -8,7 +8,7 @@ import { fetchNoLeidasNotif } from '../lib/data.js';
 import { grupoDeRol, esParaGrupo } from '../lib/notificaciones.js';
 import ErrorBoundary from '../components/ErrorBoundary.jsx';
 export default function Shell() {
-  const { profile, institucion, logout, permisos, esTutor } = useSession();
+  const { profile, institucion, logout, permisos, esTutor, demo } = useSession();
   const MENU_MINIMO = [
     { cat: 'Principal', items: [{ to: '/', label: 'Dashboard', icon: 'ti ti-layout-dashboard' }] },
     { cat: 'Sistema', items: [{ to: '/configuracion', label: 'Configuración', icon: 'ti ti-settings' }] }
@@ -26,6 +26,15 @@ export default function Shell() {
   // si falla o se apaga con VITE_REALTIME=off, SIGEE funciona igual. Las pantallas interesadas escuchan el evento 'sigee:avisos'.
   const [aviso, setAviso] = React.useState(null);
   const [noLeidas, setNoLeidas] = React.useState(0);
+  const [demosPend, setDemosPend] = React.useState(0);
+  // Solicitudes de demo sin atender (solo Super Admin): se ve como un número en el menú y se actualiza solo.
+  useEffect(() => {
+    if (profile?.rolDb !== 'super_admin') return undefined;
+    let vivo = true;
+    const cargar = async () => { try { const { count } = await supabase.from('demo_alertas').select('id', { count: 'exact', head: true }).eq('leida', false); if (vivo) setDemosPend(count || 0); } catch { /* es un extra */ } };
+    cargar(); const id = setInterval(cargar, 60000); window.addEventListener('sigee:demos', cargar);
+    return () => { vivo = false; clearInterval(id); window.removeEventListener('sigee:demos', cargar); };
+  }, [profile?.rolDb]);
   const navigate = useNavigate();
   const grupoNotif = grupoDeRol(profile.rolDb);
   const rutaNotif = (categorias.flatMap(g => g.items).find(it => ['/notificaciones', '/anuncios', '/comunicados'].includes(it.to)) || {}).to;
@@ -99,6 +108,7 @@ export default function Shell() {
                   <span className={'ico ' + item.icon} />
                   {item.label}
                   {['/notificaciones', '/anuncios', '/comunicados'].includes(item.to) && noLeidas > 0 && <span className="nav-count" aria-label={`${noLeidas} sin leer`}>{noLeidas > 99 ? '99+' : noLeidas}</span>}
+                  {item.to === '/demos' && demosPend > 0 && <span className="nav-count" aria-label={`${demosPend} solicitud${demosPend === 1 ? '' : 'es'} sin atender`}>{demosPend}</span>}
                   {item.wip && <span className="nbadge">pronto</span>}
                   {item.modulo === 'base_docentes' && !permisos?.baseDocentes && <span className="nbadge" title="Lo activa el administrador global de SIGEE">desactivado</span>}
                 </NavLink>
@@ -113,6 +123,12 @@ export default function Shell() {
         </div>
       </aside>
       <main className="main">
+        {demo?.esDemo && demo.hasta && (
+          <div className="demo-banner" role="status">
+            <span className="ti ti-flask" aria-hidden="true" />
+            <span><strong>Demostración</strong> · {new Date(demo.hasta) > new Date() ? `te quedan ${Math.max(1, Math.ceil((new Date(demo.hasta) - new Date()) / 86400000))} día${Math.ceil((new Date(demo.hasta) - new Date()) / 86400000) === 1 ? '' : 's'} (hasta el ${new Date(demo.hasta).toLocaleDateString('es-EC', { day: 'numeric', month: 'long' })})` : 'terminó'}. Los datos son ficticios.</span>
+          </div>
+        )}
         <header className="topbar">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button className="menu-btn" onClick={() => setNavOpen(true)} aria-label="Abrir menú">

@@ -36,6 +36,10 @@ export const NAV_BY_ROL = {
       { to: '/financiero', label: 'Financiero', icon: 'ti ti-cash' },
       { to: '/licencias', label: 'Licencias y activación', icon: 'ti ti-credit-card' }
     ]},
+    { cat: 'Demostraciones', items: [
+      { to: '/hub-colegio-lumen', label: 'Hub de Colegio Lumen', icon: 'ti ti-building-community', soloRolDb: ['super_admin'] },
+      { to: '/demos', label: 'Solicitudes de demo', icon: 'ti ti-user-plus', soloRolDb: ['super_admin'] }
+    ]},
     { cat: 'Sistema', items: [
       { to: '/contenido-sitio', label: 'Contenido del sitio', icon: 'ti ti-edit' },
       { to: '/roles-permisos', label: 'Roles y Permisos', icon: 'ti ti-shield-lock' },

@@ -49,3 +49,50 @@ body{font-family:'Public Sans','DM Sans',system-ui,-apple-system,'Segoe UI',sans
 
 @media (max-width:900px){.topbar-title{font-size:16px}}
 @media (prefers-reduced-motion:reduce){.ni,.btn,.btn-logout{transition:none!important}}
+
+/* Demostraciones: aviso de vencimiento y pantalla del Super Admin */
+.demo-banner{display:flex;align-items:center;gap:10px;padding:8px clamp(12px,3vw,24px);background:#fff4dc;border-bottom:1px solid #f2d28a;color:#5a3b00;font-size:13px;line-height:1.4}
+.demo-banner strong{font-weight:700}
+.demo-banner .ti{font-size:16px;color:#b97300}
+.page-demos{max-width:1180px}
+.dm-cab{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.dm-h{margin:0 0 4px;font:600 26px/1.15 'Newsreader',Georgia,serif;color:var(--sb)}
+.dm-sub{margin:0 0 12px;font-size:14px;line-height:1.5;color:var(--slate);max-width:70ch}
+.dm-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.dm-kpi{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 16px;display:flex;flex-direction:column;gap:4px}
+.dm-kpi span{font-size:12.5px;color:var(--slate)}
+.dm-kpi strong{font-size:26px;line-height:1;color:var(--sb)}
+.dm-kpi small{font-size:14px;font-weight:500;color:var(--slate)}
+.dm-kpi-pend{border-color:#f2d28a;background:#fffaf0}
+.dm-barra{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px}
+.dm-filtros{display:flex;flex-wrap:wrap;gap:6px}
+.dm-filtro{padding:7px 14px;border:1px solid var(--lineD);border-radius:999px;background:#fff;color:var(--ink2);font:600 13px 'Public Sans',sans-serif;cursor:pointer}
+.dm-filtro.on{background:var(--sb);border-color:var(--sb);color:#fff}
+.dm-buscar{min-width:260px;padding:9px 12px;border:1px solid var(--lineD);border-radius:8px;font:400 14px 'Public Sans',sans-serif;background:#fff}
+.dm-aviso{padding:10px 14px;margin-bottom:12px;border-radius:8px;background:#e8f5ee;border:1px solid #a9d8bf;color:#15563a;font-size:13.5px}
+.dm-aviso-err{background:#fdeceb;border-color:#f1b7b3;color:#7d1a14}
+.dm-tabla{padding:0;overflow:hidden}
+.dm-scroll{overflow-x:auto}
+.dm-tabla table{width:100%;border-collapse:collapse;font-size:13.5px}
+.dm-tabla th{text-align:left;padding:10px 14px;background:#f4f7fb;border-bottom:1px solid var(--line);font-size:12px;font-weight:600;color:var(--slate);white-space:nowrap}
+.dm-tabla td{padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+.dm-peq{font-size:12px;color:var(--slate);margin-top:2px}
+.dm-wa{display:inline-block;color:var(--brand);text-decoration:underline}
+.dm-venc{color:#b3261e;font-weight:600}
+.dm-acciones{display:flex;flex-wrap:wrap;gap:6px}
+.dm-vacio{padding:36px 20px;text-align:center;color:var(--slate);font-size:14px}
+.dm-modal-bg{position:fixed;inset:0;z-index:600;background:rgba(15,42,74,.55);display:flex;align-items:flex-start;justify-content:center;padding:clamp(12px,4vw,40px);overflow:auto}
+.dm-modal{width:100%;max-width:640px;background:#fff;border-radius:12px;padding:22px 24px;box-shadow:0 24px 60px rgba(0,0,0,.3)}
+.dm-modal h3{margin:0;font:600 20px/1.2 'Newsreader',Georgia,serif;color:var(--sb)}
+.dm-modal h4{margin:18px 0 8px;font-size:14px;color:var(--sb)}
+.dm-modal-cab{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:6px}
+.dm-x{border:0;background:none;font-size:26px;line-height:1;color:var(--slate);cursor:pointer;padding:0 6px}
+.dm-lbl{display:block;margin:10px 0 4px;font-size:12.5px;font-weight:600;color:var(--slate)}
+.dm-modal input,.dm-modal textarea{width:100%;padding:9px 12px;border:1px solid var(--lineD);border-radius:8px;font:400 14px 'Public Sans',sans-serif;background:#fff;color:var(--ink)}
+.dm-modal textarea{resize:vertical;line-height:1.5}
+.dm-linea{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+.dm-linea input{flex:1;min-width:200px}
+.dm-cred{display:grid;gap:8px;margin:8px 0 12px}
+.dm-cred>div{display:grid;grid-template-columns:1.1fr 1.6fr 1fr;gap:10px;align-items:center;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:#f4f7fb;font-size:13px}
+.dm-cred code{font:600 12.5px ui-monospace,Menlo,monospace;overflow-wrap:anywhere;user-select:all}
+@media (max-width:700px){.dm-cred>div{grid-template-columns:1fr}.dm-buscar{min-width:0;width:100%}}

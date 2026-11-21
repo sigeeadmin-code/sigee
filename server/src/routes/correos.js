@@ -20,6 +20,7 @@ correosRouter.post('/oficio', requireAuth, requireRole(...ROLES_OFICIO), async (
   if (!estudianteId) return res.status(400).json({ error: 'Falta estudiante_id.' });
   const of = normalizarOficio(oficio);
   if (!of) return res.status(400).json({ error: 'El oficio recibido no es válido.' });
+  if (req.demo?.es_demo) return res.status(403).json({ error: 'El envío de correos está desactivado en la demostración.' });
   // 501 (no 503): el cliente reintenta los 502/503/504 y aquí reintentar no sirve de nada.
   if (!correoConfigurado()) return res.status(501).json({ error: 'El envío de correo aún no está configurado en el servidor. Pide al administrador de SIGEE que lo active.' });
 

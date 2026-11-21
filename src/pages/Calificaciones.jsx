@@ -47,7 +47,7 @@ export default function Calificaciones() {
 }
 
 function CuadroCalificaciones() {
-  const { profile, institucion, data } = useSession();
+  const { profile, institucion, data, demo } = useSession();
   const rolDb = profile.rolDb;
   const esDocente = rolDb === 'docente';
   const puedeEditar = ROLES_EDITAN.includes(rolDb);
@@ -319,7 +319,7 @@ function CuadroCalificaciones() {
               {generandoPlantilla ? <span className="spin" /> : <span className="ti ti-download" style={{ marginRight: 6 }} />}Descargar plantilla
             </button>
           )}
-          {vista === 'registro' && editable && (
+          {vista === 'registro' && editable && !demo?.esDemo && (
             <button className="btn btn-secondary btn-sm" onClick={abrirSubir} disabled={!filtrosCompletos}
               title="Sube la plantilla Excel llenada para actualizar las notas">
               <span className="ti ti-upload" style={{ marginRight: 6 }} />Subir plantilla

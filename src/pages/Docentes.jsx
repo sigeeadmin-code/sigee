@@ -75,7 +75,7 @@ function anios(fechaIngreso) {
 }
 
 export default function Docentes() {
-  const { data, institucion, profile, refrescarDatos } = useSession();
+  const { data, institucion, profile, refrescarDatos, demo } = useSession();
   const puedeActivarDesactivar = ['super_admin', 'admin_plantel'].includes(profile.rolDb);
   const [docentes, setDocentes] = useState(data?.docentes || []);
   const [busqueda, setBusqueda] = useState('');
@@ -389,9 +389,9 @@ export default function Docentes() {
         <h2>Docentes</h2>
         <div style={{ display: 'flex', gap: 8 }}>
           {esSuperAdmin && <button className="btn btn-secondary" onClick={exportarLista} disabled={filtrados.length === 0} title="Descarga en Excel la lista que ves ahora (con los filtros aplicados)">⬇️ Exportar Excel</button>}
-          {!global && puedeActivarDesactivar && <button className="btn btn-secondary" onClick={() => setAccesoMasivo(true)} title="Crea el usuario y la contraseña de todos los docentes que aún no tienen acceso">🔑 Dar acceso a todos</button>}
-          {!global && <button className="btn btn-primary" onClick={() => setInteligente(true)} title="Sube tu lista con las columnas en cualquier orden: yo las detecto y las acomodo">✨ Carga inteligente</button>}
-          {!global && <button className="btn btn-ghost" onClick={abrirCargaMasiva}>📥 Carga con plantilla (Excel)</button>}
+          {!global && !demo?.esDemo && puedeActivarDesactivar && <button className="btn btn-secondary" onClick={() => setAccesoMasivo(true)} title="Crea el usuario y la contraseña de todos los docentes que aún no tienen acceso">🔑 Dar acceso a todos</button>}
+          {!global && !demo?.esDemo && <button className="btn btn-primary" onClick={() => setInteligente(true)} title="Sube tu lista con las columnas en cualquier orden: yo las detecto y las acomodo">✨ Carga inteligente</button>}
+          {!global && !demo?.esDemo && <button className="btn btn-ghost" onClick={abrirCargaMasiva}>📥 Carga con plantilla (Excel)</button>}
           {!global && <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo docente</button>}
         </div>
       </div>

@@ -6,6 +6,7 @@ import { asistenciaRouter } from './routes/asistencia.js';
 import { calificacionesRouter } from './routes/calificaciones.js';
 import { correosRouter } from './routes/correos.js';
 import { demoRouter } from './routes/demo.js';
+import { hubRouter } from './routes/hub.js';
 import { requireAuth, requireRole } from './lib/auth.js';
 import { crearContador, registrarPeticion, serieHoraria, leerRecursos } from './lib/metricas.js';
 import { crearVigilante } from './lib/seguridad.js';
@@ -70,6 +71,8 @@ app.use('/asistencia', asistenciaRouter);
 app.use('/calificaciones', calificacionesRouter);
 app.use('/correos', correosRouter);
 app.use('/demo', demoRouter);
+app.use('/hub', rateLimit({ windowMs: 10 * 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false, message: { error: 'Demasiados intentos seguidos. Espera unos minutos.' } }));
+app.use('/hub', hubRouter);
 
 app.use((req, res) => res.status(404).json({ error: 'Ruta no encontrada: ' + req.method + ' ' + req.path }));
 

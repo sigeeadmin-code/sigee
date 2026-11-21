@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import { linkActivacion, diasRestantes, normalizarTelefonoEC, whatsappUrl, mailtoUrl, mensajeBienvenida, mensajeCredenciales, ESTADOS_DEMO } from '../src/lib/demoAdmin.js';
+
+assert.equal(linkActivacion('https://sigee-sigee.vercel.app/', 'abc'), 'https://sigee-sigee.vercel.app/activar-demo?token=abc');
+const ahora = new Date('2026-11-18T12:00:00Z');
+assert.equal(diasRestantes('2026-11-23T12:00:00Z', ahora), 5);
+assert.equal(diasRestantes('2026-11-18T13:00:00Z', ahora), 1, 'menos de un día cuenta como 1');
+assert.ok(diasRestantes('2026-11-17T12:00:00Z', ahora) <= 0);
+assert.equal(diasRestantes(null, ahora), null);
+assert.equal(normalizarTelefonoEC('0960210788'), '593960210788');
+assert.equal(normalizarTelefonoEC('+593 96 021 0788'), '593960210788');
+assert.equal(normalizarTelefonoEC(''), '');
+assert.equal(whatsappUrl('0960210788', 'Hola ñ'), 'https://wa.me/593960210788?text=Hola%20%C3%B1');
+assert.ok(mailtoUrl('a@b.com', 'Asunto con espacio', 'Línea 1\nLínea 2').includes('subject=Asunto%20con%20espacio'));
+const m = mensajeBienvenida({ nombre: 'Pablo Fernandez Loor', institucion: 'Colegio X', link: 'https://x/activar-demo?token=t' });
+assert.ok(m.whatsapp.startsWith('Hola Pablo,')); assert.ok(m.whatsapp.includes('https://x/activar-demo?token=t'));
+assert.ok(m.whatsapp.includes('24 horas') && m.whatsapp.includes('5 días') && m.whatsapp.includes('Colegio X'));
+assert.ok(m.cuerpoCorreo.includes('https://x/activar-demo?token=t') && m.asunto.includes('SIGEE'));
+const c = mensajeCredenciales({ nombre: 'Ana López', url: 'https://sistema', cuentas: [{ rol: 'Docente', email: 'd@x.test', password: 'abc' }] });
+assert.ok(c.includes('Usuario: d@x.test') && c.includes('Contraseña: abc') && c.startsWith('Hola Ana,'));
+for (const e of ['pendiente_confirmacion', 'confirmado', 'activo', 'vencido', 'bloqueado', 'expirada', 'eliminado']) assert.ok(ESTADOS_DEMO[e].txt, e);
+console.log('demoAdmin: ok');

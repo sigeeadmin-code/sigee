@@ -39,7 +39,7 @@ const emptyForm = {
 };
 
 export default function Usuarios() {
-  const { profile, refrescarDatos } = useSession();
+  const { profile, refrescarDatos, demo } = useSession();
   const esSuperAdmin = profile.rolDb === 'super_admin';
   const esAdminPlantel = profile.rolDb === 'admin_plantel';
   const puedeGestionar = esSuperAdmin || esAdminPlantel;
@@ -228,9 +228,9 @@ export default function Usuarios() {
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {esSuperAdmin && <button className="btn btn-secondary" onClick={() => setExportando(true)}>⬇️ Exportar usuarios (Excel)</button>}
-          <button className="btn btn-primary" onClick={abrirCrear}>
+          {!demo?.esDemo && <button className="btn btn-primary" onClick={abrirCrear}>
             <span className="ti ti-user-plus" /> Nuevo usuario
-          </button>
+          </button>}
         </div>
       </div>
 

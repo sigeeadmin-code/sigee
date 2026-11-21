@@ -1,4 +1,5 @@
 import { supabase } from './supabase.js';
+import { estadoDemoInstitucion, demoVencida } from './demo.js';
 
 /**
  * Exige un Authorization: Bearer <access_token> emitido por Supabase Auth
@@ -20,6 +21,10 @@ export async function requireAuth(req, res, next) {
       .from('profiles').select('*').eq('id', userData.user.id).single();
     if (profErr || !profile) return res.status(403).json({ error: 'Perfil no encontrado para este usuario.' });
     if (profile.activo === false) return res.status(403).json({ error: 'Usuario inactivo.' });
+
+    // Una institución de demostración vencida no puede usar el servidor (el RLS ya le niega los datos; aquí se cierra el resto).
+    req.demo = await estadoDemoInstitucion(profile.institucion_id);
+    if (demoVencida(req.demo)) return res.status(403).json({ error: 'Tu demostración venció. Comunícate con el administrador de SIGEE.' });
 
     req.user = userData.user;
     req.profile = profile;

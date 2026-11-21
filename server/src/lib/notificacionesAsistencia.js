@@ -3,6 +3,7 @@
 // - Notificación In-App para Inspección y Administración (tabla notificaciones)
 import { supabase } from './supabase.js';
 import { correoConfigurado, enviarCorreo, correoValido } from './correo.js';
+import { estadoDemoInstitucion } from './demo.js';
 
 const ESTADOS_AVISO = new Set(['ausente', 'atraso']);
 
@@ -164,7 +165,12 @@ export async function notificarFaltasYAtrasos({ institucionId, docenteMateriaId,
     console.warn('[notificacionesAsistencia] In-App falló:', e?.message || e);
   }
 
-  // —— Email
+  // —— Email (desactivado en demostraciones)
+  if ((await estadoDemoInstitucion(institucionId)).es_demo) {
+    resultado.omitidos = novedades.length;
+    resultado.detalle.push({ motivo: 'El correo está desactivado en la demostración.' });
+    return resultado;
+  }
   if (!correoConfigurado()) {
     resultado.omitidos = novedades.length;
     resultado.detalle.push({ motivo: 'Correo no configurado (RESEND_API_KEY / MAIL_FROM).' });

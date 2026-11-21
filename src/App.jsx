@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { SessionProvider, useSession } from './lib/SessionContext.jsx';
 import { rolesConAcceso, rutaPermitidaParaRolDb } from './lib/nav.js';
@@ -28,7 +28,12 @@ const AsistenciaReportes = cargar(() => import('./pages/AsistenciaReportes.jsx')
 const PortalEstudiante = cargar(() => import('./pages/PortalEstudiante.jsx'));
 const GeneracionHorarios = cargar(() => import('./pages/GeneracionHorarios.jsx'));
 const CalificacionesCartilla = cargar(() => import('./pages/CalificacionesCartilla.jsx'));
+const ActivarDemo = cargar(() => import('./pages/ActivarDemo.jsx'));
+const DemosAdmin = cargar(() => import('./pages/DemosAdmin.jsx'));
+import DemoVencida from './pages/DemoVencida.jsx';
+const HubColegioLumen = cargar(() => import('./pages/HubColegioLumen.jsx'));
 const PAGINAS_PUBLICAS = {
+  '/activar-demo': ActivarDemo,
   '/asistencia-y-reportes': AsistenciaReportes,
   '/portal-estudiante': PortalEstudiante,
   '/generacion-de-horarios': GeneracionHorarios,
@@ -101,7 +106,9 @@ function BaseDocentesRuta() {
 }
 
 function Gate() {
-  const { loading, profile, recuperando } = useSession();
+  const { loading, profile, recuperando, demo } = useSession();
+  const irAlHub = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('sigee_ir_hub') === '1';
+  useEffect(() => { if (profile) { try { sessionStorage.removeItem('sigee_ir_hub'); } catch { /* sin storage */ } } }, [profile]);
   const { pathname } = useLocation();
   if (recuperando) return <RestablecerClave />;
   const Publica = PAGINAS_PUBLICAS[pathname];
@@ -110,6 +117,12 @@ function Gate() {
   }
   if (loading) return <div className="splash">Cargando SIGEE…</div>;
   if (!profile) return <Login />;
+  if (demo?.vencida) return <DemoVencida />;
+  // Hub de Colegio Lumen: pantalla completa, solo para el Super Admin. Un Super Admin que acaba de iniciar sesión llega aquí.
+  if (profile.rolDb === 'super_admin') {
+    if (pathname === '/hub-colegio-lumen') return <React.Suspense fallback={<div className="splash">Cargando…</div>}><HubColegioLumen /></React.Suspense>;
+    if (irAlHub) return <Navigate to="/hub-colegio-lumen" replace />;
+  } else if (pathname === '/hub-colegio-lumen') return <Navigate to="/" replace />;
   return (
     <ErrorBoundary reinicio={pathname}>
     <Routes>
@@ -133,6 +146,7 @@ function Gate() {
         <Route path="/estudiantes-desvinculados" element={<BasesCentrales clave="estudiantes-desvinculados" />} />
         <Route path="/base-estudiantes" element={<BasesCentrales clave="base-estudiantes" />} />
         <Route path="/contenido-sitio" element={<ContenidoSitio />} />
+        <Route path="/demos" element={<Protegida path="/demos"><DemosAdmin /></Protegida>} />
         <Route path="/usuarios" element={<Protegida path="/usuarios"><Usuarios /></Protegida>} />
         <Route path="/financiero" element={<Protegida path="/financiero"><FinancieroRuta /></Protegida>} />
         <Route path="/configuracion" element={<Configuracion />} />

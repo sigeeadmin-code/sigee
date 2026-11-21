@@ -3,6 +3,7 @@ import { supabase, ROLE_GROUP, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabas
 import { crearMonitorTic } from './ticMonitor.js';
 import { API_URL, fetchInstituciones, fetchInstitucionData, fetchDatosGlobales, fetchPermisosPlantel, fetchCursosComoTutor, limpiarCacheConsultas } from './data.js';
 import { borrarTodosLosBorradores } from './borradorNotas.js';
+import { HUB_KEY, HUB_ADMIN_KEY, HUB_IR_KEY, HUB_RUTA, LUMEN_ID, leerHub, limpiarHub, decidirLogout } from './hubLumen.js';
 export const SessionCtx = createContext(null);   // exportado para poder probar pantallas con una sesión de prueba
 export const useSession = () => useContext(SessionCtx);
 export function SessionProvider({ children }) {
@@ -10,6 +11,7 @@ export function SessionProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [instituciones, setInstituciones] = useState([]);
   const [institucion, setInstitucion] = useState(null);
+  const [demo, setDemo] = useState({ esDemo: false, hasta: null, vencida: false });
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [recuperando, setRecuperando] = useState(false);   // el usuario llegó por el enlace del correo y debe elegir su nueva contraseña
@@ -35,6 +37,13 @@ export function SessionProvider({ children }) {
     const rol = ROLE_GROUP[prof.rol] || prof.rol;
     const isSuperAdmin = rol === 'super_admin';
     setProfile({ ...prof, rol, rolDb: prof.rol });
+    // Demostración: si la institución es una demo, arranca (o consulta) el conteo de 5 días. No bloquea la carga.
+    if (prof.institucion_id) {
+      supabase.rpc('demo_iniciar_conteo').then(({ data: hasta, error: eDemo }) => {
+        if (eDemo || !hasta) setDemo({ esDemo: false, hasta: null, vencida: false });
+        else setDemo({ esDemo: true, hasta, vencida: new Date(hasta) < new Date() });
+      }, () => setDemo({ esDemo: false, hasta: null, vencida: false }));
+    } else setDemo({ esDemo: false, hasta: null, vencida: false });
     const insts = await fetchInstituciones(prof.institucion_id, isSuperAdmin);
     setInstituciones(insts);
     // Para super_admin sin institución asignada, no asumimos ningún plantel
@@ -78,13 +87,15 @@ export function SessionProvider({ children }) {
         // (notas sin guardar, curso elegido) y era lo que dejaba el módulo en blanco o lo reiniciaba.
         if (usuarioCargado.current === session.user.id && event !== 'USER_UPDATED') return;
         setLoading(true); loadForUser(session.user);
-      } else { usuarioCargado.current = null; setProfile(null); setData(null); setLoading(false); }
+      } else { usuarioCargado.current = null; setProfile(null); setData(null); setDemo({ esDemo: false, hasta: null, vencida: false }); setLoading(false); }
     });
     return () => { mounted = false; sub.subscription.unsubscribe(); };
   }, [loadForUser]);
   const login = useCallback(async (email, password) => {
     setError('');
+    limpiarHub();   // un inicio de sesión nuevo siempre empieza sin rastros de una prueba anterior del Hub
     const { error: authErr } = await supabase.auth.signInWithPassword({ email, password });
+    if (!authErr) { try { sessionStorage.setItem(HUB_IR_KEY, '1'); } catch { /* sin storage */ } }   // si es Super Admin, App lo lleva al Hub
     if (authErr) {
       // Soporte TIC: deja constancia del intento fallido (IP y correo). Nunca debe impedir mostrar el error.
       try { supabase.rpc('tic_login_fallido', { p_email: email }).then(() => {}, () => {}); } catch { /* sin registro */ }
@@ -109,10 +120,52 @@ export function SessionProvider({ children }) {
   }, []);
   // scope 'local': cerrar sesión aquí NO invalida las sesiones de la misma cuenta abiertas en otras pestañas o dispositivos
   const monitorTic = useRef(null);
-  const logout = useCallback(async () => {
-    try { await monitorTic.current?.cerrar('logout'); } catch { /* no bloquea el cierre */ }
+  const limpiezaLocal = async (motivo) => {
+    try { await monitorTic.current?.cerrar(motivo); } catch { /* no bloquea el cierre */ }
     try { borrarTodosLosBorradores(); limpiarCacheConsultas(); } catch { /* es solo limpieza */ }   // equipo compartido: no deja notas ni datos del usuario anterior
+  };
+  const logout = useCallback(async () => {
+    // Hub de Colegio Lumen: si el Super Admin está probando un usuario demo, al cerrar sesión vuelve al Hub (no al login).
+    const volverAlHub = decidirLogout({ hub: leerHub(), rolDb: profile?.rolDb, institucionId: profile?.institucion_id }) === 'volver_hub';
+    await limpiezaLocal('logout');
     await supabase.auth.signOut({ scope: 'local' });
+    if (volverAlHub) {
+      // El flag NO se borra: lo usa el Hub. Se recupera la sesión del Admin Global guardada al entrar al usuario demo.
+      let recuperada = false;
+      try {
+        const adm = JSON.parse(sessionStorage.getItem(HUB_ADMIN_KEY) || 'null');
+        if (adm?.access_token && adm?.refresh_token) { const { error: eSes } = await supabase.auth.setSession({ access_token: adm.access_token, refresh_token: adm.refresh_token }); recuperada = !eSes; if (eSes) console.warn('[Hub] no se pudo recuperar la sesión del Admin Global:', eSes.message); }
+        else console.warn('[Hub] no hay sesión del Admin Global guardada');
+      } catch (eRec) { console.warn('[Hub] error al recuperar la sesión del Admin Global:', eRec?.message || eRec); }   // si no se puede recuperar, login normal
+      if (recuperada) { window.location.href = HUB_RUTA; return; }
+      limpiarHub();
+    }
+  }, [profile]);
+  // Hub: entra a una cuenta demo de Colegio Lumen. El servidor (solo Super Admin) entrega un acceso de un solo uso; no hay contraseñas en la web.
+  const entrarComoDemo = useCallback(async (rolHub) => {
+    const { data: ses } = await supabase.auth.getSession();
+    const s = ses?.session;
+    if (!s || profile?.rolDb !== 'super_admin') throw new Error('Solo el Admin Global puede entrar desde el Hub.');
+    let r; let body = {};
+    try {
+      r = await fetch(`${API_URL}/hub/entrar`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.access_token}` }, body: JSON.stringify({ rol: rolHub }) });
+      body = await r.json().catch(() => ({}));
+    } catch { throw new Error('No hay conexión con el servidor.'); }
+    if (!r.ok || !body.token_hash) throw new Error(body.error || 'No se pudo abrir la cuenta demo.');
+    // Se guarda la sesión del Admin Global (solo en esta pestaña) para volver al Hub sin pasar por el login.
+    sessionStorage.setItem(HUB_ADMIN_KEY, JSON.stringify({ access_token: s.access_token, refresh_token: s.refresh_token }));
+    sessionStorage.setItem(HUB_KEY, JSON.stringify({ active: true, institutionId: LUMEN_ID, adminEmail: profile.email }));
+    await limpiezaLocal('cambio_sesion');
+    const { error: eOtp } = await supabase.auth.verifyOtp({ token_hash: body.token_hash, type: 'magiclink' });
+    if (eOtp) { limpiarHub(); throw new Error('No se pudo iniciar la sesión demo: ' + eOtp.message); }
+    window.location.assign('/');   // recarga limpia con la sesión del usuario demo
+  }, [profile]);
+  // Hub: cierre completo (borra el rastro del Hub, cierra sesión y va al login).
+  const cerrarSesionCompleta = useCallback(async () => {
+    limpiarHub();
+    await limpiezaLocal('logout');
+    await supabase.auth.signOut({ scope: 'local' });
+    window.location.href = '/';
   }, []);
   // Soporte TIC: latido de conexión mientras haya una sesión abierta (entrada, tiempo conectado y latencia).
   useEffect(() => {
@@ -129,7 +182,7 @@ export function SessionProvider({ children }) {
     if (profile?.rolDb === 'super_admin') setData(await fetchDatosGlobales(instituciones));
   }, [profile, instituciones]);
   return (
-    <SessionCtx.Provider value={{ loading, profile, instituciones, institucion, data, error, login, logout, recuperando, solicitarRecuperacion, cambiarClave, terminarRecuperacion, refrescarDatos, permisos, esTutor, recargarPermisos: () => cargarPermisos(profile, profile?.institucion_id) }}>
+    <SessionCtx.Provider value={{ loading, profile, demo, entrarComoDemo, cerrarSesionCompleta, instituciones, institucion, data, error, login, logout, recuperando, solicitarRecuperacion, cambiarClave, terminarRecuperacion, refrescarDatos, permisos, esTutor, recargarPermisos: () => cargarPermisos(profile, profile?.institucion_id) }}>
       {children}
     </SessionCtx.Provider>
   );
