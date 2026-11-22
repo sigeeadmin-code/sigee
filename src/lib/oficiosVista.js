@@ -11,8 +11,65 @@ export const LIMITE_VERSIONES = 5;    // alerta anti-abuso (especificación §9)
 export const TABS = [
   { id: 'mios', label: 'Mis documentos' },
   { id: 'por_cargo', label: 'Por mi cargo' },
+  { id: 'conocimiento', label: 'Para mi conocimiento' },
   { id: 'todos', label: 'Todos' }
 ];
+
+// ── Destinatario («dirigido a») y copias «de conocimiento» ──
+/** Cargos a los que se puede dirigir un oficio o enviar en copia de conocimiento (deben existir en el servidor). */
+export const CARGOS_DESTINO = ['rector', 'vicerrector', 'inspector_general', 'dece', 'secretaria'];
+const ETIQUETA_CARGO = { rector: 'Rector/a', vicerrector: 'Vicerrector/a', inspector_general: 'Inspector General', dece: 'DECE', secretaria: 'Secretaría', tutor: 'Tutor' };
+/** A quién se dirige por defecto cada tipo de documento (el emisor puede cambiarlo antes de enviar). */
+export const DESTINO_POR_DEFECTO = {
+  oficio_alerta: { tipo: 'familia' }, oficio_faltas: { tipo: 'familia' }, plan_refuerzo: { tipo: 'familia' },
+  acta_compromiso: { tipo: 'familia' }, informe_seguimiento: { tipo: 'familia' }, ficha_tutor: { tipo: 'cargo', cargo: 'secretaria' },
+  informe_dece: { tipo: 'cargo', cargo: 'rector' }
+};
+export function etiquetaDestinatario(d) {
+  if (!d) return 'Sin destinatario';
+  if (d.tipo === 'familia') return 'Representante legal';
+  if (d.tipo === 'externo') return d.nombre || 'Destinatario externo';
+  return ETIQUETA_CARGO[d.cargo] || d.cargo || 'Sin destinatario';
+}
+export const requiereEntrega = doc => doc?.destinatario?.tipo === 'familia';
+/** Copias «de conocimiento» con su etiqueta y si ya se marcó el acuse. */
+export function copiasDe(doc) {
+  return (Array.isArray(doc?.copias_conocimiento) ? doc.copias_conocimiento : []).map(c => ({
+    cargo: c.cargo, etiqueta: ETIQUETA_CARGO[c.cargo] || c.cargo, visto: !!c.visto, visto_at: c.visto_at || null, por: c.visto_por_nombre || null, nota: c.nota || null
+  }));
+}
+export function resumenConocimiento(doc) {
+  const c = copiasDe(doc); const vistas = c.filter(x => x.visto).length;
+  return { total: c.length, vistas, pendientes: c.length - vistas };
+}
+/** Recorrido para mostrar: el historial inmutable + los acuses de conocimiento (no alteran la ruta ni los tiempos de espera). */
+export function eventosRecorrido(doc) {
+  const base = Array.isArray(doc?.historial_recorrido) ? doc.historial_recorrido : [];
+  const acuses = copiasDe(doc).filter(c => c.visto && c.visto_at).map(c => ({
+    accion: 'conocimiento', cargo: c.cargo, usuario_nombre: c.por, comentario: c.nota || 'Tomó conocimiento', fecha_accion: c.visto_at, tiempo_espera: null, version_pdf: null
+  }));
+  return [...base, ...acuses].sort((a, b) => (new Date(a.fecha_accion).getTime() || 0) - (new Date(b.fecha_accion).getTime() || 0));
+}
+/** Fases posteriores a las firmas: entrega (si no es un destino interno) y archivo. */
+export function fasesFinales(doc) {
+  if (!doc || ['rechazado', 'borrador'].includes(doc.estado)) return [];
+  const conEntrega = doc.destinatario?.tipo !== 'cargo';
+  const entregado = !!doc.entrega || doc.estado === 'entregado';
+  const out = [];
+  if (conEntrega) out.push({ clave: 'entrega', etiqueta: 'Entrega', estado: entregado ? 'hecho' : doc.estado === 'aprobado_final' ? 'ahora' : 'pendiente' });
+  out.push({ clave: 'archivo', etiqueta: 'Archivo', estado: doc.estado === 'archivado' ? 'hecho'
+    : (doc.estado === 'entregado' || (doc.estado === 'aprobado_final' && !requiereEntrega(doc) && !conEntrega)) ? 'ahora' : 'pendiente' });
+  return out;
+}
+/** Agrega a la hoja (solo para ver o imprimir) la distribución: a quién va dirigido y con conocimiento a quién. */
+export function conDistribucion(hoja, doc) {
+  const dest = doc?.destinatario; const copias = copiasDe(doc);
+  if (!hoja || (!dest && !copias.length)) return hoja;
+  const filas = [];
+  if (dest) filas.push(['Dirigido a', etiquetaDestinatario(dest)]);
+  if (copias.length) filas.push(['Con conocimiento a', copias.map(c => c.etiqueta).join(', ')]);
+  return { ...hoja, bloques: [...hoja.bloques, { id: 'distribucion', t: 'campos', cols: 1, filas }] };
+}
 
 export function fmtFecha(iso) {
   if (!iso) return '—';
@@ -49,6 +106,7 @@ export const abierto = d => ESTADOS_ABIERTOS.includes(d.estado);
 export function filtrarTab(items, tab) {
   if (tab === 'mios') return items.filter(d => d.soy_emisor);
   if (tab === 'por_cargo') return items.filter(d => d.puede_actuar);
+  if (tab === 'conocimiento') return items.filter(d => d.conocimiento_pendiente);
   return items;
 }
 
@@ -110,8 +168,12 @@ export function accionesDisponibles(doc) {
   if (doc.estado === 'borrador' && doc.soy_emisor) a.push('guardar', 'enviar', 'eliminar');
   if (doc.estado === 'en_ruta' && doc.puede_actuar) a.push('aprobar', 'observar', 'rechazar');
   if (doc.estado === 'observado' && doc.soy_emisor) a.push('corregir');
-  if (doc.estado === 'aprobado_final') a.push('entregar');
+  // Cierre del recorrido: aprobado → (entrega, si va a la familia o a un externo) → archivo. Un destino interno se archiva al aprobarse.
+  const dest = doc.destinatario?.tipo;
+  if (doc.estado === 'aprobado_final' && dest !== 'cargo') a.push('entregar');
+  if (doc.estado === 'aprobado_final' && (dest === 'cargo' || dest === 'externo')) a.push('archivar');
   if (doc.estado === 'entregado') a.push('archivar');
+  if (doc.conocimiento_pendiente && doc.estado !== 'borrador') a.push('conocer');
   if (doc.estado !== 'borrador') a.push('imprimir');
   if (SEGUIMIENTO_DESDE.includes(doc.tipo) && !doc.es_seguimiento && ['aprobado_final', 'entregado', 'archivado'].includes(doc.estado)) a.push('seguimiento');
   return a;

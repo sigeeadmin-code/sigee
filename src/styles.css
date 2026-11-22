@@ -924,3 +924,23 @@ td.hd-c:empty{border-left:.25mm solid #333 !important}
 .dc-ed-hoja{flex:1;overflow:auto;padding:12px 16px 40px}.dc-ed-hoja .oficio-hoja{margin:0 auto}
 @media(max-width:720px){.dc-pasos li{font-size:10px}.dc-ed-ac{width:100%;justify-content:flex-end}.dc-ed-fecha{width:100%}}
 .dc-logro{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 16px 0;font-size:12.5px}
+
+/* ── Oficios: destino («dirigido a» / «de conocimiento»), cierre del recorrido y acuses ── */
+.ofd-callout-info{background:var(--blueL);color:var(--blueD);border-color:var(--blueXL)}
+.ofd-dist{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12.5px;color:var(--ink3);margin:2px 0 12px}
+.ofd-copia{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:99px;font-size:11.5px;font-weight:600;border:1px solid var(--line)}
+.ofd-copia-ok{background:var(--greenXL);color:var(--greenD);border-color:transparent}
+.ofd-copia-pend{background:var(--amberXL);color:var(--amberD);border-color:transparent}
+.ofd-paso-fin .ofd-paso-dot{border-style:dashed}
+.ofd-paso-fin.ofd-paso-ok .ofd-paso-dot{border-style:solid}
+.ofd-destino{border:1px solid var(--line);border-radius:var(--r2);padding:10px 14px 12px;margin:0 0 14px;min-inline-size:0}
+.ofd-destino legend{font-size:12px;font-weight:700;color:var(--slate);padding:0 6px;text-transform:uppercase;letter-spacing:.04em}
+.ofd-destino-g{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.ofd-destino-ext{margin-top:6px}
+.ofd-conoc{display:grid;gap:4px;margin-top:2px}
+.ofd-conoc-i{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
+.ofd-conoc-off{color:var(--slate);cursor:not-allowed}
+.ofd-conoc-acc{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}.ofd-conoc-acc .fc{flex:1;min-width:160px}
+.ofd-ev-conocimiento .ofd-ev-top strong{color:var(--blueD)}
+.ofd-c-destino small{display:block;color:var(--slate)}
+@media(max-width:720px){.ofd-destino-g{grid-template-columns:1fr}}

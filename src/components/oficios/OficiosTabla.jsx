@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { etiquetaCargo, etiquetaTipo } from '../../lib/oficiosDocumental.js';
-import { fmtFecha, LIMITE_VERSIONES, numObservaciones, semaforoEspera, fmtEspera } from '../../lib/oficiosVista.js';
+import { etiquetaDestinatario, resumenConocimiento, fmtFecha, LIMITE_VERSIONES, numObservaciones, semaforoEspera, fmtEspera } from '../../lib/oficiosVista.js';
 import { EsperaTag, EstadoBadge } from './OficioUI.jsx';
 
 /** Columnas que el usuario puede mostrar u ocultar (N°, Documento y Acciones son fijas). */
@@ -8,13 +8,14 @@ export const COLUMNAS = [
   { k: 'estudiante', t: 'Estudiante', def: true },
   { k: 'tipo', t: 'Tipo', def: false },
   { k: 'curso', t: 'Curso', def: false },
+  { k: 'destino', t: 'Dirigido a', def: true },
   { k: 'estado', t: 'Estado', def: true },
   { k: 'despacho', t: 'Paso actual', def: true },
   { k: 'version', t: 'Versión', def: true },
   { k: 'espera', t: 'En trámite', def: true },
   { k: 'fecha', t: 'Actualizado', def: false }
 ];
-const CLAVE_COLS = 'sigee_oficios_columnas_v2';
+const CLAVE_COLS = 'sigee_oficios_columnas_v3';
 
 /** Columnas visibles, recordadas en este navegador. */
 export function useColumnas() {
@@ -87,6 +88,7 @@ export default function OficiosTabla({ items, seleccionadoId, onSelect, nombreEs
             {v.has('estudiante') && <th className="ofd-c-estudiante">Estudiante</th>}
             {v.has('tipo') && <th className="ofd-c-tipo">Tipo</th>}
             {v.has('curso') && <th className="ofd-c-curso">Curso</th>}
+            {v.has('destino') && <th className="ofd-c-destino">Dirigido a</th>}
             {v.has('estado') && <th className="ofd-c-estado">Estado</th>}
             {v.has('despacho') && <th className="ofd-c-despacho">Paso actual</th>}
             {v.has('version') && <th className="ofd-c-version">Versión</th>}
@@ -122,6 +124,12 @@ export default function OficiosTabla({ items, seleccionadoId, onSelect, nombreEs
                 )}
                 {v.has('tipo') && <td data-label="Tipo" className="ofd-c-tipo"><span className="ofd-chip">{etiquetaTipo(d.tipo)}</span></td>}
                 {v.has('curso') && <td data-label="Curso" className="ofd-c-curso">{[d.curso, d.paralelo].filter(Boolean).join(' ') || '—'}</td>}
+                {v.has('destino') && (
+                  <td data-label="Dirigido a" className="ofd-c-destino">
+                    <span>{etiquetaDestinatario(d.destinatario)}</span>
+                    {resumenConocimiento(d).total > 0 && <small>De conocimiento: {resumenConocimiento(d).vistas}/{resumenConocimiento(d).total} ✓</small>}
+                  </td>
+                )}
                 {v.has('estado') && <td data-label="Estado" className="ofd-c-estado"><EstadoBadge estado={d.estado} /></td>}
                 {v.has('despacho') && (
                   <td data-label="Paso actual" className="ofd-c-despacho">

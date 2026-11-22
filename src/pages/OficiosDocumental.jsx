@@ -8,7 +8,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useSession } from '../lib/SessionContext.jsx';
 import {
   fetchOficiosBandeja, fetchOficio, crearBorradorOficio, enviarOficio, aprobarPasoOficio, observarOficio,
-  corregirOficio, registrarEntregaOficio, archivarOficio, rechazarOficio, eliminarBorradorOficio, guardarBorradorOficio,
+  corregirOficio, registrarEntregaOficio, archivarOficio, rechazarOficio, eliminarBorradorOficio, guardarBorradorOficio, definirDestinoOficio, tomarConocimientoOficio,
   TIPOS_DOCUMENTO, ESTADOS
 } from '../lib/oficiosDocumental.js';
 import { cargaPorEstado, cargosEnCola, filtrarCola, filtrarOficios, filtrarTab, ordenarPorEspera, relacionados, resumenDespacho, resumenEmisor, seguimientosDe, TABS } from '../lib/oficiosVista.js';
@@ -21,6 +21,7 @@ import OficiosTabla from '../components/oficios/OficiosTabla.jsx';
 import OficioDetalle from '../components/oficios/OficioDetalle.jsx';
 import OficioImpresion from '../components/oficios/OficioImpresion.jsx';
 
+const VEN_CONOC = ['admin_plantel', 'supervisor_plantel', 'supervisor_general', 'inspector_general', 'secretario', 'dece', 'super_admin'];
 const VEN_TODO = ['admin_plantel', 'secretario', 'inspector_general', 'dece', 'supervisor_plantel', 'supervisor_general', 'administrativo', 'super_admin'];
 
 export default function OficiosDocumental() {
@@ -45,7 +46,7 @@ export default function OficiosDocumental() {
   const [confirmarLote, setConfirmarLote] = useState(false);
   const [inicial, setInicial] = useState({ visor: false, pestana: 'documento', accion: null });       // documento abierto por enlace que no está en la lista
 
-  const tabs = useMemo(() => TABS.filter(t => t.id !== 'todos' || VEN_TODO.includes(profile?.rolDb)), [profile?.rolDb]);
+  const tabs = useMemo(() => TABS.filter(t => (t.id !== 'todos' || VEN_TODO.includes(profile?.rolDb)) && (t.id !== 'conocimiento' || VEN_CONOC.includes(profile?.rolDb))), [profile?.rolDb]);
 
   const nombreEst = useCallback(id => {
     if (!id) return '—';
@@ -73,8 +74,9 @@ export default function OficiosDocumental() {
   // Pestaña inicial: «Por mi cargo» si hay pendientes; si no, lo propio. Solo la primera vez.
   useEffect(() => {
     if (tab || cargando) return;
-    setTab(resDespacho.pendientes.n > 0 ? 'por_cargo' : 'mios');
-  }, [cargando, tab, resDespacho.pendientes.n]);
+    const soloConocimiento = filtrarTab(items, 'conocimiento').length > 0 && filtrarTab(items, 'mios').length === 0;
+    setTab(resDespacho.pendientes.n > 0 ? 'por_cargo' : soloConocimiento ? 'conocimiento' : 'mios');
+  }, [cargando, tab, resDespacho.pendientes.n, items]);
 
   const lista = useMemo(() => {
     let base = filtrarOficios(filtrarTab(items, tab || 'mios'), { q: busqueda, tipo, estado, nombreEstudiante: nombreEst });
@@ -122,15 +124,16 @@ export default function OficiosDocumental() {
     if (fallos.length) avisar(`${ok} aprobados, ${fallos.length} no se pudieron aprobar: ${fallos[0]}`, 'warn'); else avisar(`${ok} documento(s) aprobados.`);
   }
 
-  function onAccion(nombre, a, b) {
+  function onAccion(nombre, a, b, c) {      // c = destino (dirigido a / de conocimiento) pendiente de guardar
     const d = seleccionado; if (!d) return undefined;
     switch (nombre) {
-      case 'guardar': return ejecutar(() => guardarBorradorOficio(d.id, a), 'Borrador guardado.');
-      case 'enviar': return ejecutar(async () => { if (b) await guardarBorradorOficio(d.id, a); return enviarOficio(d.id); }, 'Documento enviado a ruta.');
+      case 'guardar': return ejecutar(async () => { if (c) await definirDestinoOficio(d.id, c); return guardarBorradorOficio(d.id, a); }, 'Borrador guardado.');
+      case 'enviar': return ejecutar(async () => { if (c) await definirDestinoOficio(d.id, c); if (b) await guardarBorradorOficio(d.id, a); return enviarOficio(d.id); }, 'Documento enviado a ruta.');
+      case 'conocer': return ejecutar(() => tomarConocimientoOficio(d.id, a), 'Quedó registrado tu conocimiento.');
       case 'aprobar': return ejecutar(() => aprobarPasoOficio(d.id), 'Paso aprobado.');
       case 'observar': return ejecutar(() => observarOficio(d.id, a), 'Documento devuelto al emisor.');
       case 'rechazar': return ejecutar(() => rechazarOficio(d.id, a), 'Documento rechazado.');
-      case 'corregir': return ejecutar(async () => { await corregirOficio(d.id, { datosPlantilla: a.datos_plantilla, titulo: a.titulo, asunto: a.asunto }); return enviarOficio(d.id); }, 'Corregido y reenviado a ruta.');
+      case 'corregir': return ejecutar(async () => { await corregirOficio(d.id, { datosPlantilla: a.datos_plantilla, titulo: a.titulo, asunto: a.asunto }); if (c) await definirDestinoOficio(d.id, c); return enviarOficio(d.id); }, 'Corregido y reenviado a ruta.');
       case 'entregar': return ejecutar(() => registrarEntregaOficio(d.id, a), 'Entrega registrada.');
       case 'archivar': return ejecutar(() => archivarOficio(d.id), 'Documento archivado.');
       case 'eliminar':
@@ -152,7 +155,7 @@ export default function OficiosDocumental() {
     return <div className="empty"><span className="ti ti-building" /><p>Selecciona un plantel para ver los oficios.</p></div>;
   }
 
-  const vacio = tab === 'por_cargo' ? 'No tienes documentos pendientes de decisión.' : busqueda || tipo || estado ? 'Ningún documento coincide con los filtros.' : 'Aún no hay documentos.';
+  const vacio = tab === 'por_cargo' ? 'No tienes documentos pendientes de decisión.' : tab === 'conocimiento' ? 'No tienes documentos pendientes de conocimiento.' : busqueda || tipo || estado ? 'Ningún documento coincide con los filtros.' : 'Aún no hay documentos.';
 
   return (
     <div className={'ofd' + (seleccionado ? ' ofd-con-detalle' : '')}>
@@ -170,7 +173,7 @@ export default function OficiosDocumental() {
       <div className="tabs ofd-tabs" role="tablist">
         {tabs.map(t => (
           <button key={t.id} role="tab" aria-selected={tab === t.id} className={'tab' + (tab === t.id ? ' on' : '')} onClick={() => setTab(t.id)}>
-            {t.label} <span className={'ofd-cuenta' + (t.id === 'por_cargo' && cuenta('por_cargo') ? ' ofd-cuenta-on' : '')}>{cuenta(t.id)}</span>
+            {t.label} <span className={'ofd-cuenta' + ((t.id === 'por_cargo' || t.id === 'conocimiento') && cuenta(t.id) ? ' ofd-cuenta-on' : '')}>{cuenta(t.id)}</span>
           </button>
         ))}
       </div>

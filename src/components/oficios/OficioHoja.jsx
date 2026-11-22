@@ -1,13 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import DocumentoEditable from '../DocumentoEditable.jsx';
 import { ACCIONES_HISTORIAL, etiquetaCargo, etiquetaTipo } from '../../lib/oficiosDocumental.js';
-import { firmantesPorCargo, fmtEspera, fmtFecha } from '../../lib/oficiosVista.js';
+import { conDistribucion, copiasDe, etiquetaDestinatario, eventosRecorrido, firmantesPorCargo, fmtEspera, fmtFecha } from '../../lib/oficiosVista.js';
 
 /** Hoja del documento. Con `datos_plantilla.documento` usa la misma hoja de SIGEE (editable o de impresión);
  *  los trámites antiguos, sin hoja estructurada, se dibujan con el formato general. */
 export default function OficioHoja({ doc, editable = false, onCambio, institucion, nombreEstudiante }) {
   const hoja = doc.datos_plantilla?.documento;
-  if (hoja) return <DocumentoEditable doc={hoja} editable={editable} onCambio={onCambio} />;
+  if (hoja) return <DocumentoEditable doc={editable ? hoja : conDistribucion(hoja, doc)} editable={editable} onCambio={onCambio} />;
   const firmas = firmantesPorCargo(doc);
   return (
     <div className="oficio-hoja ofd-hoja">
@@ -22,6 +22,8 @@ export default function OficioHoja({ doc, editable = false, onCambio, institucio
         <div><dt>Estudiante</dt><dd>{nombreEstudiante}</dd></div>
         {(doc.curso || doc.paralelo) && <div><dt>Curso</dt><dd>{[doc.curso, doc.paralelo].filter(Boolean).join(' ')}</dd></div>}
         <div><dt>Fecha de emisión</dt><dd>{fmtFecha(doc.created_at)}</dd></div>
+        {doc.destinatario && <div><dt>Dirigido a</dt><dd>{etiquetaDestinatario(doc.destinatario)}</dd></div>}
+        {copiasDe(doc).length > 0 && <div><dt>Con conocimiento a</dt><dd>{copiasDe(doc).map(c => c.etiqueta).join(', ')}</dd></div>}
       </dl>
       <div className="ofd-hoja-cuerpo">{doc.datos_plantilla?.notas || doc.asunto || doc.titulo}</div>
       <div className="ofd-hoja-firmas">
@@ -42,7 +44,7 @@ export function AnexoRecorrido({ doc }) {
       <table className="of-tabla">
         <thead><tr><th>#</th><th>Cargo</th><th>Acción</th><th>Responsable</th><th>Fecha</th><th>Espera</th><th>Comentario</th><th>v</th></tr></thead>
         <tbody>
-          {(doc.historial_recorrido || []).map((h, i) => (
+          {eventosRecorrido(doc).map((h, i) => (
             <tr key={i}>
               <td>{h.orden ?? i}</td><td>{etiquetaCargo(h.cargo)}</td><td>{ACCIONES_HISTORIAL[h.accion] || h.accion}</td>
               <td>{h.usuario_nombre || ''}</td><td>{fmtFecha(h.fecha_accion)}</td><td>{h.tiempo_espera != null ? fmtEspera(h.tiempo_espera) : ''}</td>

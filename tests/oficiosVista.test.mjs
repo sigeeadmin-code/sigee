@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {
-  fmtEspera, semaforoEspera, filtrarTab, filtrarOficios, resumenOficios, accionesDisponibles,
+  fmtEspera, semaforoEspera, filtrarTab, etiquetaDestinatario, requiereEntrega, copiasDe, resumenConocimiento, eventosRecorrido, fasesFinales, conDistribucion, DESTINO_POR_DEFECTO, filtrarOficios, resumenOficios, accionesDisponibles,
   ultimaObservacion, firmantesPorCargo, periodoPorDefecto, fmtDias, ordenarPorEspera, seguimientosDe, versionesDe
 } from '../src/lib/oficiosVista.js';
 
@@ -131,3 +131,46 @@ assert.deepEqual(relacionados([{ id: 1, estudiante_id: 'x' }, { id: 2, estudiant
 const it = indicadoresTramite({ created_at: '2026-10-24T13:00:00Z', historial_recorrido: [H('observado', 'rector', '2026-10-27T20:00:00Z'), H('observado', 'x', '2026-10-28T08:00:00Z')], version: 2 }, new Date('2026-10-27T15:00:00Z').getTime());
 assert.equal(Math.round(it.horas), 74); assert.equal(it.devoluciones, 2); assert.equal(it.metaHoras, 72);
 console.log('oficiosVista (tableros): OK');
+
+// ── Destinatario, «de conocimiento» y cierre del recorrido ──
+assert.equal(etiquetaDestinatario(null), 'Sin destinatario');
+assert.equal(etiquetaDestinatario({ tipo: 'familia' }), 'Representante legal');
+assert.equal(etiquetaDestinatario({ tipo: 'cargo', cargo: 'rector' }), 'Rector/a');
+assert.equal(etiquetaDestinatario({ tipo: 'externo', nombre: 'Distrito 07D01' }), 'Distrito 07D01');
+assert.equal(requiereEntrega({ destinatario: { tipo: 'familia' } }), true); assert.equal(requiereEntrega({}), false);
+assert.equal(DESTINO_POR_DEFECTO.oficio_faltas.tipo, 'familia');
+
+const conCopias = { copias_conocimiento: [{ cargo: 'dece', visto: true, visto_at: '2026-11-22T10:00:00Z', visto_por_nombre: 'DECE Demo', nota: 'Enterado' }, { cargo: 'vicerrector', visto: false }] };
+assert.deepEqual(resumenConocimiento(conCopias), { total: 2, vistas: 1, pendientes: 1 });
+assert.deepEqual(copiasDe(conCopias).map(c => [c.etiqueta, c.visto]), [['DECE', true], ['Vicerrector/a', false]]);
+assert.deepEqual(resumenConocimiento({}), { total: 0, vistas: 0, pendientes: 0 });
+
+// el acuse aparece en el recorrido, en su lugar cronológico, sin tocar el historial inmutable
+const hist = [{ accion: 'enviado', cargo: 'tutor', fecha_accion: '2026-11-22T08:00:00Z' }, { accion: 'aprobado', cargo: 'inspector_general', fecha_accion: '2026-11-22T12:00:00Z' }];
+const ev = eventosRecorrido({ ...conCopias, historial_recorrido: hist });
+assert.deepEqual(ev.map(e => e.accion), ['enviado', 'conocimiento', 'aprobado']);
+assert.equal(ev[1].usuario_nombre, 'DECE Demo'); assert.equal(ev[1].comentario, 'Enterado'); assert.equal(hist.length, 2);
+
+// cierre: a la familia = entrega + archivo; a un cargo interno = solo archivo
+assert.deepEqual(fasesFinales({ estado: 'aprobado_final', destinatario: { tipo: 'familia' } }).map(f => [f.clave, f.estado]), [['entrega', 'ahora'], ['archivo', 'pendiente']]);
+assert.deepEqual(fasesFinales({ estado: 'entregado', entrega: { recibido_por: 'Madre' }, destinatario: { tipo: 'familia' } }).map(f => [f.clave, f.estado]), [['entrega', 'hecho'], ['archivo', 'ahora']]);
+assert.deepEqual(fasesFinales({ estado: 'aprobado_final', destinatario: { tipo: 'cargo', cargo: 'rector' } }).map(f => [f.clave, f.estado]), [['archivo', 'ahora']]);
+assert.deepEqual(fasesFinales({ estado: 'archivado', destinatario: { tipo: 'cargo', cargo: 'rector' } }).map(f => [f.clave, f.estado]), [['archivo', 'hecho']]);
+assert.deepEqual(fasesFinales({ estado: 'en_ruta', destinatario: { tipo: 'familia' } }).map(f => [f.clave, f.estado]), [['entrega', 'pendiente'], ['archivo', 'pendiente']]);
+assert.deepEqual(fasesFinales({ estado: 'rechazado' }), []); assert.deepEqual(fasesFinales({ estado: 'borrador' }), []);
+
+// acciones: lo anterior se mantiene (sin destinatario) y el destino interno se archiva al aprobarse
+assert.deepEqual(accionesDisponibles({ estado: 'aprobado_final', destinatario: { tipo: 'familia' } }), ['entregar', 'imprimir']);
+assert.deepEqual(accionesDisponibles({ estado: 'aprobado_final', destinatario: { tipo: 'cargo', cargo: 'rector' } }), ['archivar', 'imprimir']);
+assert.deepEqual(accionesDisponibles({ estado: 'aprobado_final', destinatario: { tipo: 'externo', nombre: 'Distrito' } }), ['entregar', 'archivar', 'imprimir']);
+assert.deepEqual(accionesDisponibles({ estado: 'en_ruta', puede_actuar: false, conocimiento_pendiente: true }), ['conocer', 'imprimir']);
+assert.deepEqual(accionesDisponibles({ estado: 'en_ruta', puede_actuar: false, conocimiento_pendiente: false }), ['imprimir']);
+assert.equal(filtrarTab([{ id: 1, conocimiento_pendiente: true }, { id: 2 }], 'conocimiento').length, 1);
+
+// la hoja impresa lleva la distribución sin modificar el documento guardado
+const hoja = { bloques: [{ id: 'a', t: 'texto', texto: 'x' }] };
+const dist = conDistribucion(hoja, { destinatario: { tipo: 'familia' }, ...conCopias });
+assert.equal(hoja.bloques.length, 1); assert.equal(dist.bloques.length, 2);
+assert.deepEqual(dist.bloques[1].filas, [['Dirigido a', 'Representante legal'], ['Con conocimiento a', 'DECE, Vicerrector/a']]);
+assert.equal(conDistribucion(hoja, {}), hoja);
+console.log('oficios destino/conocimiento OK');

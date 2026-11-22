@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ACCIONES_HISTORIAL, badgeEstado, etiquetaCargo, etiquetaEstado } from '../../lib/oficiosDocumental.js';
-import { fmtEspera, fmtFecha, semaforoEspera } from '../../lib/oficiosVista.js';
+import { copiasDe, etiquetaDestinatario, eventosRecorrido, fasesFinales, fmtEspera, fmtFecha, semaforoEspera } from '../../lib/oficiosVista.js';
 
 /** Estado del documento. */
 export const EstadoBadge = ({ estado }) => <span className={'badge ' + badgeEstado(estado)}>{etiquetaEstado(estado)}</span>;
@@ -11,34 +11,53 @@ export function EsperaTag({ doc }) {
   return <span className={'ofd-espera ofd-' + semaforoEspera(doc.espera_seg)}>{fmtEspera(doc.espera_seg)}</span>;
 }
 
-/** Ruta de autoridades: horizontal en pantallas anchas, vertical en móvil (solo CSS). */
+/** Ruta de autoridades + cierre (entrega y archivo): horizontal en pantallas anchas, vertical en móvil (solo CSS). */
 export function RutaStepper({ doc }) {
   const ruta = doc.ruta || [];
   if (!ruta.length) return null;
+  const fases = fasesFinales(doc);
+  const destCargo = doc.destinatario?.tipo === 'cargo' ? doc.destinatario.cargo : null;
+  const copias = copiasDe(doc);
   return (
-    <ol className="ofd-ruta" aria-label="Ruta de aprobación">
-      {ruta.map((p, i) => {
-        const actual = i === doc.paso_actual && doc.estado === 'en_ruta';
-        const est = p.estado_paso === 'aprobado' ? 'ok' : p.estado_paso === 'observado' ? 'warn' : actual ? 'now' : 'wait';
-        return (
-          <li key={i} className={'ofd-paso ofd-paso-' + est} aria-current={actual ? 'step' : undefined}>
-            <span className="ofd-paso-dot" aria-hidden="true">
-              {est === 'ok' ? <span className="ti ti-check" /> : est === 'warn' ? <span className="ti ti-alert-triangle" /> : i + 1}
-            </span>
-            <span className="ofd-paso-txt">
-              <strong>{etiquetaCargo(p.cargo)}</strong>
-              <small>{est === 'ok' ? 'Aprobó' : est === 'warn' ? 'Observó' : actual ? 'Le toca' : 'Pendiente'}</small>
-            </span>
+    <>
+      <ol className="ofd-ruta" aria-label="Ruta de aprobación, entrega y archivo">
+        {ruta.map((p, i) => {
+          const actual = i === doc.paso_actual && doc.estado === 'en_ruta';
+          const est = p.estado_paso === 'aprobado' ? 'ok' : p.estado_paso === 'observado' ? 'warn' : actual ? 'now' : 'wait';
+          return (
+            <li key={i} className={'ofd-paso ofd-paso-' + est} aria-current={actual ? 'step' : undefined}>
+              <span className="ofd-paso-dot" aria-hidden="true">
+                {est === 'ok' ? <span className="ti ti-check" /> : est === 'warn' ? <span className="ti ti-alert-triangle" /> : i + 1}
+              </span>
+              <span className="ofd-paso-txt">
+                <strong>{etiquetaCargo(p.cargo)}</strong>
+                <small>{est === 'ok' ? 'Aprobó' : est === 'warn' ? 'Observó' : actual ? 'Le toca' : 'Pendiente'}{destCargo === p.cargo ? ' · destinatario' : ''}</small>
+              </span>
+            </li>
+          );
+        })}
+        {fases.map(f => (
+          <li key={f.clave} className={'ofd-paso ofd-paso-fin ofd-paso-' + (f.estado === 'hecho' ? 'ok' : f.estado === 'ahora' ? 'now' : 'wait')} aria-current={f.estado === 'ahora' ? 'step' : undefined}>
+            <span className="ofd-paso-dot" aria-hidden="true">{f.estado === 'hecho' ? <span className="ti ti-check" /> : <span className={'ti ' + (f.clave === 'entrega' ? 'ti-package' : 'ti-archive')} />}</span>
+            <span className="ofd-paso-txt"><strong>{f.etiqueta}</strong><small>{f.estado === 'hecho' ? 'Hecho' : f.estado === 'ahora' ? 'Le toca' : 'Pendiente'}</small></span>
           </li>
-        );
-      })}
-    </ol>
+        ))}
+      </ol>
+      {(doc.destinatario || copias.length > 0) && (
+        <div className="ofd-dist" aria-label="Destino del documento">
+          <span><b>Dirigido a:</b> {etiquetaDestinatario(doc.destinatario)}</span>
+          {copias.length > 0 && <span><b>De conocimiento:</b> {copias.map(c => (
+            <span key={c.cargo} className={'ofd-copia ' + (c.visto ? 'ofd-copia-ok' : 'ofd-copia-pend')} title={c.visto ? `Tomó conocimiento${c.por ? ': ' + c.por : ''} · ${fmtFecha(c.visto_at)}` : 'Aún no toma conocimiento'}>
+              {c.visto ? '✓ ' : '⏳ '}{c.etiqueta}</span>))}</span>}
+        </div>
+      )}
+    </>
   );
 }
 
 /** Historial inmutable del recorrido, del más reciente al más antiguo. */
 export function Recorrido({ historial }) {
-  const h = [...(historial || [])].reverse();
+  const h = [...(historial || [])].reverse();      // recibe eventosRecorrido(doc): historial + acuses de conocimiento
   if (!h.length) return <p className="ofd-muted">Sin movimientos todavía.</p>;
   return (
     <ul className="ofd-linea">

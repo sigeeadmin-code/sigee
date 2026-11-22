@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { etiquetaCargo, etiquetaTipo } from '../../lib/oficiosDocumental.js';
-import { accionesDisponibles, fmtEspera, fmtFecha, indicadoresTramite, LIMITE_VERSIONES, ultimaObservacion, versionesDe } from '../../lib/oficiosVista.js';
+import { accionesDisponibles, eventosRecorrido, fmtEspera, fmtFecha, indicadoresTramite, LIMITE_VERSIONES, ultimaObservacion, versionesDe } from '../../lib/oficiosVista.js';
 import { EstadoBadge, MotivoForm, Recorrido, RutaStepper } from './OficioUI.jsx';
 import OficioDocumentoModal from './OficioDocumentoModal.jsx';
+import { ConocimientoBox, DestinoEditor, destinoDeDoc, mismoDestino } from './OficioDestino.jsx';
 import { notasDe } from '../../lib/documentoOficio.js';
 
 const editable = d => d.soy_emisor && (d.estado === 'borrador' || d.estado === 'observado');
@@ -17,9 +18,11 @@ export default function OficioDetalle({ doc, nombreEst, ocupado, onAccion, onCer
   const [modo, setModo] = useState(null);                       // 'observar' | 'rechazar' | 'entrega' | null
   const [entrega, setEntrega] = useState({ recibidoPor: '', cedula: '', medio: 'presencial' });
   const [pestana, setPestana] = useState('documento');
+  const [destino, setDestino] = useState(() => destinoDeDoc(doc));
 
   // Reinicia el formulario al cambiar de documento o de versión (no al refrescar por una acción ajena).
   useEffect(() => {
+    setDestino(destinoDeDoc(doc));
     setEdit({ titulo: doc.titulo || '', asunto: doc.asunto || '', notas: doc.datos_plantilla?.notas || '', documento: doc.datos_plantilla?.documento || null });
     setModo(modoInicial && accionesDisponibles(doc).includes(modoInicial) ? modoInicial : null); setPestana(pestanaInicial); setVisor(abrirVisor ? 'ver' : null);
     if (abrirVisor) onVisorAbierto?.();
@@ -30,6 +33,9 @@ export default function OficioDetalle({ doc, nombreEst, ocupado, onAccion, onCer
   const obs = doc.estado === 'observado' ? ultimaObservacion(doc) : null;
   const datos = () => ({ titulo: edit.titulo, asunto: edit.asunto, datos_plantilla: { ...(doc.datos_plantilla || {}), ...(edit.documento ? { documento: edit.documento, notas: notasDe(edit.documento) } : { notas: edit.notas }) } });
   const ind = indicadoresTramite(doc);
+  const destinoSucio = puedeEditar && !mismoDestino(destino, destinoDeDoc(doc));
+  const destinoListo = !puedeEditar || (!!destino.destinatario && (destino.destinatario.tipo !== 'externo' || (destino.destinatario.nombre || '').trim().length >= 3));
+  const paraDestino = destinoSucio ? destino : null;
   const sinCambios = edit.titulo === (doc.titulo || '') && edit.asunto === (doc.asunto || '') && edit.notas === (doc.datos_plantilla?.notas || '')
     && JSON.stringify(edit.documento) === JSON.stringify(doc.datos_plantilla?.documento || null);
 
@@ -90,8 +96,11 @@ export default function OficioDetalle({ doc, nombreEst, ocupado, onAccion, onCer
 
         <RutaStepper doc={doc} />
 
+        {puedeEditar && <DestinoEditor valor={destino} onChange={setDestino} ruta={doc.ruta || []} disabled={ocupado} />}
+        {acc.includes('conocer') && <ConocimientoBox ocupado={ocupado} onConfirmar={n => onAccion('conocer', n)} />}
+
         <div className="tabs ofd-subtabs" role="tablist">
-          {[['documento', 'Documento'], ['recorrido', `Recorrido (${(doc.historial_recorrido || []).length})`], ['versiones', `Versiones (${doc.version})`], ...(seguimientos.length || acc.includes('seguimiento') ? [['seguimientos', `Seguimientos (${seguimientos.length})`]] : [])].map(([id, label]) => (
+          {[['documento', 'Documento'], ['recorrido', `Recorrido (${eventosRecorrido(doc).length})`], ['versiones', `Versiones (${doc.version})`], ...(seguimientos.length || acc.includes('seguimiento') ? [['seguimientos', `Seguimientos (${seguimientos.length})`]] : [])].map(([id, label]) => (
             <button key={id} type="button" role="tab" aria-selected={pestana === id} className={'tab' + (pestana === id ? ' on' : '')} onClick={() => setPestana(id)}>{label}</button>
           ))}
         </div>
@@ -125,7 +134,7 @@ export default function OficioDetalle({ doc, nombreEst, ocupado, onAccion, onCer
                 {doc.entrega.cedula ? ` (CI ${doc.entrega.cedula})` : ''} · {doc.entrega.medio} · {fmtFecha(doc.entrega.fecha)}</p>
             )}
           </div>
-        ) : pestana === 'recorrido' ? <Recorrido historial={doc.historial_recorrido} />
+        ) : pestana === 'recorrido' ? <Recorrido historial={eventosRecorrido(doc)} />
           : pestana === 'versiones' ? (
             <ul className="ofd-ver">
               {versionesDe(doc).reverse().map(v => (
@@ -186,10 +195,10 @@ export default function OficioDetalle({ doc, nombreEst, ocupado, onAccion, onCer
       )}
       {!modo && (
         <footer className="ofd-acciones">
-          {acc.includes('enviar') && <button className="btn btn-primary" disabled={ocupado} onClick={() => onAccion('enviar', datos(), !sinCambios)}>Enviar a ruta</button>}
-          {acc.includes('guardar') && <button className="btn btn-secondary" disabled={ocupado || sinCambios} onClick={() => onAccion('guardar', datos())}>Guardar</button>}
-          {acc.includes('corregir') && <button className="btn btn-primary" disabled={ocupado} onClick={() => onAccion('corregir', datos())}>
-            {sinCambios ? 'Reenviar sin cambios' : `Corregir y reenviar (v${doc.version + 1})`}</button>}
+          {acc.includes('enviar') && <button className="btn btn-primary" onClick={() => onAccion('enviar', datos(), !sinCambios, paraDestino)} disabled={ocupado || !destinoListo} title={destinoListo ? undefined : 'Selecciona a quién va dirigido el documento'}>Enviar a ruta</button>}
+          {acc.includes('guardar') && <button className="btn btn-secondary" disabled={ocupado || (sinCambios && !destinoSucio) || !destinoListo} onClick={() => onAccion('guardar', datos(), false, paraDestino)}>Guardar</button>}
+          {acc.includes('corregir') && <button className="btn btn-primary" disabled={ocupado || !destinoListo} onClick={() => onAccion('corregir', datos(), false, paraDestino)}>
+            {sinCambios && !destinoSucio ? 'Reenviar sin cambios' : `Corregir y reenviar (v${doc.version + 1})`}</button>}
           {acc.includes('aprobar') && <button className="btn btn-success" disabled={ocupado} onClick={() => onAccion('aprobar')}>Aprobar</button>}
           {acc.includes('observar') && <button className="btn btn-secondary" disabled={ocupado} onClick={() => setModo('observar')}>Observar</button>}
           {acc.includes('entregar') && <button className="btn btn-success" disabled={ocupado} onClick={() => setModo('entrega')}>Registrar entrega</button>}

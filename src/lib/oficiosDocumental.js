@@ -6,6 +6,7 @@
 import { supabase } from './supabase.js';
 import { aplicarNumeroTramite, refOrigen, TIPO_TRAMITE_DE_FICHA } from './numeroTramite.js';
 import { textoCompleto } from './fichasRendimiento.js';
+import { DESTINO_POR_DEFECTO } from './oficiosVista.js';
 
 export const TIPOS_DOCUMENTO = {
   oficio_alerta:       { nombre: 'Oficio de alerta',        uso: 'Bajo rendimiento; citación a reunión' },
@@ -45,7 +46,8 @@ export const ACCIONES_HISTORIAL = {
   corregido:  'Corregido',
   rechazado:  'Rechazado',
   entregado:  'Entregado',
-  archivado:  'Archivado'
+  archivado:  'Archivado',
+  conocimiento: 'Tomó conocimiento'
 };
 
 /** Lista documentos de la bandeja del usuario. */
@@ -79,7 +81,7 @@ export async function crearBorradorOficio({
     p_documento_origen_id: documentoOrigenId || null
   });
   if (error) throw new Error(error.message || 'No se pudo crear el borrador.');
-  return data;
+  return aplicarDestinoPorDefecto(data);
 }
 
 /** Envía (o reenvía) a ruta. */
@@ -167,6 +169,29 @@ export async function guardarBorradorOficio(id, campos) {
   return data;
 }
 
+/** Define «dirigido a» y las copias «de conocimiento» (solo el emisor, en borrador u observado). */
+export async function definirDestinoOficio(id, { destinatario, copias = [] } = {}) {
+  const { data, error } = await supabase.rpc('oficios_definir_destino', { p_id: id, p_destinatario: destinatario || null, p_copias: copias });
+  if (error) throw new Error(error.message || 'No se pudo guardar el destino.');
+  return data;
+}
+
+/** Acuse de conocimiento del cargo que recibió una copia. */
+export async function tomarConocimientoOficio(id, nota = null) {
+  const { data, error } = await supabase.rpc('oficios_tomar_conocimiento', { p_id: id, p_nota: nota });
+  if (error) throw new Error(error.message || 'No se pudo registrar el conocimiento.');
+  return data;
+}
+
+/** Destino inicial según el tipo (el emisor lo puede cambiar antes de enviar). No bloquea la creación si falla. */
+export async function aplicarDestinoPorDefecto(fila) {
+  try {
+    const dest = DESTINO_POR_DEFECTO[fila?.tipo];
+    if (!fila || fila.destinatario || !dest || !['borrador', 'observado'].includes(fila.estado)) return fila;
+    return await definirDestinoOficio(fila.id, { destinatario: dest, copias: [] });
+  } catch { return fila; }
+}
+
 export function etiquetaEstado(estado) {
   return ESTADOS[estado]?.label || estado;
 }
@@ -217,7 +242,8 @@ export async function enviarDocumentoATramite({ institucionId, tipo, origen, est
     if (r2.error) throw new Error(r2.error.message || 'No se pudo actualizar el documento.');
     fila = r2.data;
   }
-  // 3) envío a la ruta
+  // 3) destino por defecto (a quién va dirigido) y envío a la ruta
+  fila = await aplicarDestinoPorDefecto(fila);
   if (enviar && ['borrador', 'observado'].includes(fila.estado)) fila = await enviarOficio(fila.id);
   return fila;
 }
