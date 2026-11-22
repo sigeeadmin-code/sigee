@@ -40,6 +40,7 @@ const emptyForm = {
 
 export default function Usuarios() {
   const { profile, refrescarDatos, demo } = useSession();
+  const soloLectura = !!demo?.esDemo;   // en una demostración las cuentas solo se consultan: no se editan, activan ni se restablecen
   const esSuperAdmin = profile.rolDb === 'super_admin';
   const esAdminPlantel = profile.rolDb === 'admin_plantel';
   const puedeGestionar = esSuperAdmin || esAdminPlantel;
@@ -242,7 +243,13 @@ export default function Usuarios() {
         </select>
       </div>
 
-      {sel.size > 0 && (
+      {soloLectura && (
+        <div role="note" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: '#eef3fb', border: '1px solid #c9d8f0', fontSize: 13, color: '#0F2A4A' }}>
+          <span className="ti ti-eye" aria-hidden="true" /> <span>Vista de solo lectura: en la demostración las cuentas se consultan, pero no se editan, desactivan ni se restablecen sus contraseñas.</span>
+        </div>
+      )}
+
+      {!soloLectura && sel.size > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', margin: '0 0 12px', padding: '10px 14px', borderRadius: 10, background: '#eff6ff', border: '1px solid #bfdbfe', fontSize: 13 }}>
           <span><strong>{sel.size}</strong> cuenta{sel.size === 1 ? '' : 's'} seleccionada{sel.size === 1 ? '' : 's'}</span>
           <span style={{ display: 'flex', gap: 8 }}>
@@ -264,28 +271,31 @@ export default function Usuarios() {
             <table className="data" style={{ width: '100%' }}>
               <thead>
                 <tr>
+                  {!soloLectura && (
                   <th style={{ width: 34 }}>
                     <input type="checkbox" title="Seleccionar los de esta página"
                       checked={visibles.length > 0 && visibles.every(u => sel.has(u.id))}
                       onChange={e => setSel(prev => { const n = new Set(prev); visibles.forEach(u => (e.target.checked ? n.add(u.id) : n.delete(u.id))); return n; })} />
                   </th>
+                  )}
                   <th>Nombre</th>
                   <th>Correo</th>
                   <th>Rol</th>
                   {esSuperAdmin && <th>Institución</th>}
                   <th>Estado</th>
-                  <th />
+                  {!soloLectura && <th />}
                 </tr>
               </thead>
               <tbody>
                 {visibles.map(u => (
                   <tr key={u.id}>
-                    <td><input type="checkbox" checked={sel.has(u.id)} onChange={e => setSel(prev => { const n = new Set(prev); if (e.target.checked) n.add(u.id); else n.delete(u.id); return n; })} /></td>
+                    {!soloLectura && <td><input type="checkbox" checked={sel.has(u.id)} onChange={e => setSel(prev => { const n = new Set(prev); if (e.target.checked) n.add(u.id); else n.delete(u.id); return n; })} /></td>}
                     <td><strong>{u.nombres} {u.apellidos}</strong>{u.cedula ? <div style={{ fontSize: 11, color: 'var(--slate)' }}>{u.cedula}</div> : null}</td>
                     <td>{u.email}</td>
                     <td>{ROLE_LABEL[u.rol] || u.rol}</td>
                     {esSuperAdmin && <td>{u.instituciones?.nombre || '—'}</td>}
                     <td><span className={'badge ' + (u.activo ? 'b-ok' : 'b-muted')}>{u.activo ? 'Activo' : 'Inactivo'}</span></td>
+                    {!soloLectura && (
                     <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                       {(esSuperAdmin || !NIVEL_SIGEE.includes(u.rol)) && <button className="btn btn-secondary btn-sm" title="Editar datos y rol del usuario" style={{ marginRight: 6 }} onClick={() => abrirEditar(u)}>✏️ Editar</button>}
                       <button className="btn btn-secondary btn-sm" title="Asignar una contraseña nueva a esta cuenta" style={{ marginRight: 6 }}
@@ -294,6 +304,7 @@ export default function Usuarios() {
                         {u.activo ? 'Desactivar' : 'Activar'}
                       </button>
                     </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

@@ -9,7 +9,8 @@ const ok = (rolDb, ruta) => rutaPermitidaParaRolDb(ruta, ROLE_GROUP[rolDb], rolD
 
 // DECE (docs/ROL-DECE.md): consulta + oficios en su paso; sin análisis académicos, finanzas ni administración
 assert.equal(ROLE_GROUP.dece, 'dece');
-for (const r of ['/', '/notificaciones', '/estudiantes', '/justificaciones', '/oficios', '/configuracion']) assert.equal(ok('dece', r), true, 'DECE debe ver ' + r);
+for (const r of ['/', '/notificaciones', '/estudiantes', '/informes-dece', '/oficios', '/configuracion']) assert.equal(ok('dece', r), true, 'DECE debe ver ' + r);
+assert.equal(ok('dece', '/justificaciones'), false, 'DECE ya no ve Justificaciones (decisión 91e0a6e)');
 for (const r of ['/analisis-calificaciones', '/analisis-asistencia', '/licencias', '/usuarios', '/asistencia', '/boletas', '/matriculas']) assert.equal(ok('dece', r), false, 'DECE NO debe ver ' + r);
 
 // Secretaría (docs/ROL-SECRETARIA.md): maneja Oficios; Finanzas (licencias) no
