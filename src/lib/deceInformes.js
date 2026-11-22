@@ -73,6 +73,7 @@ export function indicadores({ casos = [], derivaciones = [], documentos = [] }, 
     revisionVencida: abiertos.filter(c => revisionVencida(c, hoy)).length,
     derivadosActivos: derivaciones.filter(d => d.estado !== 'cerrada').length,
     informesMes: documentos.filter(d => String(d.fecha || '').slice(0, 7) === mes).length,
+    sinConocimiento: documentos.filter(d => d.tipo !== 'oficio_representante' && !d.conocido_estudiante && !d.conocido_representante).length,
   };
 }
 /** Línea de tiempo del expediente (más reciente primero). */
@@ -98,14 +99,51 @@ export function siguienteCodigo(casos = [], anio = new Date().getFullYear()) {
   return `DECE-${anio}-${String(max + 1).padStart(3, '0')}`;
 }
 
+// ── Valoración de logros (indicadores de avance del plan de intervención) ──
+export const NIVELES_LOGRO = mkOpts([['cumplido', 'Cumplido'], ['en_proceso', 'En proceso'], ['no_cumplido', 'No cumplido']]);
+export const LEYENDA_NIVELES = 'Niveles de logro: Cumplido (el objetivo se alcanzó y el indicador se verifica) · En proceso (hay avance, pero aún no se alcanza) · No cumplido (sin avance o el indicador se deterioró; revisar las estrategias).';
+const sinTildes = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+/** Interpreta el texto escrito en la columna «Nivel de logro»: 'cumplido' | 'en_proceso' | 'no_cumplido' | null (sin valorar). */
+export function nivelDeTexto(t) {
+  const x = sinTildes(t);
+  if (!x) return null;
+  if (/\bno\b.*(cumpl|logr|alcanz)/.test(x) || /sin avance/.test(x)) return 'no_cumplido';
+  if (/proceso|parcial|avanz/.test(x)) return 'en_proceso';
+  if (/cumpl|logrado|alcanzado/.test(x)) return 'cumplido';
+  return null;
+}
+/** Resume la(s) tabla(s) de valoración de un documento: conteo por nivel y total de objetivos con texto. */
+export function resumenValoracion(documento) {
+  const r = { cumplido: 0, en_proceso: 0, no_cumplido: 0, sin_valorar: 0, total: 0 };
+  for (const b of documento?.bloques || []) {
+    if (b.t !== 'tabla' || b.clave !== 'valoracion') continue;
+    for (const f of b.filas) {
+      if (!String(f[0] || '').trim()) continue;          // fila sin objetivo: no cuenta
+      r.total += 1; r[nivelDeTexto(f[b.colNivel]) || 'sin_valorar'] += 1;
+    }
+  }
+  return r;
+}
+/** Objetivos con su indicador, tomados de la tabla de valoración de un plan (para precargar el seguimiento). */
+export function objetivosDePlan(documento) {
+  const b = (documento?.bloques || []).find(x => x.t === 'tabla' && x.clave === 'valoracion');
+  return b ? b.filas.filter(f => String(f[0] || '').trim()).map(f => [f[0], f[1] || '']) : [];
+}
+/** ¿Quién tomó conocimiento? Lee las casillas del bloque «Toma de conocimiento». */
+export function estadoConocimiento(documento) {
+  const b = (documento?.bloques || []).find(x => x.t === 'lista' && x.clave === 'conocimiento');
+  if (!b) return null;                                   // este documento no lleva constancia (p. ej. el oficio, que ya trae «recibí conforme»)
+  return { estudiante: !!b.items[0]?.marcado, representante: !!b.items[1]?.marcado };
+}
+
 // ── Constructores de bloques (mismo formato que DocumentoEditable) ──
 let contador = 0;
 const id = () => `dc${++contador}`;
 const texto = (t, extra = {}) => ({ id: id(), t: 'texto', texto: t, ...extra });
 const subtitulo = t => ({ id: id(), t: 'subtitulo', texto: t });
 const campos = (filas, cols = 1) => ({ id: id(), t: 'campos', cols, filas: filas.map(([e, v]) => [e, v ?? '']) });
-const tabla = (cols, filas, vacias = 0) => ({ id: id(), t: 'tabla', cols, filas: [...filas, ...Array.from({ length: vacias }, () => cols.map(() => ''))] });
-const lista = items => ({ id: id(), t: 'lista', items: items.map(i => (typeof i === 'string' ? { texto: i, marcado: false } : i)) });
+const tabla = (cols, filas, vacias = 0, extra = {}) => ({ id: id(), t: 'tabla', cols, filas: [...filas, ...Array.from({ length: vacias }, () => cols.map(() => ''))], ...extra });
+const lista = (items, extra = {}) => ({ id: id(), t: 'lista', items: items.map(i => (typeof i === 'string' ? { texto: i, marcado: false } : i)), ...extra });
 const firmas = f => ({ id: id(), t: 'firmas', firmas: f });
 
 const mayus = t => String(t || '').trim().toUpperCase();
@@ -116,6 +154,13 @@ function cabecera(inst, subt) {
 const datosEstudiante = e => campos([
   ['Estudiante', mayus(e.nombre)], ['Cédula', e.cedula || ''], ['Curso y paralelo', [e.curso, e.paralelo].filter(c => c && c !== '—').join(' ')], ['Representante legal', e.representante || ''],
 ], 2);
+/** Constancia de toma de conocimiento: casillas (marcan el estado en el expediente) + fecha y firmas. */
+const conocimiento = () => [
+  subtitulo('Toma de conocimiento'),
+  lista(['El estudiante tomó conocimiento del contenido de este documento', 'El representante legal tomó conocimiento del contenido de este documento'], { clave: 'conocimiento' }),
+  campos([['Fecha de conocimiento', '']]),
+];
+const filasValoracion = (objs, vacias, nivel = 'En proceso') => [...objs.map(([o, i]) => [o, i, nivel, '']), ...Array.from({ length: vacias }, () => ['', '', nivel, ''])];
 const firmaDece = p => ({ nombre: p?.nombre || '', cargo: 'Profesional DECE' });
 const marcar = (opciones, activa) => lista(Object.entries(opciones).map(([k, l]) => ({ texto: l, marcado: k === activa })));
 const doc = (inst, subt, bloques) => ({ cabecera: cabecera(inst, subt), bloques, pie: PIE_DECE, aviso: AVISO_BORRADOR });
@@ -144,6 +189,7 @@ export function construirDocDece(tipo, datos) {
       subtitulo('4. Acciones inmediatas'),
       lista(['Se conversó con el estudiante en un espacio adecuado y reservado', 'Se informó al representante legal', 'Se coordinó con el docente tutor', 'Se activó la ruta o protocolo correspondiente (si es violencia o drogas)']),
       subtitulo('5. Observaciones'), texto(''),
+      ...conocimiento(),
       firmas([firmaDece(profesional), { nombre: '', cargo: 'Quien reporta' }]),
     ]);
   }
@@ -154,14 +200,17 @@ export function construirDocDece(tipo, datos) {
       campos([['Fecha', fechaCorta(fecha)], ['Código del caso', caso?.codigo || '']], 2),
       datosEstudiante(est),
       subtitulo('1. Problemas identificados'), texto(caso?.descripcion || cat || ''),
-      subtitulo('2. Valoración'),
+      subtitulo('2. Análisis de la situación'),
       campos([['Individual (personal, afectiva, académica, social y familiar)', ''], ['Familiar (relaciones, percepciones y soluciones intentadas)', ''], ['Institucional (percepción docente y factores del plantel)', '']]),
       subtitulo('3. Tipo de intervención'),
       marcar(TIPOS_INTERVENCION, 'individual'),
-      subtitulo('4. Objetivos a desarrollar'), texto(''),
+      subtitulo('4. Objetivos e indicadores de avance'),
+      tabla(['Objetivo', 'Indicador de avance', 'Meta y plazo', 'Nivel de logro'], [['', '', '', 'En proceso'], ['', '', '', 'En proceso'], ['', '', '', 'En proceso']], 0, { clave: 'valoracion', colNivel: 3 }),
+      texto(LEYENDA_NIVELES, { menor: true }),
       subtitulo('5. Acciones o estrategias a implementar'),
       tabla(['Acción o estrategia', 'Responsable', 'Fecha prevista', 'Estado'], [], 4),
-      subtitulo('6. Resultados esperados e indicadores de avance'), texto(''),
+      subtitulo('6. Resultados esperados'), texto(''),
+      ...conocimiento(),
       firmas([firmaDece(profesional), { nombre: est.representante || '', cargo: 'Representante legal (conformidad)' }]),
     ]);
   }
@@ -178,6 +227,7 @@ export function construirDocDece(tipo, datos) {
       tabla(['Compromiso', 'Responsable', 'Fecha límite'], [], 3),
       subtitulo('3. Próxima sesión o revisión'), campos([['Fecha prevista', s.proxima_fecha ? fechaCorta(s.proxima_fecha) : '']]),
       subtitulo('4. Observaciones'), texto(''),
+      ...conocimiento(),
       firmas([firmaDece(profesional), { nombre: '', cargo: 'Participante' }]),
     ]);
   }
@@ -198,6 +248,7 @@ export function construirDocDece(tipo, datos) {
       subtitulo('6. Coordinación previa'),
       lista(['Representante legal informado y de acuerdo', 'Docente tutor y equipo docente informados', 'Autoridad de la institución informada']),
       subtitulo('7. Observaciones'), texto('El presente informe se remite con carácter reservado. El DECE no emite diagnósticos clínicos.'),
+      ...conocimiento(),
       firmas([firmaDece(profesional), { nombre: '', cargo: 'Rector/a o autoridad de la institución' }]),
     ]);
   }
@@ -209,12 +260,15 @@ export function construirDocDece(tipo, datos) {
       datosEstudiante(est),
       subtitulo('1. Acciones de seguimiento realizadas'),
       tabla(['Fecha', 'Tipo', 'Resultado'], intervenciones.map(i => [fechaCorta(i.fecha), TIPOS_INTERVENCION[i.tipo] || i.tipo, i.resumen || '']), intervenciones.length ? 0 : 3),
-      subtitulo('2. Avance de los objetivos del plan de intervención'), texto(''),
+      subtitulo('2. Valoración de logros (indicadores de avance del plan)'),
+      tabla(['Objetivo', 'Indicador de avance', 'Nivel de logro', 'Evidencia u observación'], filasValoracion(datos.objetivos || [], datos.objetivos?.length ? 0 : 3), 0, { clave: 'valoracion', colNivel: 2 }),
+      texto(LEYENDA_NIVELES, { menor: true }),
       subtitulo('3. Criterios para finalizar el seguimiento'),
       lista(['Los objetivos propuestos en el plan de intervención se cumplieron', 'El sistema de apoyos que requiere el estudiante se mantiene', 'El estudiante se encuentra en situación de protección y bienestar']),
       subtitulo('4. Decisión'),
       lista([{ texto: 'Continuar el seguimiento', marcado: caso?.estado !== 'cerrado' }, { texto: 'Cerrar el caso', marcado: caso?.estado === 'cerrado' }]),
       campos([['Motivo del cierre o próxima revisión', caso?.motivo_cierre || (caso?.proxima_revision ? fechaCorta(caso.proxima_revision) : '')]]),
+      ...conocimiento(),
       firmas([firmaDece(profesional), { nombre: '', cargo: 'Rector/a o autoridad de la institución' }]),
     ]);
   }

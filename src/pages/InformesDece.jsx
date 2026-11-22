@@ -7,6 +7,7 @@ import { useImpresionOficio } from '../lib/useImpresionOficio.js';
 import {
   CATEGORIAS, ORIGENES, RIESGOS, ESTADOS_CASO, ORDEN_ESTADOS, TIPOS_INTERVENCION, CAUSALES, DESTINOS, TIPOS_DOC,
   hoyISO, fechaCorta, indicadores, lineaDeTiempo, revisionVencida, estadoTrasAccion, siguienteCodigo, construirDocDece, tituloDoc,
+  NIVELES_LOGRO, resumenValoracion, objetivosDePlan, estadoConocimiento,
 } from '../lib/deceInformes.js';
 
 /**
@@ -56,7 +57,7 @@ export default function InformesDece() {
   const cargar = useCallback(async () => {
     if (!institucion?.id) { setCargando(false); return; }
     setCargando(true); setError('');
-    const porInst = t => supabase.from(t).select(t === 'dece_documentos' ? 'id, caso_id, estudiante_id, tipo, titulo, fecha, version, updated_at' : '*').eq('institucion_id', institucion.id);
+    const porInst = t => supabase.from(t).select(t === 'dece_documentos' ? 'id, caso_id, estudiante_id, tipo, titulo, fecha, version, updated_at, conocido_estudiante, conocido_representante, fecha_conocimiento' : '*').eq('institucion_id', institucion.id);
     const [c, i, d, x] = await Promise.all([
       porInst('dece_casos').order('created_at', { ascending: false }), porInst('dece_intervenciones').order('fecha', { ascending: false }),
       porInst('dece_derivaciones').order('fecha', { ascending: false }), porInst('dece_documentos').order('fecha', { ascending: false }),
@@ -84,33 +85,41 @@ export default function InformesDece() {
   const profesional = { nombre: profile?.nombre || profile?.email || '' };
 
   // ── Documentos ──
-  function nuevoDoc(tipo, extra = {}) {
+  async function nuevoDoc(tipo, extra = {}) {
     const c = extra.caso || caso;
+    let objetivos = [];
+    if (tipo === 'informe_seguimiento') {   // la valoración de logros parte de los objetivos del último plan del expediente
+      const plan = documentos.filter(d => d.caso_id === c.id && d.tipo === 'plan_intervencion').sort((a, b) => (a.fecha < b.fecha ? 1 : -1))[0];
+      if (plan) { const { data: p } = await supabase.from('dece_documentos').select('documento').eq('id', plan.id).single(); objetivos = objetivosDePlan(p?.documento); }
+    }
     const estudiante = estudiantes[c.estudiante_id] || {};
     const fecha = hoyISO();
     const doc = construirDocDece(tipo, {
       institucion, estudiante, caso: c, profesional, fecha, ciudad: '',
       intervenciones: intervenciones.filter(i => i.caso_id === c.id).sort((a, b) => (a.fecha < b.fecha ? -1 : 1)),
-      intervencion: extra.intervencion, derivacion: extra.derivacion,
+      intervencion: extra.intervencion, derivacion: extra.derivacion, objetivos,
     });
-    setEditor({ id: null, tipo, casoId: c.id, estudianteId: c.estudiante_id, titulo: tituloDoc(tipo, estudiante, fecha), fecha, version: 0, doc, sucio: true });
+    setEditor({ id: null, tipo, casoId: c.id, estudianteId: c.estudiante_id, titulo: tituloDoc(tipo, estudiante, fecha), fecha, version: 0, doc, sucio: true, fechaConocimiento: null });
   }
   async function abrirDoc(fila) {
     const { data: d, error: e } = await supabase.from('dece_documentos').select('*').eq('id', fila.id).single();
     if (e || !d) { setAviso('No se pudo abrir el documento.'); return; }
-    setEditor({ id: d.id, tipo: d.tipo, casoId: d.caso_id, estudianteId: d.estudiante_id, titulo: d.titulo, fecha: d.fecha, version: d.version, doc: d.documento, sucio: false });
+    setEditor({ id: d.id, tipo: d.tipo, casoId: d.caso_id, estudianteId: d.estudiante_id, titulo: d.titulo, fecha: d.fecha, version: d.version, doc: d.documento, sucio: false, fechaConocimiento: d.fecha_conocimiento || null });
   }
   async function guardarDoc() {
     if (!editor || guardando) return;
     if ((editor.titulo || '').trim().length < 3) { setAviso('Escriba un título para el documento.'); return; }
     setGuardando(true);
-    const campos = { titulo: editor.titulo.trim(), fecha: editor.fecha, documento: editor.doc, updated_by: profile?.id || null, updated_at: new Date().toISOString() };
+    const con = estadoConocimiento(editor.doc);   // null si el documento no lleva constancia
+    const marcado = !!(con && (con.estudiante || con.representante));
+    const fechaCon = marcado ? (editor.fechaConocimiento || hoyISO()) : null;
+    const campos = { titulo: editor.titulo.trim(), fecha: editor.fecha, documento: editor.doc, updated_by: profile?.id || null, updated_at: new Date().toISOString(), conocido_estudiante: !!con?.estudiante, conocido_representante: !!con?.representante, fecha_conocimiento: fechaCon };
     const r = editor.id
       ? await supabase.from('dece_documentos').update({ ...campos, version: (editor.version || 1) + 1 }).eq('id', editor.id).select('id, version').single()
       : await supabase.from('dece_documentos').insert({ ...campos, institucion_id: institucion.id, caso_id: editor.casoId, estudiante_id: editor.estudianteId, tipo: editor.tipo, created_by: profile?.id || null }).select('id, version').single();
     setGuardando(false);
     if (r.error) { setAviso('No se pudo guardar: ' + r.error.message); return; }
-    setEditor(e => ({ ...e, id: r.data.id, version: r.data.version, sucio: false }));
+    setEditor(e => ({ ...e, id: r.data.id, version: r.data.version, sucio: false, fechaConocimiento: fechaCon }));
     setAviso('Documento guardado.');
     cargar();
   }
@@ -183,7 +192,7 @@ export default function InformesDece() {
       {error && <div className="dc-error" role="alert">{error} <button className="btn btn-secondary btn-sm" onClick={cargar}>Reintentar</button></div>}
 
       <div className="dc-kpis">
-        {[['Casos abiertos', kpi.abiertos, 'ti ti-folder-open', ''], ['Riesgo alto', kpi.riesgoAlto, 'ti ti-alert-triangle', kpi.riesgoAlto ? 'dc-k-rojo' : ''], ['Revisión vencida', kpi.revisionVencida, 'ti ti-clock-exclamation', kpi.revisionVencida ? 'dc-k-ambar' : ''], ['Derivaciones activas', kpi.derivadosActivos, 'ti ti-arrow-forward-up', ''], ['Documentos del mes', kpi.informesMes, 'ti ti-file-text', '']].map(([l, v, ic, cl]) => (
+        {[['Casos abiertos', kpi.abiertos, 'ti ti-folder-open', ''], ['Riesgo alto', kpi.riesgoAlto, 'ti ti-alert-triangle', kpi.riesgoAlto ? 'dc-k-rojo' : ''], ['Revisión vencida', kpi.revisionVencida, 'ti ti-clock-exclamation', kpi.revisionVencida ? 'dc-k-ambar' : ''], ['Derivaciones activas', kpi.derivadosActivos, 'ti ti-arrow-forward-up', ''], ['Documentos del mes', kpi.informesMes, 'ti ti-file-text', ''], ['Sin constancia de conocimiento', kpi.sinConocimiento, 'ti ti-signature', kpi.sinConocimiento ? 'dc-k-ambar' : '']].map(([l, v, ic, cl]) => (
           <div key={l} className={'dc-kpi ' + cl}><span className={ic} aria-hidden="true" /><strong>{v}</strong><small>{l}</small></div>
         ))}
       </div>
@@ -254,7 +263,10 @@ export default function InformesDece() {
               <h4 className="dc-h">Documentos del expediente ({docsDelCaso.length})</h4>
               {docsDelCaso.length === 0 ? <p className="dc-mini">Todavía no hay documentos. Elija un tipo para generarlo; podrá editarlo directamente sobre la hoja.</p> : (
                 <ul className="dc-docs">{docsDelCaso.map(d => (
-                  <li key={d.id}><div><strong>{d.titulo}</strong><div className="dc-mini">{TIPOS_DOC[d.tipo]?.corto} · {fechaCorta(d.fecha)} · v{d.version}</div></div>
+                  <li key={d.id}><div><strong>{d.titulo}</strong><div className="dc-mini">{TIPOS_DOC[d.tipo]?.corto} · {fechaCorta(d.fecha)} · v{d.version}</div>
+                    {d.tipo !== 'oficio_representante' && <div className="dc-chips" style={{ margin: '4px 0 0' }}>{d.conocido_estudiante || d.conocido_representante
+                      ? <span className="badge b-ok">Conocimiento: {[d.conocido_estudiante && 'estudiante', d.conocido_representante && 'representante'].filter(Boolean).join(' y ')}{d.fecha_conocimiento ? ' · ' + fechaCorta(d.fecha_conocimiento) : ''}</span>
+                      : <span className="badge b-warn">Pendiente de conocimiento</span>}</div>}</div>
                     <span><button className="btn btn-secondary btn-sm" onClick={() => abrirDoc(d)}>Abrir y editar</button> <button className="btn btn-ghost btn-sm" onClick={() => borrarDoc(d)} aria-label={'Eliminar ' + d.titulo}>🗑</button></span></li>
                 ))}</ul>
               )}
@@ -293,12 +305,30 @@ export default function InformesDece() {
                 <button className="btn btn-ghost btn-sm" onClick={cerrarEditor} aria-label="Cerrar editor">✕</button>
               </span>
             </div>
+            <ResumenLogro documento={editor.doc} />
             <p className="dc-ed-ayuda">Escriba directamente sobre la hoja: cada texto, campo, fila y firma es editable. Las casillas se marcan con un clic.</p>
             <div className="dc-ed-hoja"><DocumentoEditable editable doc={editor.doc} onCambio={d => setEditor(x => ({ ...x, doc: d, sucio: true }))} /></div>
           </div>
         </div>
       )}
       {modoImp && editor && createPortal(<div className="oficio-print"><DocumentoEditable doc={editor.doc} editable={false} /></div>, document.body)}
+    </div>
+  );
+}
+
+/** Resumen en vivo de la valoración de logros del documento (plan de intervención y seguimiento). */
+function ResumenLogro({ documento }) {
+  const r = resumenValoracion(documento);
+  if (!r.total) return null;
+  const todos = r.cumplido === r.total;
+  return (
+    <div className="dc-logro" role="status" aria-live="polite">
+      <strong>Valoración de logros:</strong>
+      <span className="badge b-ok">{r.cumplido} {NIVELES_LOGRO.cumplido.toLowerCase()}</span>
+      <span className="badge b-warn">{r.en_proceso} {NIVELES_LOGRO.en_proceso.toLowerCase()}</span>
+      <span className="badge b-err">{r.no_cumplido} {NIVELES_LOGRO.no_cumplido.toLowerCase()}</span>
+      {r.sin_valorar > 0 && <span className="badge b-muted">{r.sin_valorar} sin valorar (escriba Cumplido, En proceso o No cumplido)</span>}
+      {todos && <span className="dc-mini">Todos los objetivos se cumplieron: evalúe si corresponde cerrar el seguimiento.</span>}
     </div>
   );
 }
