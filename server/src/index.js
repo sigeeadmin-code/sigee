@@ -7,6 +7,7 @@ import { calificacionesRouter } from './routes/calificaciones.js';
 import { correosRouter } from './routes/correos.js';
 import { demoRouter } from './routes/demo.js';
 import { hubRouter } from './routes/hub.js';
+import { reportesRouter } from './routes/reportes.js';
 import { requireAuth, requireRole } from './lib/auth.js';
 import { crearContador, registrarPeticion, serieHoraria, leerRecursos } from './lib/metricas.js';
 import { crearVigilante } from './lib/seguridad.js';
@@ -39,7 +40,7 @@ app.use(express.json());
 // docentes: cada guardado es 1 sola petición (upsert por lote), por lo que
 // 200/min (~3 por segundo) cubre con holgura la hora pico de un colegio
 // grande y aún frena abusos o bucles descontrolados.
-app.use(['/asistencia', '/calendario', '/calificaciones'], rateLimit({
+app.use(['/asistencia', '/calendario', '/calificaciones', '/reportes'], rateLimit({
   windowMs: 60 * 1000,
   limit: 200,
   standardHeaders: true,
@@ -71,6 +72,7 @@ app.use('/asistencia', asistenciaRouter);
 app.use('/calificaciones', calificacionesRouter);
 app.use('/correos', correosRouter);
 app.use('/demo', demoRouter);
+app.use('/reportes', reportesRouter);
 app.use('/hub', rateLimit({ windowMs: 10 * 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false, message: { error: 'Demasiados intentos seguidos. Espera unos minutos.' } }));
 app.use('/hub', hubRouter);
 
