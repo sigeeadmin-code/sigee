@@ -13,42 +13,9 @@ import RestablecerClaveModal from '../components/RestablecerClaveModal.jsx';
 import AccesoMasivoDocentes from '../components/AccesoMasivoDocentes.jsx';
 import { cmpNombre } from '../lib/ordenar.js';
 import { JORNADAS as JORNADAS_TURNO, jornadasDePlantel, normalizarJornadas } from '../lib/jornadas.js';
-import { descargarPlantillaExcel, leerExcel, normalizarFecha, validarCedulaEC, exportarFilasExcel } from '../lib/cargaMasiva.js';
-
-const PLANTILLA_DOCENTES_COLS = [
-  'Cédula', 'Nombres', 'Apellidos', 'Email', 'Teléfono', 'Título', 'Cargo',
-  'Situación (NOMBRAMIENTO/CONTRATO/OCASIONAL/REEMPLAZO)', 'Especialidad', 'Área',
-  'Fecha Ingreso (AAAA-MM-DD)', 'Género (Masculino/Femenino)'
-];
-const PLANTILLA_DOCENTES_EJEMPLO = [
-  '0701234567', 'Juan Carlos', 'Pérez Gómez', 'juan.perez@ejemplo.com', '0991234567',
-  'Licenciado en Educación Básica', 'Docente', 'NOMBRAMIENTO', 'Matemática', 'Ciencias Exactas',
-  '2020-03-15', 'Masculino'
-];
-
-function filaAPayloadDocente(fila) {
-  const cedula = String(fila['Cédula'] || '').trim();
-  const nombres = String(fila['Nombres'] || '').trim();
-  const apellidos = String(fila['Apellidos'] || '').trim();
-  const errores = [];
-  if (!cedula) errores.push('cédula vacía');
-  else if (!validarCedulaEC(cedula)) errores.push('cédula inválida');
-  if (!nombres) errores.push('nombres vacíos');
-  if (!apellidos) errores.push('apellidos vacíos');
-  const payload = {
-    cedula, nombres, apellidos,
-    email: String(fila['Email'] || '').trim() || null,
-    telefono: String(fila['Teléfono'] || '').trim() || null,
-    titulo: String(fila['Título'] || '').trim() || null,
-    cargo: String(fila['Cargo'] || '').trim() || null,
-    situacion: String(fila['Situación (NOMBRAMIENTO/CONTRATO/OCASIONAL/REEMPLAZO)'] || '').trim().toUpperCase() || 'NOMBRAMIENTO',
-    especialidad: String(fila['Especialidad'] || '').trim() || null,
-    area: String(fila['Área'] || '').trim() || null,
-    fecha_ingreso: normalizarFecha(fila['Fecha Ingreso (AAAA-MM-DD)']),
-    genero: String(fila['Género (Masculino/Femenino)'] || '').trim() || null,
-  };
-  return { payload, errores };
-}
+import { exportarFilasExcel } from '../lib/cargaMasiva.js';
+import ModalPlantillaDocentes from '../components/ModalPlantillaDocentes.jsx';
+import { descargarPlantillaDocentes, ROLES_PLANTILLA_DOCENTES } from '../lib/plantillaDocentes.js';
 
 const SANGRE = ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'];
 const GENEROS = ['Masculino', 'Femenino'];
@@ -77,6 +44,8 @@ function anios(fechaIngreso) {
 export default function Docentes() {
   const { data, institucion, profile, refrescarDatos, demo } = useSession();
   const puedeActivarDesactivar = ['super_admin', 'admin_plantel'].includes(profile.rolDb);
+  const puedePlantilla = ROLES_PLANTILLA_DOCENTES.includes(profile.rolDb);
+  const esInspector = profile.rolDb === 'inspector_general';   // ve la lista y usa la plantilla; no crea ni edita fichas una por una
   const [docentes, setDocentes] = useState(data?.docentes || []);
   const [busqueda, setBusqueda] = useState('');
   const [fPlantel, setFPlantel] = useState('');
@@ -98,7 +67,7 @@ export default function Docentes() {
   const [accesoMasivo, setAccesoMasivo] = useState(false);
   const [acceso, setAcceso] = useState(null); // { docente, email, password, guardando, error, creado }
   const [inteligente, setInteligente] = useState(false);
-  const [masivo, setMasivo] = useState(null); // { filas: [{payload, errores, fila}], subiendo, resultado }
+  const [plantillaAbierta, setPlantillaAbierta] = useState(false);
 
   useEffect(() => { setDocentes(data?.docentes || []); }, [data]);
 
@@ -184,58 +153,6 @@ export default function Docentes() {
       const url = await subirArchivo('docentes-documentos', path, file);
       upd('documentos', [...modal.documentos, { nombre: nombreDoc || file.name, url, fecha: new Date().toISOString().slice(0, 10) }]);
     } catch (e) { setError('No se pudo subir el documento: ' + e.message); }
-  }
-
-  function abrirCargaMasiva() {
-    setMasivo({ filas: [], subiendo: false, resultado: null });
-  }
-
-  async function onArchivoMasivo(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const filasCrudas = await leerExcel(file);
-      const cedulasExistentes = new Set(docentes.map(d => d.cedula));
-      const vistas = new Set();
-      const filas = filasCrudas.map(fila => {
-        const { payload, errores } = filaAPayloadDocente(fila);
-        if (payload.cedula) {
-          if (cedulasExistentes.has(payload.cedula)) errores.push('cédula ya existe en el sistema');
-          else if (vistas.has(payload.cedula)) errores.push('cédula duplicada en el archivo');
-          vistas.add(payload.cedula);
-        }
-        return { payload, errores };
-      });
-      setMasivo({ filas, subiendo: false, resultado: null });
-    } catch (err) {
-      setMasivo({ filas: [], subiendo: false, resultado: null });
-      setError('No se pudo leer el archivo: ' + err.message);
-    } finally {
-      e.target.value = '';
-    }
-  }
-
-  async function confirmarCargaMasiva() {
-    const validas = masivo.filas.filter(f => f.errores.length === 0);
-    if (validas.length === 0) return;
-    setMasivo(m => ({ ...m, subiendo: true }));
-    let creados = 0;
-    const fallos = [];
-    const nuevosLocales = [];
-    for (const f of validas) {
-      try {
-        const nuevo = await crearDocente(institucion.id, f.payload);
-        nuevosLocales.push({
-          id: nuevo.id, nombre: `${f.payload.apellidos} ${f.payload.nombres}`.trim(), cedula: f.payload.cedula,
-          situacion: f.payload.situacion, cargo: f.payload.cargo, materias: [], cursos: [], activo: true, acceso: false
-        });
-        creados++;
-      } catch (err) {
-        fallos.push({ cedula: f.payload.cedula, nombre: `${f.payload.nombres} ${f.payload.apellidos}`, motivo: err.message });
-      }
-    }
-    if (nuevosLocales.length) { setDocentes(ds => [...ds, ...nuevosLocales]); refrescarDatos(); }
-    setMasivo(m => ({ ...m, subiendo: false, resultado: { creados, fallos } }));
   }
 
   function generarClave() {
@@ -390,9 +307,10 @@ export default function Docentes() {
         <div style={{ display: 'flex', gap: 8 }}>
           {esSuperAdmin && <button className="btn btn-secondary" onClick={exportarLista} disabled={filtrados.length === 0} title="Descarga en Excel la lista que ves ahora (con los filtros aplicados)">⬇️ Exportar Excel</button>}
           {!global && !demo?.esDemo && puedeActivarDesactivar && <button className="btn btn-secondary" onClick={() => setAccesoMasivo(true)} title="Crea el usuario y la contraseña de todos los docentes que aún no tienen acceso">🔑 Dar acceso a todos</button>}
-          {!global && !demo?.esDemo && <button className="btn btn-primary" onClick={() => setInteligente(true)} title="Sube tu lista con las columnas en cualquier orden: yo las detecto y las acomodo">✨ Carga inteligente</button>}
-          {!global && !demo?.esDemo && <button className="btn btn-ghost" onClick={abrirCargaMasiva}>📥 Carga con plantilla (Excel)</button>}
-          {!global && <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo docente</button>}
+          {!global && !demo?.esDemo && !esInspector && <button className="btn btn-primary" onClick={() => setInteligente(true)} title="Sube tu lista con las columnas en cualquier orden: yo las detecto y las acomodo">✨ Carga inteligente</button>}
+          {puedePlantilla && <button className="btn btn-secondary" onClick={descargarPlantillaDocentes} title="Descarga el Excel con las columnas de los docentes y las instrucciones">⬇️ Bajar plantilla</button>}
+          {puedePlantilla && <button className="btn btn-secondary" onClick={() => setPlantillaAbierta(true)} title="Sube la plantilla llena: se revisa antes de guardar">📤 Subir plantilla</button>}
+          {!global && !esInspector && <button className="btn btn-primary" onClick={abrirNuevo}>+ Nuevo docente</button>}
         </div>
       </div>
 
@@ -541,7 +459,7 @@ export default function Docentes() {
                 <td className="mono" style={{ fontSize: 11 }}>{d.amie || institucion?.amie || '—'}</td>
                 <td>{d.plantel || institucion?.nombre || '—'}</td>
                 <td className="mono">{d.cedula || '—'}</td>
-                <td><strong style={global ? undefined : { cursor: 'pointer' }} onClick={global ? undefined : () => abrirEditar(d.id)}>{d.nombre}</strong></td>
+                <td><strong style={global || esInspector ? undefined : { cursor: 'pointer' }} onClick={global || esInspector ? undefined : () => abrirEditar(d.id)}>{d.nombre}</strong></td>
                 <td>{d.situacion || '—'}</td>
                 <td style={{ fontSize: 11 }}>{d.cargo}</td>
                 <td style={{ fontSize: 11 }}>{d.especialidad || (d.materias || [])[0] || '—'}</td>
@@ -575,7 +493,7 @@ export default function Docentes() {
                     <span className={'badge ' + (d.activo ? 'b-ok' : 'b-muted')}>{d.activo ? 'Activo' : 'Inactivo'}</span>
                   )}
                 </td>
-                <td>{global ? <span className="muted" style={{ fontSize: 11 }}>—</span> : <button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(d.id)}>✏️ Editar</button>}</td>
+                <td>{global || esInspector ? <span className="muted" style={{ fontSize: 11 }}>—</span> : <button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(d.id)}>✏️ Editar</button>}</td>
               </tr>
             ))}
           </tbody>
@@ -744,81 +662,13 @@ export default function Docentes() {
         </div>
       )}
 
-      {masivo && (
-        <div className="modal-bg" onClick={() => !masivo.subiendo && setMasivo(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 720 }}>
-            <h3>📥 Carga masiva de docentes (Excel)</h3>
-            <p style={{ color: 'var(--slate)', fontSize: 13 }}>
-              Descarga la plantilla, complétala con los datos de los docentes y súbela aquí. Cédula, nombres y apellidos son obligatorios.
-            </p>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-              <button className="btn btn-secondary" onClick={() => descargarPlantillaExcel('plantilla_docentes_sigee.xlsx', PLANTILLA_DOCENTES_COLS, PLANTILLA_DOCENTES_EJEMPLO)}>
-                ⬇️ Descargar plantilla
-              </button>
-              <label className="btn btn-primary" style={{ cursor: 'pointer' }}>
-                📂 Elegir archivo
-                <input type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={onArchivoMasivo} />
-              </label>
-            </div>
-
-            {masivo.filas.length > 0 && !masivo.resultado && (
-              <>
-                <div style={{ maxHeight: 320, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
-                  <table className="tbl">
-                    <thead><tr><th>#</th><th>Cédula</th><th>Nombres</th><th>Apellidos</th><th>Estado</th></tr></thead>
-                    <tbody>
-                      {masivo.filas.map((f, i) => (
-                        <tr key={i}>
-                          <td>{i + 1}</td>
-                          <td className="mono">{f.payload.cedula || '—'}</td>
-                          <td>{f.payload.nombres}</td>
-                          <td>{f.payload.apellidos}</td>
-                          <td>
-                            {f.errores.length === 0
-                              ? <span className="badge b-ok">Listo</span>
-                              : <span className="badge b-err" title={f.errores.join(', ')}>⚠️ {f.errores.join(', ')}</span>}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <p style={{ fontSize: 12, color: 'var(--slate)', margin: '8px 0' }}>
-                  {masivo.filas.filter(f => f.errores.length === 0).length} de {masivo.filas.length} filas listas para cargar.
-                </p>
-              </>
-            )}
-
-            {masivo.resultado && (
-              <div style={{ padding: 12, background: 'var(--bg-soft)', borderRadius: 8, marginBottom: 12 }}>
-                <p><strong>{masivo.resultado.creados}</strong> docente{masivo.resultado.creados === 1 ? '' : 's'} creado{masivo.resultado.creados === 1 ? '' : 's'} correctamente.</p>
-                {masivo.resultado.fallos.length > 0 && (
-                  <>
-                    <p style={{ color: 'var(--red)' }}>{masivo.resultado.fallos.length} fila(s) fallaron:</p>
-                    <ul style={{ fontSize: 12, color: 'var(--red)' }}>
-                      {masivo.resultado.fallos.map((f, i) => <li key={i}>{f.nombre} ({f.cedula}): {f.motivo}</li>)}
-                    </ul>
-                  </>
-                )}
-              </div>
-            )}
-
-            <div className="modal-f">
-              <button className="btn btn-secondary" disabled={masivo.subiendo} onClick={() => setMasivo(null)}>
-                {masivo.resultado ? 'Cerrar' : 'Cancelar'}
-              </button>
-              {!masivo.resultado && (
-                <button
-                  className="btn btn-primary"
-                  disabled={masivo.subiendo || masivo.filas.filter(f => f.errores.length === 0).length === 0}
-                  onClick={confirmarCargaMasiva}
-                >
-                  {masivo.subiendo ? 'Cargando…' : `✅ Confirmar carga (${masivo.filas.filter(f => f.errores.length === 0).length})`}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+      {plantillaAbierta && (
+        <ModalPlantillaDocentes
+          institucionId={institucion?.id || null}
+          planteles={plantelesDisponibles}
+          onClose={() => setPlantillaAbierta(false)}
+          onGuardado={() => { refrescarDatos(); }}
+        />
       )}
     </div>
   );

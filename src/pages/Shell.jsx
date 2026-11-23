@@ -9,6 +9,7 @@ import { grupoDeRol, esParaGrupo } from '../lib/notificaciones.js';
 import ErrorBoundary from '../components/ErrorBoundary.jsx';
 export default function Shell() {
   const { profile, institucion, logout, permisos, esTutor, demo } = useSession();
+  const diasDemo = demo?.hasta ? Math.max(1, Math.ceil((new Date(demo.hasta) - new Date()) / 86400000)) : 0;
   const MENU_MINIMO = [
     { cat: 'Principal', items: [{ to: '/', label: 'Dashboard', icon: 'ti ti-layout-dashboard' }] },
     { cat: 'Sistema', items: [{ to: '/configuracion', label: 'Configuración', icon: 'ti ti-settings' }] }
@@ -126,7 +127,7 @@ export default function Shell() {
         {demo?.esDemo && demo.hasta && (
           <div className="demo-banner" role="status">
             <span className="ti ti-flask" aria-hidden="true" />
-            <span><strong>Demostración</strong> · {new Date(demo.hasta) > new Date() ? `te quedan ${Math.max(1, Math.ceil((new Date(demo.hasta) - new Date()) / 86400000))} día${Math.ceil((new Date(demo.hasta) - new Date()) / 86400000) === 1 ? '' : 's'} (hasta el ${new Date(demo.hasta).toLocaleDateString('es-EC', { day: 'numeric', month: 'long' })})` : 'terminó'}. Los datos son ficticios.</span>
+            <span><strong>Demostración</strong> · {new Date(demo.hasta).getFullYear() >= 9000 ? 'colegio de pruebas, sin fecha de vencimiento' : new Date(demo.hasta) > new Date() ? `te quedan ${diasDemo} día${diasDemo === 1 ? '' : 's'} (hasta el ${new Date(demo.hasta).toLocaleDateString('es-EC', { day: 'numeric', month: 'long' })})` : 'terminó'}. Los datos son ficticios.</span>
           </div>
         )}
         <header className="topbar">

@@ -139,6 +139,7 @@ export const NAV_BY_ROL = {
       { to: '/notificaciones', label: 'Notificaciones', icon: 'ti ti-bell' }
     ]},
     { cat: 'Convivencia y asistencia', items: [
+      { to: '/docentes', label: 'Docentes', icon: 'ti ti-chalkboard' },
       { to: '/estudiantes', label: 'Estudiantes', icon: 'ti ti-users' },
       { to: '/estadistica-plantel', label: 'Estadísticas AMIE', icon: 'ti ti-chart-bar' },
       { to: '/encadenamiento', label: 'Encadenamiento', icon: 'ti ti-link' },
