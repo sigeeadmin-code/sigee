@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
 import { fetchEstudiantePerfil, guardarEstudiantePerfil } from '../lib/data.js';
 import { cmpNombre } from '../lib/ordenar.js';
+import ListadosEstudiantesModal from '../components/ListadosEstudiantesModal.jsx';
 import {
   validarCedulaEcuador,
   puedeGenerarCodigoExtranjero,
@@ -39,10 +40,32 @@ function DocBadge({ tipo, valor }) {
   );
 }
 
+function Field({ label, children }) {
+  return (
+    <div>
+      <label className="fl">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function Section({ title, icon, children, accent }) {
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, color: accent ? 'var(--amberD)' : 'var(--ink)' }}>
+        <span className={icon} style={{ fontSize: 16 }} />
+        <span style={{ fontWeight: 800, fontSize: 13.5 }}>{title}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export default function Estudiantes() {
   const { data, institucion, profile, refrescarDatos } = useSession();
   const esDece = profile.rol === 'dece' || profile.rolDb === 'dece';
   const puedeEscribir = ['super_admin', 'admin_plantel', 'secretario'].includes(profile.rolDb);
+  const puedeListados = ['super_admin', 'admin_plantel', 'secretario', 'inspector_general', 'supervisor_plantel', 'docente'].includes(profile.rolDb || profile.rol);
   const [estudiantes, setEstudiantes] = useState(data?.estudiantes || []);
   const [busqueda, setBusqueda] = useState('');
   const [fCurso, setFCurso] = useState('');
@@ -53,6 +76,7 @@ export default function Estudiantes() {
   const [toast, setToast] = useState(null);
   const [pagina, setPagina] = useState(1);
   const [cargandoPerfil, setCargandoPerfil] = useState(false);
+  const [modalListados, setModalListados] = useState(false);
   const porPagina = 25;
 
   useEffect(() => { setEstudiantes(data?.estudiantes || []); }, [data]);
@@ -196,12 +220,19 @@ export default function Estudiantes() {
             {institucion?.nombre || 'Todos los planteles'} · Matrícula y perfil documental
           </p>
         </div>
-        <span style={{
-          fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 999,
-          background: 'var(--brandL)', color: 'var(--brandD)', border: '1px solid var(--brandXL)',
-        }}>
-          {filtrados.length} registro{filtrados.length === 1 ? '' : 's'}
-        </span>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {puedeListados && (
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => setModalListados(true)}>
+              <span className="ti ti-printer" /> Imprimir / Exportar listados
+            </button>
+          )}
+          <span style={{
+            fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 999,
+            background: 'var(--brandL)', color: 'var(--brandD)', border: '1px solid var(--brandXL)',
+          }}>
+            {filtrados.length} registro{filtrados.length === 1 ? '' : 's'}
+          </span>
+        </div>
       </div>
 
       {esDece && (
@@ -318,6 +349,8 @@ export default function Estudiantes() {
         </div>
       )}
 
+      {modalListados && <ListadosEstudiantesModal onClose={() => setModalListados(false)} />}
+
       {modal && form && (
         <div className="modal-overlay" onClick={cerrarModal} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px 12px', overflowY: 'auto' }}>
           <div
@@ -392,187 +425,79 @@ export default function Estudiantes() {
                       display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px',
                       borderRadius: 'var(--r2)', cursor: puedeEscribir ? 'pointer' : 'default',
                       background: form.extranjero ? 'var(--amberL)' : 'var(--page)',
-                      border: form.extranjero ? '1.5px solid #fcd34d' : '1.5px solid var(--line)',
-                      transition: 'background .15s, border-color .15s', marginBottom: 14,
+                      border: form.extranjero ? '1px solid #fcd34d' : '1px solid var(--line)',
+                      marginBottom: 12,
                     }}
                   >
                     <div style={{
-                      width: 44, height: 26, borderRadius: 999, padding: 3, flexShrink: 0,
-                      background: form.extranjero ? 'var(--amber)' : 'var(--lineD)', transition: 'background .15s',
+                      width: 22, height: 22, borderRadius: 6, border: form.extranjero ? '2px solid var(--amberD)' : '2px solid var(--line)',
+                      background: form.extranjero ? 'var(--amberD)' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>
-                      <div style={{
-                        width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: 'var(--sh)',
-                        transform: form.extranjero ? 'translateX(18px)' : 'translateX(0)', transition: 'transform .15s',
-                      }} />
+                      {form.extranjero && <span className="ti ti-check" style={{ color: '#fff', fontSize: 14 }} />}
                     </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: 13.5, color: form.extranjero ? 'var(--amberD)' : 'var(--ink)' }}>
-                        Estudiante extranjero
-                      </div>
-                      <div style={{ fontSize: 12, color: 'var(--slate)', marginTop: 2 }}>
-                        Sin cédula ecuatoriana · pasaporte o código único SIGEE
-                      </div>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 13.5 }}>Estudiante extranjero</div>
+                      <div style={{ fontSize: 12, color: 'var(--slate)' }}>Permite pasaporte o código SIGEE en lugar de cédula</div>
                     </div>
-                    {form.extranjero && (
-                      <span style={{
-                        fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em',
-                        padding: '4px 10px', borderRadius: 999, background: '#fff', color: 'var(--amberD)',
-                        border: '1px solid #fcd34d',
-                      }}>Extranjero</span>
-                    )}
                   </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                    <Field label="Nacionalidad" required={form.extranjero}>
-                      <select className="fc" disabled={!puedeEscribir} value={form.nacionalidad} onChange={e => campo('nacionalidad', e.target.value)}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <Field label="Tipo de documento">
+                      <select className="fc" disabled={!puedeEscribir} value={form.tipo_documento || 'cedula'} onChange={e => campo('tipo_documento', e.target.value)}>
+                        <option value="cedula">Cédula</option>
+                        <option value="pasaporte">Pasaporte</option>
+                        <option value="codigo_sigee">Código SIGEE</option>
+                      </select>
+                    </Field>
+                    <Field label="Número / Código">
+                      <input className="fc" value={form.cedula} disabled={!puedeEscribir} onChange={e => campo('cedula', e.target.value)} />
+                    </Field>
+                    <Field label="Nacionalidad">
+                      <select className="fc" disabled={!puedeEscribir} value={form.nacionalidad || ''} onChange={e => campo('nacionalidad', e.target.value)}>
                         <option value="">— Seleccione —</option>
                         {NACIONALIDADES_COMUNES.map(n => <option key={n} value={n}>{n}</option>)}
-                        {form.nacionalidad && !NACIONALIDADES_COMUNES.includes(form.nacionalidad) && (
-                          <option value={form.nacionalidad}>{form.nacionalidad}</option>
-                        )}
                       </select>
                     </Field>
-                    <Field label="Tipo de documento">
-                      <select className="fc" disabled={!puedeEscribir} value={form.tipo_documento} onChange={e => campo('tipo_documento', e.target.value)}>
-                        {!form.extranjero && <option value="cedula">Cédula ecuatoriana</option>}
-                        <option value="pasaporte">Pasaporte</option>
-                        {puedeCodigo && <option value="codigo_sigee">Código único SIGEE</option>}
-                      </select>
-                    </Field>
-                  </div>
-
-                  <Field label={
-                    form.tipo_documento === 'codigo_sigee' ? 'Código único SIGEE'
-                      : form.tipo_documento === 'pasaporte' || form.extranjero ? 'Pasaporte / documento'
-                        : 'Cédula ecuatoriana'
-                  }>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <input
-                        className="fc"
-                        style={{
-                          flex: 1, minWidth: 180, fontFamily: "'DM Mono', monospace",
-                          borderColor: docValido === false ? 'var(--red)' : docValido === true ? 'var(--green)' : undefined,
-                        }}
-                        value={form.cedula}
-                        disabled={!puedeEscribir || form.tipo_documento === 'codigo_sigee'}
-                        onChange={e => campo('cedula', e.target.value)}
-                        maxLength={form.tipo_documento === 'cedula' && !form.extranjero ? 10 : 32}
-                        placeholder={form.extranjero ? 'Nº de pasaporte o genere código' : '10 dígitos'}
-                      />
-                      {puedeEscribir && (
-                        <button
-                          type="button"
-                          className="btn"
-                          disabled={!puedeCodigo}
-                          onClick={generarCodigo}
-                          style={{
-                            whiteSpace: 'nowrap',
-                            background: puedeCodigo ? 'linear-gradient(135deg, #d97706, #b45309)' : undefined,
-                            color: puedeCodigo ? '#fff' : undefined,
-                            border: puedeCodigo ? 'none' : undefined,
-                            boxShadow: puedeCodigo ? '0 4px 14px rgba(217,119,6,.35)' : undefined,
-                            opacity: puedeCodigo ? 1 : 0.55,
-                            cursor: puedeCodigo ? 'pointer' : 'not-allowed',
-                          }}
-                          title={puedeCodigo ? 'Generar identificador único EXT-…' : motivoCodigoOff}
-                        >
-                          <span className="ti ti-key" style={{ marginRight: 6 }} />
-                          Generar código único
+                    {puedeEscribir && (
+                      <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                        <button type="button" className="btn btn-secondary btn-sm" disabled={!puedeCodigo} title={motivoCodigoOff} onClick={generarCodigo}>
+                          Generar código SIGEE
                         </button>
-                      )}
-                    </div>
-                    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {docValido === true && <Hint ok>Documento válido</Hint>}
-                      {docValido === false && (
-                        <Hint error>
-                          {form.tipo_documento === 'cedula' || !form.extranjero
-                            ? 'Cédula ecuatoriana inválida (algoritmo Registro Civil).'
-                            : 'Documento demasiado corto.'}
-                        </Hint>
-                      )}
-                      {puedeEscribir && !puedeCodigo && (
-                        <Hint>{motivoCodigoOff || 'Complete extranjero + nacionalidad para generar código SIGEE.'}</Hint>
-                      )}
-                      {puedeCodigo && form.tipo_documento !== 'codigo_sigee' && (
-                        <Hint accent>Puede ingresar el pasaporte o generar un código único SIGEE si no lo tiene a mano.</Hint>
-                      )}
-                      {form.tipo_documento === 'codigo_sigee' && form.cedula && (
-                        <Hint ok>Código asignado. Se usará como identificador del estudiante (no reemplaza un pasaporte oficial).</Hint>
-                      )}
-                    </div>
-                  </Field>
-
-                  {puedeCodigo && puedeEscribir && (
-                    <div style={{
-                      marginTop: 12, padding: '12px 14px', borderRadius: 'var(--r2)',
-                      background: 'linear-gradient(135deg, #fffbeb, #fef3c7)',
-                      border: '1px solid #fcd34d', fontSize: 12.5, color: 'var(--amberD)',
-                      display: 'flex', gap: 10, alignItems: 'flex-start',
-                    }}>
-                      <span className="ti ti-info-circle" style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }} />
-                      <div>
-                        <strong>Código único SIGEE</strong>
-                        <div style={{ marginTop: 2, lineHeight: 1.45 }}>
-                          Formato <span className="mono">EXT-…-AÑO-…</span>. Solo para extranjeros con nacionalidad distinta de ecuatoriana.
-                          La cédula EC sigue validándose con el algoritmo oficial cuando el estudiante no es extranjero.
-                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </Section>
 
                 <Section title="Contacto" icon="ti ti-phone">
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     <Field label="Teléfono">
-                      <input className="fc" disabled={!puedeEscribir} value={form.telefono || ''} onChange={e => campo('telefono', e.target.value)} placeholder="09XXXXXXXX" />
+                      <input className="fc" value={form.telefono || ''} disabled={!puedeEscribir} onChange={e => campo('telefono', e.target.value)} />
                     </Field>
-                    <Field label="Email">
-                      <input className="fc" type="email" disabled={!puedeEscribir} value={form.email || ''} onChange={e => campo('email', e.target.value)} />
+                    <Field label="Correo">
+                      <input className="fc" type="email" value={form.email || ''} disabled={!puedeEscribir} onChange={e => campo('email', e.target.value)} />
                     </Field>
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <Field label="Dirección">
-                        <input className="fc" disabled={!puedeEscribir} value={form.direccion || ''} onChange={e => campo('direccion', e.target.value)} />
-                      </Field>
-                    </div>
+                    <Field label="Dirección">
+                      <input className="fc" value={form.direccion || ''} disabled={!puedeEscribir} onChange={e => campo('direccion', e.target.value)} style={{ gridColumn: '1 / -1' }} />
+                    </Field>
                   </div>
                 </Section>
 
-                {modal.representantes?.length > 0 && (
-                  <Section title="Representantes" icon="ti ti-users">
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {modal.representantes.map(r => (
-                        <div key={r.id} style={{
-                          display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap',
-                          padding: '10px 12px', borderRadius: 'var(--r)', background: 'var(--page)', border: '1px solid var(--line)',
-                        }}>
-                          <div>
-                            <div style={{ fontWeight: 700, fontSize: 13 }}>{r.apellidos} {r.nombres}</div>
-                            <div style={{ fontSize: 12, color: 'var(--slate)' }}>{r.rol_representante || 'Representante'}</div>
-                          </div>
-                          <div style={{ fontSize: 12.5, color: 'var(--slate)' }}>{r.telefono || '—'}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </Section>
-                )}
-
-                {esDece && (
-                  <div style={{ marginBottom: 8 }}>
-                    <a className="btn btn-primary" href="/informes-dece" style={{ textDecoration: 'none' }}>Ir a Informes Individuales DECE</a>
+                <Section title="Datos adicionales" icon="ti ti-notes">
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <Field label="Discapacidad">
+                      <input className="fc" value={form.discapacidad || ''} disabled={!puedeEscribir} onChange={e => campo('discapacidad', e.target.value)} />
+                    </Field>
+                    <Field label="Etnia">
+                      <input className="fc" value={form.etnia || ''} disabled={!puedeEscribir} onChange={e => campo('etnia', e.target.value)} />
+                    </Field>
                   </div>
-                )}
+                </Section>
               </div>
 
-              <div style={{
-                display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap',
-                padding: '14px 22px', borderTop: '1px solid var(--line)', background: 'var(--page)',
-              }}>
-                <button type="button" className="btn btn-secondary" onClick={cerrarModal}>
-                  {puedeEscribir ? 'Cancelar' : 'Cerrar'}
-                </button>
+              <div style={{ padding: '12px 22px 18px', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <button type="button" className="btn btn-secondary" onClick={cerrarModal}>Cerrar</button>
                 {puedeEscribir && (
-                  <button type="submit" className="btn btn-primary" disabled={guardando} style={{ minWidth: 140 }}>
-                    {guardando ? 'Guardando…' : 'Guardar perfil'}
+                  <button type="submit" className="btn btn-primary" disabled={guardando}>
+                    {guardando ? 'Guardando…' : 'Guardar cambios'}
                   </button>
                 )}
               </div>
@@ -582,57 +507,17 @@ export default function Estudiantes() {
       )}
 
       {toast && (
-        <div className={'toast ' + (toast.tipo === 'ok' ? 'ok' : 'err')} style={{ zIndex: 9999 }}>
+        <div style={{
+          position: 'fixed', bottom: 24, right: 24, zIndex: 1000,
+          padding: '12px 16px', borderRadius: 'var(--r2)', boxShadow: 'var(--sh2)',
+          background: toast.tipo === 'ok' ? 'var(--greenL)' : 'var(--redL)',
+          color: toast.tipo === 'ok' ? 'var(--greenD)' : 'var(--redD)',
+          border: `1px solid ${toast.tipo === 'ok' ? '#86efac' : '#fca5a5'}`,
+          fontSize: 13, fontWeight: 600,
+        }}>
           {toast.msg}
         </div>
       )}
-    </div>
-  );
-}
-
-function Section({ title, icon, children, accent }) {
-  return (
-    <div style={{
-      marginBottom: 16, padding: 16, borderRadius: 'var(--r2)',
-      background: 'var(--white)',
-      border: accent ? '1px solid var(--amberXL)' : '1px solid var(--line)',
-      boxShadow: accent ? '0 0 0 3px rgba(217,119,6,.06)' : 'none',
-    }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12,
-        fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em',
-        color: accent ? 'var(--amberD)' : 'var(--brandD)',
-      }}>
-        {icon && <span className={icon} style={{ fontSize: 16 }} />}
-        {title}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function Field({ label, children, required }) {
-  return (
-    <div>
-      <label className="fl" style={{ marginBottom: 4 }}>
-        {label}{required && <span style={{ color: 'var(--red)', marginLeft: 3 }}>*</span>}
-      </label>
-      {children}
-    </div>
-  );
-}
-
-function Hint({ children, ok, error, accent }) {
-  const style = ok
-    ? { background: 'var(--greenL)', color: 'var(--greenD)', border: '1px solid #6ee7b7' }
-    : error
-      ? { background: 'var(--redL)', color: 'var(--redD)', border: '1px solid #fca5a5' }
-      : accent
-        ? { background: 'var(--blueL)', color: 'var(--blueD)', border: '1px solid #93c5fd' }
-        : { background: 'var(--page)', color: 'var(--slate)', border: '1px solid var(--line)' };
-  return (
-    <div style={{ ...style, fontSize: 12, padding: '6px 10px', borderRadius: 8, lineHeight: 1.4 }}>
-      {children}
     </div>
   );
 }
