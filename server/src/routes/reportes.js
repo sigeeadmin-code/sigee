@@ -11,7 +11,7 @@ export const reportesRouter = Router();
  *   tipo: 'asistencia' | 'nomina_oficial' | 'junta_curso' | 'resumen_inspector',
  *   paralelo_id?: string,
  *   grado_id?: string,
- *   tutor_id?: string,          // profile_id del tutor
+ *   tutor_id?: string,          // id del docente tutor (docentes.id)
  *   jornada?: string,
  *   anio_lectivo?: string,
  *   sexo?: 'M' | 'F',
@@ -23,7 +23,12 @@ export const reportesRouter = Router();
  *
  * Devuelve datos estructurados listos para generar Excel/PDF en el frontend.
  */
-reportesRouter.post('/listados', requireAuth, async (req, res) => {
+// Solo personal con función de gestión. El docente solo ve los paralelos donde es tutor (se fuerza más abajo).
+// Estudiantes, padres, contadores, administrativos y DECE no tienen acceso a estos listados.
+const ROLES_LISTADOS = ['super_admin', 'admin_plantel', 'secretario', 'inspector_general', 'supervisor_plantel', 'docente'];
+const TIPOS_DOCENTE = ['asistencia', 'nomina_oficial', 'junta_curso'];
+
+reportesRouter.post('/listados', requireAuth, requireRole(...ROLES_LISTADOS), async (req, res) => {
   try {
     const {
       tipo = 'nomina_oficial',
@@ -44,9 +49,26 @@ reportesRouter.post('/listados', requireAuth, async (req, res) => {
       return res.status(400).json({ error: `tipo inválido. Use: ${tiposValidos.join(', ')}` });
     }
 
-    const institucionId = req.profile.institucion_id;
-    if (!institucionId && req.profile.rol !== 'super_admin') {
-      return res.status(403).json({ error: 'Usuario sin institución asignada.' });
+    // La institución sale SIEMPRE del perfil del token. Solo el super_admin sin plantel puede elegirla (body.institucion_id).
+    let institucionId = req.profile.institucion_id;
+    if (!institucionId && req.profile.rol === 'super_admin') institucionId = req.body?.institucion_id || null;
+    if (!institucionId) {
+      return res.status(req.profile.rol === 'super_admin' ? 400 : 403).json({
+        error: req.profile.rol === 'super_admin'
+          ? 'Indique institucion_id: el listado se genera por plantel.'
+          : 'Usuario sin institución asignada.'
+      });
+    }
+
+    // Docente: solo los paralelos donde es tutor.
+    let paralelosPermitidos = null;
+    if (req.profile.rol === 'docente') {
+      if (!TIPOS_DOCENTE.includes(tipo)) return res.status(403).json({ error: 'Tu rol no puede generar este tipo de listado.' });
+      const { data: doc } = await supabase.from('docentes').select('id').eq('profile_id', req.profile.id).eq('institucion_id', institucionId).maybeSingle();
+      if (!doc) return res.status(403).json({ error: 'No se encontró tu ficha de docente.' });
+      const { data: misPar } = await supabase.from('paralelos').select('id').eq('tutor_docente_id', doc.id);
+      paralelosPermitidos = (misPar || []).map(x => x.id);
+      if (!paralelosPermitidos.length) return res.status(403).json({ error: 'No eres tutor de ningún paralelo.' });
     }
 
     // Resolver rango de fechas
@@ -82,20 +104,18 @@ reportesRouter.post('/listados', requireAuth, async (req, res) => {
         paralelo_id,
         grado_id,
         periodo_id,
-        estudiantes (
-          id, cedula, nombres, apellidos, genero, activo
+        estudiantes!inner (
+          id, institucion_id, cedula, nombres, apellidos, genero, activo
         ),
         paralelos (
-          id, nombre, jornada, tutor_id,
+          id, nombre, jornada, tutor_docente_id,
           grados ( id, nombre )
         )
       `)
       .eq('estado', estado || 'activa');
 
-    if (institucionId) {
-      // Filtrar por institución a través de grados
-      queryMat = queryMat.eq('estudiantes.institucion_id', institucionId);
-    }
+    queryMat = queryMat.eq('estudiantes.institucion_id', institucionId);
+    if (paralelosPermitidos) queryMat = queryMat.in('paralelo_id', paralelosPermitidos);
 
     if (paralelo_id) queryMat = queryMat.eq('paralelo_id', paralelo_id);
     if (grado_id) queryMat = queryMat.eq('grado_id', grado_id);
@@ -116,7 +136,7 @@ reportesRouter.post('/listados', requireAuth, async (req, res) => {
       filas = filas.filter(m => (m.estudiantes.genero || '').toUpperCase().startsWith(sexo.toUpperCase()));
     }
     if (tutor_id) {
-      filas = filas.filter(m => m.paralelos?.tutor_id === tutor_id);
+      filas = filas.filter(m => m.paralelos?.tutor_docente_id === tutor_id);
     }
 
     // Orden alfabético por apellidos + nombres
@@ -127,22 +147,19 @@ reportesRouter.post('/listados', requireAuth, async (req, res) => {
     });
 
     // Datos de la institución
-    let institucion = null;
-    if (institucionId) {
-      const { data: inst } = await supabase
-        .from('instituciones')
-        .select('id, nombre, amie, regimen, jornada_default')
-        .eq('id', institucionId)
-        .single();
-      institucion = inst;
-    }
+    const { data: institucion } = await supabase
+      .from('instituciones')
+      .select('id, nombre, amie, regimen')
+      .eq('id', institucionId)
+      .maybeSingle();
 
     // Resolver nombre del tutor si hay un solo paralelo
     let tutorNombre = null;
-    if (filas.length && filas[0].paralelos?.tutor_id) {
-      const tid = filas[0].paralelos.tutor_id;
+    const tutoresUnicos = new Set(filas.map(m => m.paralelos?.tutor_docente_id));
+    if (filas.length && tutoresUnicos.size === 1 && filas[0].paralelos?.tutor_docente_id) {
+      const tid = filas[0].paralelos.tutor_docente_id;
       const { data: tutorProf } = await supabase
-        .from('profiles')
+        .from('docentes')
         .select('nombres, apellidos')
         .eq('id', tid)
         .maybeSingle();
@@ -199,14 +216,24 @@ reportesRouter.post('/listados', requireAuth, async (req, res) => {
 
       if (estudianteIds.length) {
         // Buscamos asistencia de esos estudiantes en el rango (por cualquier materia del paralelo)
-        const { data: asist } = await supabase
-          .from('asistencia')
-          .select('estudiante_id, fecha, estado, observacion')
-          .in('estudiante_id', estudianteIds)
-          .gte('fecha', desde)
-          .lte('fecha', hasta);
-
-        registros = asist || [];
+        // PostgREST corta en 1.000 filas: se pagina por bloques de estudiantes y por rango.
+        for (let i = 0; i < estudianteIds.length; i += 100) {
+          const bloque = estudianteIds.slice(i, i + 100);
+          for (let desdeFila = 0; ; desdeFila += 1000) {
+            const { data: asist, error: errAs } = await supabase
+              .from('asistencia')
+              .select('estudiante_id, fecha, estado, observacion')
+              .in('estudiante_id', bloque)
+              .gte('fecha', desde)
+              .lte('fecha', hasta)
+              .order('fecha')
+              .order('id')
+              .range(desdeFila, desdeFila + 999);
+            if (errAs) return res.status(500).json({ error: 'Error al consultar asistencia: ' + errAs.message });
+            registros.push(...(asist || []));
+            if (!asist || asist.length < 1000) break;
+          }
+        }
       }
 
       // Generar lista de días laborables del rango
@@ -255,7 +282,7 @@ reportesRouter.post('/listados', requireAuth, async (req, res) => {
           n: i + 1,
           cedula: m.estudiantes.cedula || '',
           nombre_completo: `${m.estudiantes.apellidos || ''} ${m.estudiantes.nombres || ''}`.trim(),
-          sexo: (m.estudiantes.genero || '').toUpperCase().startsWith('F') ? 'F' : 'M',
+          sexo: (m.estudiantes.genero || '').toUpperCase().startsWith('F') ? 'F' : (m.estudiantes.genero || '').toUpperCase().startsWith('M') ? 'M' : '',
           curso: m.paralelos?.grados?.nombre || '',
           paralelo: m.paralelos?.nombre || '',
           marcas,
@@ -284,7 +311,7 @@ reportesRouter.post('/listados', requireAuth, async (req, res) => {
             curso: m.paralelos?.grados?.nombre || '',
             paralelo: m.paralelos?.nombre || '',
             jornada: m.paralelos?.jornada || '',
-            tutor_id: m.paralelos?.tutor_id || null,
+            tutor_id: m.paralelos?.tutor_docente_id || null,
             total: 0,
             hombres: 0,
             mujeres: 0,
