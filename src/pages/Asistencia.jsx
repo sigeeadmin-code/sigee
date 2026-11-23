@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSession } from '../lib/SessionContext.jsx';
 import BuscadorEstudianteAsistencia from '../components/BuscadorEstudianteAsistencia.jsx';
 import FichaAsistenciaModal from '../components/FichaAsistenciaModal.jsx';
+import ListadosEstudiantesModal from '../components/ListadosEstudiantesModal.jsx';
 import {
   fetchGradosConParalelos, fetchMateriasParalelo, fetchEstudiantesParaleloDetalle,
   fetchAsistencia, guardarAsistencia, fetchCargasDocente, fetchAsistenciaReciente,
@@ -568,6 +569,7 @@ function ConsultasEstadisticas() {
   const [historial, setHistorial] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fichaDe, setFichaDe] = useState(null);
+  const [listados, setListados] = useState(false);
 
   useEffect(() => {
     let activo = true;
@@ -666,9 +668,11 @@ function ConsultasEstadisticas() {
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
         <button className={'btn btn-sm ' + (modo === 'curso' ? 'btn-primary' : 'btn-secondary')} onClick={() => setModo('curso')}>Por curso</button>
         <button className={'btn btn-sm ' + (modo === 'estudiante' ? 'btn-primary' : 'btn-secondary')} onClick={() => setModo('estudiante')}>Por estudiante</button>
+        <span style={{ flex: 1 }} />
+        <button className="btn btn-sm btn-secondary" onClick={() => setListados(true)} title="Resumen por materia, reporte para junta de curso, resumen del inspector y listados con Excel e impresión">📋 Reportes e impresión</button>
       </div>
 
       {loading ? <p style={{ fontSize: 13, color: 'var(--slate)' }}>Cargando…</p> : modo === 'curso' ? (
@@ -754,6 +758,15 @@ function ConsultasEstadisticas() {
         </div>
       )}
       {fichaDe && <FichaAsistenciaModal estudiante={fichaDe} onClose={() => setFichaDe(null)} />}
+      {listados && (
+        <ListadosEstudiantesModal
+          onClose={() => setListados(false)}
+          opcionesCursos={gradosVisibles.map(g => ({ id: g.id, nombre: g.nombre, paralelos: g.paralelos }))}
+          gradoIdInicial={gradoId}
+          paraleloIdInicial={paraleloId}
+          tituloContexto={gradoSel ? `${gradoSel.nombre}${gradoSel.paralelos.find(p => p.id === paraleloId) ? ' · Paralelo ' + gradoSel.paralelos.find(p => p.id === paraleloId).nombre : ''}` : ''}
+        />
+      )}
     </div>
   );
 }

@@ -1,0 +1,9 @@
+-- Aplicado en Supabase como migración "reportes_asistencia_agregados" (23 nov 2026).
+-- Agregados de asistencia para POST /reportes/listados (servidor en Railway). Solo service_role: reciben ids de estudiantes
+-- y no revalidan el plantel, por eso NO se otorgan a authenticated ni anon.
+-- Un día es 'ausente' si hay al menos un registro ausente ese día; si no 'justificado'; si no 'atraso'; si no 'presente'.
+--  · reporte_asistencia_estudiantes(p_estudiantes, p_desde, p_hasta, p_dias, p_dm) → [{e, presente, atraso, ausente, justificado, dias}]
+--  · reporte_asistencia_grilla(...)    → [{e, f, s}] estado de cada estudiante en cada día lectivo
+--  · reporte_asistencia_por_carga(...) → [{dm, presente, atraso, ausente, justificado, fechas}] por docente_materia (cuenta cada clase)
+-- p_dias = días lectivos según calendario_eventos; p_dm = docente_materia a contar (null = todas las materias).
+-- (El texto de las funciones está en la migración aplicada.)
