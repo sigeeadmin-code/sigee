@@ -6,10 +6,30 @@ import { descargarLibro } from '../lib/exportLibro.js';
 import { supabase } from '../lib/supabase.js';
 
 const TIPOS = [
-  { id: 'asistencia', label: 'Lista de Asistencia', desc: 'Control diario / semanal con marcas ✓ F A J', roles: ['docente', 'inspector_general', 'supervisor_plantel', 'admin_plantel', 'secretario', 'super_admin'] },
-  { id: 'nomina_oficial', label: 'Nómina Oficial (Ministerio)', desc: 'Listado formal con cédula, sexo y estado', roles: ['docente', 'inspector_general', 'supervisor_plantel', 'admin_plantel', 'secretario', 'super_admin'] },
-  { id: 'junta_curso', label: 'Lista para Junta de Curso', desc: 'Observaciones académicas y de comportamiento + firma', roles: ['docente', 'inspector_general', 'supervisor_plantel', 'admin_plantel', 'secretario', 'super_admin'] },
-  { id: 'resumen_inspector', label: 'Resumen Inspector General', desc: 'Totales por curso/paralelo (hombres, mujeres, etc.)', roles: ['inspector_general', 'supervisor_plantel', 'admin_plantel', 'secretario', 'super_admin'] },
+  {
+    id: 'asistencia',
+    label: 'Lista de Asistencia del Curso',
+    desc: 'Marcas diarias (✓ presente, F falta, A atraso, J justificado). Ideal para pasar lista y juntas.',
+    roles: ['docente', 'inspector_general', 'supervisor_plantel', 'admin_plantel', 'secretario', 'super_admin'],
+  },
+  {
+    id: 'nomina_oficial',
+    label: 'Nómina Oficial (estilo Ministerio)',
+    desc: 'Listado formal con cédula, sexo y estado de matrícula. Para archivos oficiales y reportes AMIE.',
+    roles: ['docente', 'inspector_general', 'supervisor_plantel', 'admin_plantel', 'secretario', 'super_admin'],
+  },
+  {
+    id: 'junta_curso',
+    label: 'Lista para Junta de Curso',
+    desc: 'Espacios para observaciones académicas, de comportamiento y firma del representante.',
+    roles: ['docente', 'inspector_general', 'supervisor_plantel', 'admin_plantel', 'secretario', 'super_admin'],
+  },
+  {
+    id: 'resumen_inspector',
+    label: 'Resumen consolidado (Inspector)',
+    desc: 'Totales por curso y paralelo: estudiantes, hombres, mujeres. Vista global del plantel.',
+    roles: ['inspector_general', 'supervisor_plantel', 'admin_plantel', 'secretario', 'super_admin'],
+  },
 ];
 
 function fechaHoy() {
@@ -27,7 +47,28 @@ function etiquetaDia(iso) {
   return `${dias[d.getDay()]} ${d.getDate()}`;
 }
 
-export default function ListadosEstudiantesModal({ onClose, paraleloIdInicial = '', gradoIdInicial = '' }) {
+function construirEncabezadoExcel(meta, tituloDocumento, extra = []) {
+  const inst = meta?.institucion || {};
+  const rango = meta?.rango || {};
+  const lineas = [
+    inst.nombre || 'UNIDAD EDUCATIVA',
+    `Código AMIE: ${inst.amie || '—'}  ·  Régimen: ${inst.regimen || '—'}`,
+    tituloDocumento,
+    `Periodo: ${rango.desde || '—'} al ${rango.hasta || '—'}  ·  Generado: ${new Date(meta?.generado_en || Date.now()).toLocaleString('es-EC')}`,
+  ];
+  if (meta?.tutor) lineas.push(`Docente tutor: ${meta.tutor}`);
+  if (meta?.total_estudiantes != null) lineas.push(`Total de estudiantes: ${meta.total_estudiantes}`);
+  for (const e of extra) if (e) lineas.push(e);
+  lineas.push(''); // fila en blanco antes de la tabla
+  return lineas;
+}
+
+export default function ListadosEstudiantesModal({
+  onClose,
+  paraleloIdInicial = '',
+  gradoIdInicial = '',
+  tituloContexto = '',
+}) {
   const { profile, institucion, data } = useSession();
   const rol = profile?.rolDb || profile?.rol || '';
 
@@ -37,7 +78,7 @@ export default function ListadosEstudiantesModal({ onClose, paraleloIdInicial = 
   );
 
   const [tipo, setTipo] = useState(tiposDisponibles[0]?.id || 'nomina_oficial');
-  const [modoFecha, setModoFecha] = useState('rango'); // 'rango' | 'semana'
+  const [modoFecha, setModoFecha] = useState('rango');
   const [fechaInicio, setFechaInicio] = useState(inicioMes());
   const [fechaFin, setFechaFin] = useState(fechaHoy());
   const [semana, setSemana] = useState(fechaHoy());
@@ -65,6 +106,12 @@ export default function ListadosEstudiantesModal({ onClose, paraleloIdInicial = 
       if (p && p.grado_id !== gradoId) setParaleloId('');
     }
   }, [gradoId, paraleloId, data?.paralelos]);
+
+  // Si se abre desde Curso Tutor, preseleccionar el paralelo
+  useEffect(() => {
+    if (paraleloIdInicial) setParaleloId(paraleloIdInicial);
+    if (gradoIdInicial) setGradoId(gradoIdInicial);
+  }, [paraleloIdInicial, gradoIdInicial]);
 
   const llamarBackend = useMemo(() => {
     return crearClienteBackend({
@@ -104,10 +151,18 @@ export default function ListadosEstudiantesModal({ onClose, paraleloIdInicial = 
     setCargando(false);
   }
 
+  function tituloDocumento() {
+    return {
+      asistencia: 'REGISTRO DE ASISTENCIA DEL CURSO',
+      nomina_oficial: 'NÓMINA OFICIAL DE ESTUDIANTES POR CURSO Y PARALELO',
+      junta_curso: 'LISTA PARA JUNTA DE CURSO',
+      resumen_inspector: 'RESUMEN CONSOLIDADO DE ASISTENCIA POR CURSO Y PARALELO',
+    }[resultado?.tipo] || 'LISTADO DE ESTUDIANTES';
+  }
+
   function exportarExcel() {
     if (!resultado) return;
     const meta = resultado.meta || {};
-    const inst = meta.institucion || {};
     const rango = meta.rango || {};
     const nombreBase = {
       asistencia: 'Lista_Asistencia',
@@ -115,6 +170,10 @@ export default function ListadosEstudiantesModal({ onClose, paraleloIdInicial = 
       junta_curso: 'Lista_Junta_Curso',
       resumen_inspector: 'Resumen_Inspector',
     }[resultado.tipo] || 'Listado';
+
+    const encabezado = construirEncabezadoExcel(meta, tituloDocumento(), [
+      tituloContexto || null,
+    ]);
 
     if (resultado.tipo === 'asistencia') {
       const dias = meta.dias || [];
@@ -135,6 +194,7 @@ export default function ListadosEstudiantesModal({ onClose, paraleloIdInicial = 
         nombre: 'Asistencia',
         filas,
         cols,
+        encabezado,
       }]);
       return;
     }
@@ -149,11 +209,10 @@ export default function ListadosEstudiantesModal({ onClose, paraleloIdInicial = 
         'Hombres': r.hombres,
         'Mujeres': r.mujeres,
       }));
-      descargarLibro(`${nombreBase}_${rango.desde || ''}.xlsx`, [{ nombre: 'Resumen', filas, cols }]);
+      descargarLibro(`${nombreBase}_${rango.desde || ''}.xlsx`, [{ nombre: 'Resumen', filas, cols, encabezado }]);
       return;
     }
 
-    // nómina oficial y junta de curso
     if (resultado.tipo === 'junta_curso') {
       const cols = ['N°', 'Apellidos y Nombres', 'Sexo', 'Observaciones Académicas', 'Observaciones de Comportamiento', 'Firma Representante'];
       const filas = (resultado.estudiantes || []).map(e => ({
@@ -164,7 +223,7 @@ export default function ListadosEstudiantesModal({ onClose, paraleloIdInicial = 
         'Observaciones de Comportamiento': '',
         'Firma Representante': '',
       }));
-      descargarLibro(`${nombreBase}_${rango.desde || ''}.xlsx`, [{ nombre: 'Junta de Curso', filas, cols }]);
+      descargarLibro(`${nombreBase}_${rango.desde || ''}.xlsx`, [{ nombre: 'Junta de Curso', filas, cols, encabezado }]);
       return;
     }
 
@@ -179,7 +238,7 @@ export default function ListadosEstudiantesModal({ onClose, paraleloIdInicial = 
       'Curso': e.curso,
       'Paralelo': e.paralelo,
     }));
-    descargarLibro(`${nombreBase}_${rango.desde || ''}.xlsx`, [{ nombre: 'Nómina Oficial', filas, cols }]);
+    descargarLibro(`${nombreBase}_${rango.desde || ''}.xlsx`, [{ nombre: 'Nómina Oficial', filas, cols, encabezado }]);
   }
 
   function imprimirPDF() {
@@ -187,12 +246,7 @@ export default function ListadosEstudiantesModal({ onClose, paraleloIdInicial = 
     const meta = resultado.meta || {};
     const inst = meta.institucion || {};
     const rango = meta.rango || {};
-    const titulo = {
-      asistencia: 'REGISTRO DE ASISTENCIA DEL CURSO',
-      nomina_oficial: 'NÓMINA DE ESTUDIANTES POR CURSO Y PARALELO',
-      junta_curso: 'LISTA PARA JUNTA DE CURSO',
-      resumen_inspector: 'RESUMEN DE ASISTENCIA POR CURSO Y PARALELO – INSPECTOR GENERAL',
-    }[resultado.tipo] || 'LISTADO DE ESTUDIANTES';
+    const titulo = tituloDocumento();
 
     let tablaHtml = '';
     if (resultado.tipo === 'asistencia') {
@@ -314,6 +368,12 @@ export default function ListadosEstudiantesModal({ onClose, paraleloIdInicial = 
     w.document.close();
   }
 
+  const notaRol = rol === 'docente'
+    ? 'Como docente/tutor solo verás los paralelos de los que eres tutor. Usa la Lista de Asistencia o la Nómina para presentar el resumen de faltas de tu curso.'
+    : rol === 'inspector_general' || rol === 'supervisor_plantel'
+      ? 'Como inspector puedes generar el resumen consolidado de todos los cursos o filtrar por curso/paralelo.'
+      : '';
+
   return (
     <div className="modal-overlay" onClick={onClose} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px 12px', overflowY: 'auto' }}>
       <div
@@ -327,7 +387,9 @@ export default function ListadosEstudiantesModal({ onClose, paraleloIdInicial = 
         }}>
           <div>
             <div style={{ fontSize: 16, fontWeight: 800 }}>Imprimir / Exportar listados</div>
-            <div style={{ fontSize: 12, opacity: 0.8, marginTop: 2 }}>Asistencia · Nómina oficial · Junta de curso · Resumen inspector</div>
+            <div style={{ fontSize: 12, opacity: 0.8, marginTop: 2 }}>
+              {tituloContexto || 'Asistencia · Nómina oficial · Junta de curso · Resumen inspector'}
+            </div>
           </div>
           <button type="button" className="btn btn-ghost btn-sm" onClick={onClose} style={{ color: '#fff', borderColor: 'rgba(255,255,255,.25)' }}>
             <span className="ti ti-x" />
@@ -335,6 +397,12 @@ export default function ListadosEstudiantesModal({ onClose, paraleloIdInicial = 
         </div>
 
         <div style={{ padding: '16px 20px', display: 'grid', gap: 14 }}>
+          {notaRol && (
+            <div style={{ padding: '10px 12px', borderRadius: 'var(--r)', background: 'var(--brandL)', color: 'var(--brandD)', border: '1px solid var(--brandXL)', fontSize: 12.5 }}>
+              {notaRol}
+            </div>
+          )}
+
           {error && (
             <div style={{ padding: '10px 12px', borderRadius: 'var(--r)', background: 'var(--redL)', color: 'var(--redD)', border: '1px solid #fca5a5', fontSize: 13 }}>
               {error}
@@ -432,6 +500,9 @@ export default function ListadosEstudiantesModal({ onClose, paraleloIdInicial = 
                 <button type="button" className="btn btn-secondary" onClick={imprimirPDF}>
                   🖨️ Imprimir / PDF
                 </button>
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--slate)' }}>
+                El Excel incluye el encabezado de la institución (nombre, AMIE, periodo y tutor), igual que la impresión.
               </div>
             </div>
           )}

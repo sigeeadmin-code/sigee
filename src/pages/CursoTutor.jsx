@@ -9,6 +9,7 @@ import AnalisisCalificaciones from './AnalisisCalificaciones.jsx';
 import FichasEmitidas from '../components/FichasEmitidas.jsx';
 import FichaDocumentoModal from '../components/FichaDocumentoModal.jsx';
 import FichaAsistenciaModal from '../components/FichaAsistenciaModal.jsx';
+import ListadosEstudiantesModal from '../components/ListadosEstudiantesModal.jsx';
 import { Dona, BarrasH } from '../components/GraficosRendimiento.jsx';
 
 const COLOR_CLASE = { excelente: '#15803d', buena: '#1d4ed8', en_riesgo: '#d97706', critica: '#dc2626', sin_datos: '#94a3b8' };
@@ -27,7 +28,7 @@ function Pestanas({ valor, onCambio, items }) {
 }
 
 /** Asistencia de los cursos de los que el docente es TUTOR (aparte de sus propias clases). */
-function AsistenciaCurso({ institucion, paraleloIds, nombreCurso, onFicha, onVer, recarga }) {
+function AsistenciaCurso({ institucion, paraleloIds, nombreCurso, onFicha, onVer, recarga, onAbrirListados }) {
   const [periodo, setPeriodo] = useState('mes');
   const { desde, hasta } = useMemo(() => rangoPeriodo(periodo), [periodo]);
   const [datos, setDatos] = useState(null); const [error, setError] = useState(''); const [cargando, setCargando] = useState(false);
@@ -50,7 +51,32 @@ function AsistenciaCurso({ institucion, paraleloIds, nombreCurso, onFicha, onVer
   }, [filas]);
 
   function exportar() {
-    descargarLibro(`asistencia_mi_curso_${desde}_a_${hasta}.xlsx`, [{ nombre: 'Asistencia', filas: vis.map(f => ({ Estudiante: f.nombre, Cédula: f.cedula, Curso: f.curso, 'Días con registro': f.dias, Presentes: f.presentes, Atrasos: f.atrasos, 'Faltas injustificadas': f.faltas, Justificadas: f.justificadas, '% asistencia': f.pctAsistencia ?? '', 'Faltas consecutivas (máx.)': f.rachaMax, Clasificación: ETIQUETA_CLASE[f.clase] })), cols: ['Estudiante', 'Cédula', 'Curso', 'Días con registro', 'Presentes', 'Atrasos', 'Faltas injustificadas', 'Justificadas', '% asistencia', 'Faltas consecutivas (máx.)', 'Clasificación'] }]);
+    const encabezado = [
+      institucion?.nombre || 'UNIDAD EDUCATIVA',
+      `Código AMIE: ${institucion?.amie || '—'}`,
+      `Asistencia del curso tutorado · ${nombreCurso}`,
+      `Periodo: ${desde} al ${hasta}`,
+      `Total estudiantes: ${filas.length}`,
+      '',
+    ];
+    descargarLibro(`asistencia_mi_curso_${desde}_a_${hasta}.xlsx`, [{
+      nombre: 'Asistencia',
+      encabezado,
+      filas: vis.map(f => ({
+        Estudiante: f.nombre,
+        Cédula: f.cedula,
+        Curso: f.curso,
+        'Días con registro': f.dias,
+        Presentes: f.presentes,
+        Atrasos: f.atrasos,
+        'Faltas injustificadas': f.faltas,
+        Justificadas: f.justificadas,
+        '% asistencia': f.pctAsistencia ?? '',
+        'Faltas consecutivas (máx.)': f.rachaMax,
+        Clasificación: ETIQUETA_CLASE[f.clase],
+      })),
+      cols: ['Estudiante', 'Cédula', 'Curso', 'Días con registro', 'Presentes', 'Atrasos', 'Faltas injustificadas', 'Justificadas', '% asistencia', 'Faltas consecutivas (máx.)', 'Clasificación'],
+    }]);
   }
 
   return (
@@ -62,7 +88,12 @@ function AsistenciaCurso({ institucion, paraleloIds, nombreCurso, onFicha, onVer
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {PERIODOS.map(([k, t]) => <button key={k} className={'btn btn-sm ' + (periodo === k ? 'btn-primary' : 'btn-secondary')} onClick={() => setPeriodo(k)}>{t}</button>)}
-          <button className="btn btn-secondary btn-sm" onClick={exportar} disabled={!filas.length}>⬇️ Excel</button>
+          <button className="btn btn-secondary btn-sm" onClick={exportar} disabled={!filas.length}>⬇️ Excel rápido</button>
+          {typeof onAbrirListados === 'function' && (
+            <button className="btn btn-primary btn-sm" onClick={onAbrirListados}>
+              <span className="ti ti-printer" /> Listados oficiales
+            </button>
+          )}
         </div>
       </div>
       {error && <div className="card" style={{ padding: 12, color: 'var(--red)' }}>{error}</div>}
@@ -118,12 +149,13 @@ function AsistenciaCurso({ institucion, paraleloIds, nombreCurso, onFicha, onVer
 }
 
 export default function CursoTutor() {
-  const { institucion, profile, esTutor } = useSession();
+  const { institucion, profile } = useSession();
   const [tab, setTab] = useState('calificaciones');
   const [cursos, setCursos] = useState(null); const [error, setError] = useState('');
   const [trim, setTrim] = useState('T1');
   const [ficha, setFicha] = useState(null); const [recarga, setRecarga] = useState(0);
   const [verDe, setVerDe] = useState(null);
+  const [modalListados, setModalListados] = useState(false);
 
   useEffect(() => {
     let activo = true;
@@ -140,6 +172,8 @@ export default function CursoTutor() {
   const paraleloIds = useMemo(() => (cursos || []).map(c => c.id), [cursos]);
   const nombreCurso = (cursos || []).map(c => `${c.grados?.nombre || ''} ${c.nombre}${c.jornada ? ' (' + c.jornada + ')' : ''}`.trim()).join(' · ');
   const tutorNombre = `${profile?.apellidos || ''} ${profile?.nombres || ''}`.trim();
+  const primerParaleloId = paraleloIds[0] || '';
+  const primerGradoId = (cursos || [])[0]?.grado_id || (cursos || [])[0]?.grados?.id || '';
 
   if (!institucion?.id) return <div className="card cb">Selecciona una institución.</div>;
   if (error) return <div className="card" style={{ padding: 16, color: 'var(--red)' }}>{error}</div>;
@@ -147,9 +181,14 @@ export default function CursoTutor() {
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
-      <div>
-        <h2 style={{ margin: '0 0 4px' }}>Mi curso como tutor</h2>
-        <div style={{ fontSize: 13, color: 'var(--slate)' }}>{cursos ? <>Curso tutorado: <strong>{nombreCurso}</strong>. Aquí ves las estadísticas, la asistencia y las fichas de TODO tu curso; tus propias clases siguen en "Alertas de rendimiento".</> : 'Cargando…'}</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <div>
+          <h2 style={{ margin: '0 0 4px' }}>Mi curso como tutor</h2>
+          <div style={{ fontSize: 13, color: 'var(--slate)' }}>{cursos ? <>Curso tutorado: <strong>{nombreCurso}</strong>. Aquí ves las estadísticas, la asistencia y las fichas de TODO tu curso; tus propias clases siguen en "Alertas de rendimiento".</> : 'Cargando…'}</div>
+        </div>
+        <button type="button" className="btn btn-primary btn-sm" onClick={() => setModalListados(true)}>
+          <span className="ti ti-printer" /> Imprimir / Exportar listados
+        </button>
       </div>
       <Pestanas valor={tab} onCambio={setTab} items={[['calificaciones', 'Calificaciones del curso', 'ti ti-chart-histogram'], ['asistencia', 'Asistencia del curso', 'ti ti-calendar-check'], ['fichas', 'Fichas emitidas', 'ti ti-clipboard-check']]} />
       {tab === 'calificaciones' && <AnalisisCalificaciones ambito="tutor" />}
@@ -159,7 +198,15 @@ export default function CursoTutor() {
             <span>Trimestre de las notas que irán en la ficha:</span>
             {['T1', 'T2', 'T3'].map(t => <button key={t} className={'btn btn-sm ' + (trim === t ? 'btn-primary' : 'btn-secondary')} onClick={() => setTrim(t)}>{t.slice(1)}</button>)}
           </div>
-          <AsistenciaCurso recarga={recarga} institucion={institucion} paraleloIds={paraleloIds} nombreCurso={nombreCurso} onFicha={(f, rango) => setFicha({ f, rango })} onVer={f => setVerDe({ id: f.id, nombre: f.nombre, cedula: f.cedula, curso: f.curso })} />
+          <AsistenciaCurso
+            recarga={recarga}
+            institucion={institucion}
+            paraleloIds={paraleloIds}
+            nombreCurso={nombreCurso}
+            onFicha={(f, rango) => setFicha({ f, rango })}
+            onVer={f => setVerDe({ id: f.id, nombre: f.nombre, cedula: f.cedula, curso: f.curso })}
+            onAbrirListados={() => setModalListados(true)}
+          />
         </>
       )}
       {tab === 'fichas' && <FichasEmitidas institucion={institucion} puedeRevisar={false} recargar={recarga} titulo="Fichas y oficios de mi curso" />}
@@ -170,6 +217,14 @@ export default function CursoTutor() {
           asistencia={{ dias: ficha.f.dias, presentes: ficha.f.presentes, faltas: ficha.f.faltas, justificadas: ficha.f.justificadas, atrasos: ficha.f.atrasos, pctAsistencia: ficha.f.pctAsistencia, rachaMax: ficha.f.rachaMax }}
           periodoAsistencia={`${fechaCorta(ficha.rango.desde)} al ${fechaCorta(ficha.rango.hasta)}`}
           onClose={() => setFicha(null)} onGuardado={() => setRecarga(n => n + 1)} />
+      )}
+      {modalListados && (
+        <ListadosEstudiantesModal
+          onClose={() => setModalListados(false)}
+          paraleloIdInicial={primerParaleloId}
+          gradoIdInicial={primerGradoId}
+          tituloContexto={`Curso tutorado: ${nombreCurso}`}
+        />
       )}
     </div>
   );
