@@ -67,6 +67,7 @@ const MiPerfil = cargar(() => import('./pages/MiPerfil.jsx'));
 const MiPerfilFamilia = cargar(() => import('./pages/MiPerfilFamilia.jsx'));
 const MisEstudiantes = cargar(() => import('./pages/MisEstudiantes.jsx'));
 const Encadenamiento = cargar(() => import('./pages/Encadenamiento.jsx'));
+const Secretaria = cargar(() => import('./pages/Secretaria.jsx'));
 const Licencias = cargar(() => import('./pages/Licencias.jsx'));
 const Inasistencias = cargar(() => import('./pages/Inasistencias.jsx'));
 const PromocionMatriculas = cargar(() => import('./pages/PromocionMatriculas.jsx'));
@@ -137,6 +138,7 @@ function Gate() {
         <Route path="/academico" element={<Protegida path="/academico"><Academico /></Protegida>} />
         <Route path="/estudiantes" element={<Protegida path="/estudiantes"><Estudiantes /></Protegida>} />
         <Route path="/encadenamiento" element={<Protegida path="/encadenamiento"><Encadenamiento /></Protegida>} />
+        <Route path="/secretaria" element={<Protegida path="/secretaria"><Secretaria /></Protegida>} />
         <Route path="/licencias" element={<Protegida path="/licencias"><Licencias /></Protegida>} />
         <Route path="/matriculas" element={<Protegida path="/matriculas"><PromocionMatriculas /></Protegida>} />
         <Route path="/reportes-matriculas" element={<Protegida path="/reportes-matriculas"><ReportesMatriculas /></Protegida>} />

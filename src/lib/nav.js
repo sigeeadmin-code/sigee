@@ -61,6 +61,7 @@ export const NAV_BY_ROL = {
       { to: '/estudiantes', label: 'Estudiantes', icon: 'ti ti-users' },
       { to: '/base-docentes', label: 'Base de docentes', icon: 'ti ti-database', modulo: 'base_docentes' },
       { to: '/encadenamiento', label: 'Encadenamiento', icon: 'ti ti-link' },
+      { to: '/secretaria', label: 'Competencias de Secretaría', icon: 'ti ti-clipboard-check', soloRolDb: ['admin_plantel'] },
       { to: '/usuarios', label: 'Usuarios', icon: 'ti ti-user-cog', soloRolDb: ['super_admin', 'admin_plantel'] }
     ]},
     { cat: 'Académico', items: [
@@ -96,6 +97,8 @@ export const NAV_BY_ROL = {
       { to: '/notificaciones', label: 'Notificaciones', icon: 'ti ti-bell' }
     ]},
     { cat: 'Académico', items: [
+      { to: '/secretaria', label: 'Competencias de Secretaría', icon: 'ti ti-clipboard-check', soloRolDb: ['secretario', 'administrativo'] },
+      { to: '/docentes', label: 'Docentes', icon: 'ti ti-chalkboard', soloRolDb: ['secretario', 'administrativo'] },
       { to: '/estudiantes', label: 'Estudiantes', icon: 'ti ti-users' },
       { to: '/encadenamiento', label: 'Encadenamiento', icon: 'ti ti-link' },
       { to: '/matriculas', label: 'Promoción y traslados', icon: 'ti ti-arrow-up-circle' },
