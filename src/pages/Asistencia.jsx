@@ -5,6 +5,7 @@ import { useSession } from '../lib/SessionContext.jsx';
 import BuscadorEstudianteAsistencia from '../components/BuscadorEstudianteAsistencia.jsx';
 import FichaAsistenciaModal from '../components/FichaAsistenciaModal.jsx';
 import ListadosEstudiantesModal from '../components/ListadosEstudiantesModal.jsx';
+import ClasesSinRegistro from '../components/ClasesSinRegistro.jsx';
 import {
   fetchGradosConParalelos, fetchMateriasParalelo, fetchEstudiantesParaleloDetalle,
   fetchAsistencia, guardarAsistencia, fetchCargasDocente, fetchAsistenciaReciente,
@@ -774,16 +775,20 @@ function ConsultasEstadisticas() {
 export default function Asistencia() {
   const { profile } = useSession();
   const puedeRegistrar = profile.rolDb === 'docente';
+  const veClasesSinRegistro = puedeRegistrar || ROLES_VISTA_AMPLIA.includes(profile.rolDb);
   const [tab, setTab] = useState(puedeRegistrar ? 'registro' : 'consultas');
   return (
     <div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
         {puedeRegistrar && (
           <button className={'btn btn-sm ' + (tab === 'registro' ? 'btn-primary' : 'btn-secondary')} onClick={() => setTab('registro')}>Registro diario</button>
         )}
         <button className={'btn btn-sm ' + (tab === 'consultas' ? 'btn-primary' : 'btn-secondary')} onClick={() => setTab('consultas')}>Consultas y estadísticas</button>
+        {veClasesSinRegistro && (
+          <button className={'btn btn-sm ' + (tab === 'sinregistro' ? 'btn-primary' : 'btn-secondary')} onClick={() => setTab('sinregistro')}>Clases sin registro</button>
+        )}
       </div>
-      {tab === 'registro' && puedeRegistrar ? <RegistroDiario /> : <ConsultasEstadisticas />}
+      {tab === 'registro' && puedeRegistrar ? <RegistroDiario /> : tab === 'sinregistro' && veClasesSinRegistro ? <ClasesSinRegistro /> : <ConsultasEstadisticas />}
     </div>
   );
 }

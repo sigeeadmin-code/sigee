@@ -209,6 +209,29 @@ export async function fetchResumenPlantelGlobal(institucionId) {
   return data;
 }
 
+/** Clases del horario ya terminadas y sin ningún registro de asistencia (función clases_sin_asistencia). */
+export async function fetchClasesSinAsistencia(desde, hasta, institucionId = null) {
+  const { data, error } = await supabase.rpc('clases_sin_asistencia', { p_desde: desde, p_hasta: hasta, p_institucion: institucionId });
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+/** Estudiantes con matrícula activa de un paralelo (para registrar una clase desde Inspección). */
+export async function fetchEstudiantesDeParalelo(paraleloId) {
+  const { data, error } = await supabase.from('matriculas').select('estudiante_id, estudiantes!inner(id, nombres, apellidos)')
+    .eq('paralelo_id', paraleloId).eq('estado', 'activa');
+  if (error) throw new Error(error.message);
+  return (data || []).map(m => m.estudiantes).filter(Boolean)
+    .sort((a, b) => `${a.apellidos} ${a.nombres}`.localeCompare(`${b.apellidos} ${b.nombres}`, 'es'));
+}
+
+/** Inspección registra una clase que el docente no registró: todos presentes salvo las marcas (ausente / atraso con hora). */
+export async function registrarAsistenciaInspeccion(docenteMateriaId, fecha, marcas) {
+  const { data, error } = await supabase.rpc('registrar_asistencia_inspeccion', { p_docente_materia_id: docenteMateriaId, p_fecha: fecha, p_marcas: marcas });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
 export async function fetchAsistencia(docenteMateriaId, fecha) {
   return sel('asistencia', '*', q => q.eq('docente_materia_id', docenteMateriaId).eq('fecha', fecha));
 }

@@ -14,6 +14,7 @@ import DashboardDece from './DashboardDece.jsx';
 import RecordatorioRendimiento from '../components/RecordatorioRendimiento.jsx';
 import AvisosJustificacion from '../components/AvisosJustificacion.jsx';
 import PanelPlantelGlobal, { SelectorPlantel } from '../components/PanelPlantelGlobal.jsx';
+import { AvisoClasesSinRegistro } from '../components/ClasesSinRegistro.jsx';
 
 const SOST_LABEL = { Fiscal: 'Fiscal', Particular: 'Particular', Fiscomisional: 'Fiscomisional', Municipal: 'Municipal' };
 
@@ -326,6 +327,7 @@ function DashboardInspector() {
   return (
     <div>
       <div style={{ marginBottom: 4, fontSize: 12, color: 'var(--slate)' }}>Panel de inspectoría · autonomía del plantel</div>
+      <AvisoClasesSinRegistro />
       <h2 style={{ margin: '0 0 4px' }}>Dashboard</h2>
       <div style={{ fontSize: 13, color: 'var(--slate)', marginBottom: 18 }}>
         {institucion ? `${institucion.nombre}${institucion.amie ? ' · AMIE ' + institucion.amie : ''}` : ''}

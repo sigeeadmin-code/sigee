@@ -1,0 +1,9 @@
+-- Aplicado en Supabase como migración "asistencia_clases_sin_registro" (25 nov 2026).
+--  · asistencia.hora_llegada (time, opcional): hora de llegada del atraso. Columna nueva, no cambia lo existente.
+--  · clases_sin_asistencia(p_desde, p_hasta, p_institucion) → jsonb: clases del horario ya terminadas, en día lectivo
+--    (sigee_dia_lectivo), con estudiantes matriculados y SIN ningún registro de asistencia para esa carga y fecha.
+--    El docente ve solo las suyas; gestión ve las de su plantel (el super_admin elige plantel). Máximo 30 días atrás.
+--  · registrar_asistencia_inspeccion(p_docente_materia_id, p_fecha, p_marcas) → Inspección/administración registra la clase
+--    DENTRO de la misma carga y fecha: todos presentes salvo las marcas (ausente, o atraso con hora). Una fila por
+--    (estudiante, carga, fecha): no duplica. No reemplaza lo que el docente ya registró ni toca las justificadas.
+-- La asistencia sigue siempre ligada a una carga (docente_materia). (El texto de las funciones está en la migración aplicada.)
