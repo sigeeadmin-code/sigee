@@ -1,4 +1,5 @@
 import { supabase, ROLE_GROUP, ROLE_LABELS } from './supabase.js';
+import { idsPlantelesReales, soloPlantelesReales } from './plantelesReales.js';
 import { crearClienteBackend } from './backend.js';
 import { crearCache } from './cacheConsultas.js';
 import { aDos } from './calificaciones.js';
@@ -146,11 +147,26 @@ export async function fetchInstitucionData(institucionId) {
  */
 export async function fetchDatosGlobales(instituciones = []) {
   const instById = Object.fromEntries(instituciones.map(i => [i.id, i]));
-  const todo = (tabla, cols = '*') => paginarTodo(() => supabase.from(tabla).select(cols).order('id'));
-  const [docentesRows, estudiantesRows, periodos, grados, paralelos, matriculas, representantes, repEst] = await Promise.all([
-    todo('docentes'), todo('estudiantes'), todo('periodos_lectivos', 'id, institucion_id, activo'), todo('grados', 'id, nombre'),
-    todo('paralelos', 'id, nombre'), todo('matriculas'), todo('representantes', 'id, nombres, apellidos, telefono'), todo('representantes_estudiantes')
+  // Solo colegios reales y activos (el Admin global no ve los planteles de demostración; sus filas no deben sumarse).
+  const reales = idsPlantelesReales(instituciones);
+  const avisos = [];
+  // Cada tabla se carga con un reintento. Si falla una secundaria se sigue sin ella y se avisa; si fallan docentes o
+  // estudiantes se lanza el error para que la pantalla lo muestre (antes quedaba todo vacío en silencio).
+  const cargar = async (tabla, cols = '*', critica = false) => {
+    let ultimo;
+    for (let intento = 0; intento < 2; intento++) {
+      try { return await paginarTodo(() => supabase.from(tabla).select(cols).order('id')); } catch (e) { ultimo = e; }
+    }
+    if (critica) throw new Error(`No se pudo cargar «${tabla}»: ${ultimo?.message || ultimo}`);
+    avisos.push(tabla);
+    return [];
+  };
+  const [docentesTodos, estudiantesTodos, periodos, grados, paralelos, matriculas, representantes, repEst] = await Promise.all([
+    cargar('docentes', '*', true), cargar('estudiantes', '*', true), cargar('periodos_lectivos', 'id, institucion_id, activo'), cargar('grados', 'id, nombre'),
+    cargar('paralelos', 'id, nombre'), cargar('matriculas'), cargar('representantes', 'id, nombres, apellidos, telefono'), cargar('representantes_estudiantes')
   ]);
+  const docentesRows = soloPlantelesReales(docentesTodos, instituciones);
+  const estudiantesRows = soloPlantelesReales(estudiantesTodos, instituciones);
   const plantel = id => ({ institucionId: id, plantel: instById[id]?.nombre || '', amie: instById[id]?.amie || '' });
   const docentes = docentesRows.map(d => ({
     id: d.id, profileId: d.profile_id, nombre: `${d.apellidos || ''} ${d.nombres || ''}`.trim(),
@@ -180,7 +196,17 @@ export async function fetchDatosGlobales(instituciones = []) {
     };
   });
   docentes.sort(cmpNombre); estudiantes.sort(cmpNombre);
-  return { docentes, estudiantes, usuarios: [], administrativos: [], tareas: [], horario: [], periodoActivo: null, grados: [], paralelos: [], materias: [] };
+  return {
+    docentes, estudiantes, usuarios: [], administrativos: [], tareas: [], horario: [], periodoActivo: null, grados: [], paralelos: [], materias: [],
+    avisosCarga: avisos, plantelesReales: reales.size
+  };
+}
+
+/** Panel de un plantel para el Admin global: totales, plantilla de docentes, cursos y asistencia (función resumen_plantel_global). */
+export async function fetchResumenPlantelGlobal(institucionId) {
+  const { data, error } = await supabase.rpc('resumen_plantel_global', { p_institucion: institucionId });
+  if (error) throw new Error(error.message);
+  return data;
 }
 
 export async function fetchAsistencia(docenteMateriaId, fecha) {
@@ -743,17 +769,22 @@ export async function eliminarPlantel(id) {
 }
 
 export async function fetchMetricasGlobales() {
-  const [planteles, docentes, estudiantes, usuarios] = await Promise.all([
-    sel('instituciones', '*'),
-    sel('docentes', 'id, institucion_id, activo'),
-    sel('estudiantes', 'id, institucion_id, activo'),
-    sel('profiles', 'id, rol, activo')
+  const errores = [];
+  // Con paginación (sin tope de 1.000 filas) y sin tragar los errores: si algo falla se avisa en pantalla.
+  const cargar = async (tabla, cols) => {
+    try { return await paginarTodo(() => supabase.from(tabla).select(cols).order('id')); } catch (e) { errores.push(`${tabla}: ${e?.message || e}`); return []; }
+  };
+  const [planteles, docentesTodos, estudiantesTodos, usuarios] = await Promise.all([
+    cargar('instituciones', '*'), cargar('docentes', 'id, institucion_id, activo'),
+    cargar('estudiantes', 'id, institucion_id, activo'), cargar('profiles', 'id, rol, activo')
   ]);
+  // Las sumas son de colegios reales y activos: los planteles de demostración no se cuentan.
   return {
-    planteles,
-    docentes,
-    estudiantes,
-    usuarios: usuarios.map(u => ({ ...u, rol: ROLE_GROUP[u.rol] || u.rol }))
+    planteles: planteles.filter(p => !p.es_demo),
+    docentes: soloPlantelesReales(docentesTodos, planteles),
+    estudiantes: soloPlantelesReales(estudiantesTodos, planteles),
+    usuarios: usuarios.map(u => ({ ...u, rol: ROLE_GROUP[u.rol] || u.rol })),
+    errores
   };
 }
 

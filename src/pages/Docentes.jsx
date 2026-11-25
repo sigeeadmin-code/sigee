@@ -96,6 +96,15 @@ export default function Docentes() {
     return true;
   });
   const plantelesDisponibles = [...new Map(docentes.filter(d => d.institucionId).map(d => [d.institucionId, d.plantel || d.amie])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  // Vista global: cuántos docentes tiene cada colegio (de mayor a menor), para que se vea que la suma es la del sistema.
+  const resumenPlanteles = (() => {
+    const m = new Map();
+    docentes.filter(d => d.institucionId).forEach(d => {
+      const g = m.get(d.institucionId) || { id: d.institucionId, nombre: d.plantel, amie: d.amie, total: 0 };
+      g.total++; m.set(d.institucionId, g);
+    });
+    return [...m.values()].sort((a, b) => b.total - a.total || (a.nombre || '').localeCompare(b.nombre || '', 'es'));
+  })();
   const situacionesDisponibles = [...new Set(docentes.map(d => d.situacion).filter(Boolean))];
   const funcionesDisponibles = [...new Set(docentes.map(d => d.cargo).filter(Boolean))];
   const areasDisponibles = [...new Set(docentes.map(d => d.area).filter(Boolean))].sort();
@@ -314,7 +323,32 @@ export default function Docentes() {
         </div>
       </div>
 
-      {global && <p className="muted" style={{ margin: '0 0 8px' }}>Vista global: aquí aparecen los docentes de todos los planteles, con su plantel y AMIE. Para crear o editar, entra al plantel correspondiente.</p>}
+      {global && data?.errorCarga && (
+        <div style={{ margin: '0 0 10px', padding: '10px 12px', borderRadius: 8, background: 'var(--redL)', color: 'var(--redD)', border: '1px solid #fca5a5', fontSize: 13, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span><strong>No se pudieron cargar los docentes de todos los planteles.</strong> {data.errorCarga}</span>
+          <button className="btn btn-secondary btn-sm" onClick={() => refrescarDatos()}>Reintentar</button>
+        </div>
+      )}
+      {global && !data?.errorCarga && data?.avisosCarga?.length > 0 && (
+        <div style={{ margin: '0 0 10px', padding: '8px 12px', borderRadius: 8, background: 'var(--amberXL)', color: 'var(--amberD)', fontSize: 12.5 }}>
+          Los docentes cargaron completos, pero no se pudo leer: {data.avisosCarga.join(', ')}. Algunos datos de estudiantes pueden verse incompletos.
+        </div>
+      )}
+      {global && (
+        <div style={{ margin: '0 0 10px' }}>
+          <p className="muted" style={{ margin: '0 0 6px' }}>
+            Vista global: <strong>{docentes.length}</strong> docente{docentes.length === 1 ? '' : 's'} en <strong>{resumenPlanteles.length}</strong> colegio{resumenPlanteles.length === 1 ? '' : 's'} activo{resumenPlanteles.length === 1 ? '' : 's'} (no incluye planteles de demostración).
+            Para crear o editar fichas una por una, entra al plantel correspondiente.
+          </p>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {resumenPlanteles.map(p => (
+              <button key={p.id} className={'btn btn-sm ' + (fPlantel === p.id ? 'btn-primary' : 'btn-secondary')} onClick={() => { setFPlantel(fPlantel === p.id ? '' : p.id); setPagina(1); }} title={p.amie ? 'AMIE ' + p.amie : ''}>
+                {(p.nombre || 'Sin nombre').replace(/\s+/g, ' ').trim()} · {p.total}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="search-bar">
         <input className="fc" style={{ flex: 1, minWidth: 200 }} placeholder="Buscar por nombre, cédula o AMIE…"
           value={busqueda} onChange={e => setBusqueda(e.target.value)} />

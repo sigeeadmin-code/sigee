@@ -13,6 +13,7 @@ import MiSeguimiento from '../components/MiSeguimiento.jsx';
 import DashboardDece from './DashboardDece.jsx';
 import RecordatorioRendimiento from '../components/RecordatorioRendimiento.jsx';
 import AvisosJustificacion from '../components/AvisosJustificacion.jsx';
+import PanelPlantelGlobal, { SelectorPlantel } from '../components/PanelPlantelGlobal.jsx';
 
 const SOST_LABEL = { Fiscal: 'Fiscal', Particular: 'Particular', Fiscomisional: 'Fiscomisional', Municipal: 'Municipal' };
 
@@ -20,12 +21,14 @@ function DashboardGlobal() {
   const { profile } = useSession();
   const [m, setM] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [plantelId, setPlantelId] = useState(null);   // plantel elegido para verlo en detalle (solo lectura)
 
   useEffect(() => {
     (async () => { setM(await fetchMetricasGlobales()); setLoading(false); })();
   }, []);
 
   if (loading) return <p style={{ fontSize: 13, color: 'var(--slate)' }}>Cargando panorama de la Zona 7…</p>;
+  if (plantelId) return <PanelPlantelGlobal plantelId={plantelId} onVolver={() => setPlantelId(null)} />;
 
   const planteles = m.planteles || [];
   const docentes = m.docentes || [];
@@ -63,6 +66,11 @@ function DashboardGlobal() {
     .sort((a, b) => b.total - a.total)
     .slice(0, 6);
 
+  const atajos = planteles
+    .filter(p => p.activo !== false && ((docentesPorPlantel[p.id] || 0) + (estudiantesPorPlantel[p.id] || 0)) > 0)
+    .map(p => ({ id: p.id, nombre: p.nombre, amie: p.amie, docentes: docentesPorPlantel[p.id] || 0, estudiantes: estudiantesPorPlantel[p.id] || 0 }))
+    .sort((a, b) => (b.docentes + b.estudiantes) - (a.docentes + a.estudiantes));
+
   return (
     <div>
       <div style={{ marginBottom: 4, fontSize: 12, color: 'var(--slate)' }}>Panel de dirección · alcance global</div>
@@ -70,6 +78,13 @@ function DashboardGlobal() {
       <div style={{ fontSize: 13, color: 'var(--slate)', marginBottom: 18 }}>
         {profile.nombres} {profile.apellidos} · Super Admin Global
       </div>
+
+      {m.errores?.length > 0 && (
+        <div style={{ margin: '0 0 12px', padding: '8px 12px', borderRadius: 8, background: 'var(--amberXL)', color: 'var(--amberD)', fontSize: 12.5 }}>
+          No se pudo leer una parte de los datos ({m.errores.join(' · ')}); los totales pueden estar incompletos. Recarga la página para reintentar.
+        </div>
+      )}
+      <SelectorPlantel atajos={atajos} onElegir={setPlantelId} />
 
       <div className="grid-4">
         <div className="metric m-teal">

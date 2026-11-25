@@ -1,0 +1,6 @@
+-- Aplicado en Supabase como migración "resumen_plantel_global" (24 nov 2026).
+-- resumen_plantel_global(p_institucion uuid) → jsonb para el panel "Ver un plantel en detalle" del Dashboard del Admin global.
+-- SECURITY DEFINER, solo super_admin y supervisor_general (cualquier otro rol recibe 42501). Todo filtrado explícitamente por el plantel:
+--   plantel, totales (docentes, activos, con acceso, con carga, estudiantes activos/registrados, grados, paralelos),
+--   docentes (plantilla), cursos (estudiantes, hombres, mujeres, tutor), asistencia (hoy, últimos 30 días, tendencia 14 días).
+-- (El texto de la función está en la migración aplicada.)

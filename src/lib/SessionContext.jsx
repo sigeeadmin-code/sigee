@@ -58,7 +58,7 @@ export function SessionProvider({ children }) {
       setData(d);
     } else if (isSuperAdmin) {
       // Alcance global: todos los docentes y estudiantes de todos los planteles, con su plantel y AMIE.
-      setData(await fetchDatosGlobales(insts).catch(() => ({ docentes: [], estudiantes: [], usuarios: [], administrativos: [], tareas: [] })));
+      setData(await fetchDatosGlobales(insts).catch(e => ({ docentes: [], estudiantes: [], usuarios: [], administrativos: [], tareas: [], errorCarga: e?.message || 'No se pudieron cargar los datos de los planteles.' })));
     } else {
       setData({ docentes: [], estudiantes: [], usuarios: [], administrativos: [], tareas: [] });
     }
@@ -179,7 +179,9 @@ export function SessionProvider({ children }) {
   // otra pantalla y regresa, no vea una versión vieja en caché de los datos.
   const refrescarDatos = useCallback(async () => {
     if (profile?.institucion_id) { setData(await fetchInstitucionData(profile.institucion_id)); return; }
-    if (profile?.rolDb === 'super_admin') setData(await fetchDatosGlobales(instituciones));
+    if (profile?.rolDb === 'super_admin') {
+      setData(await fetchDatosGlobales(instituciones).catch(e => ({ docentes: [], estudiantes: [], usuarios: [], administrativos: [], tareas: [], errorCarga: e?.message || 'No se pudieron cargar los datos de los planteles.' })));
+    }
   }, [profile, instituciones]);
   return (
     <SessionCtx.Provider value={{ loading, profile, demo, entrarComoDemo, cerrarSesionCompleta, instituciones, institucion, data, error, login, logout, recuperando, solicitarRecuperacion, cambiarClave, terminarRecuperacion, refrescarDatos, permisos, esTutor, recargarPermisos: () => cargarPermisos(profile, profile?.institucion_id) }}>
