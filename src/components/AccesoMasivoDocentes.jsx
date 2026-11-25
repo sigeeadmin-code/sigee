@@ -43,7 +43,7 @@ export default function AccesoMasivoDocentes({ institucion, onClose, onDone }) {
         const clave = generarClave();
         const fila = { cedula: p.d.cedula || '', nombre: `${p.d.apellidos || ''} ${p.d.nombres || ''}`.trim(), correo: p.correo, clave, ok: false, detalle: '' };
         try {
-          await crearUsuario({ email: p.correo, password: clave, rol: 'docente', docente_id: p.d.id, nombres: p.d.nombres || fila.nombre, apellidos: p.d.apellidos || fila.nombre, cedula: p.d.cedula || undefined, telefono: p.d.telefono || undefined });
+          await crearUsuario({ email: p.correo, password: clave, rol: 'docente', institucion_id: institucion.id, docente_id: p.d.id, nombres: p.d.nombres || fila.nombre, apellidos: p.d.apellidos || fila.nombre, cedula: p.d.cedula || undefined, telefono: p.d.telefono || undefined });
           fila.ok = true;
         } catch (err) {
           let msg = err.message || 'No se pudo crear.';

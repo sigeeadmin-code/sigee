@@ -4,6 +4,7 @@ import { fetchResumenPlantelGlobal, fetchAnalisisCalificaciones } from '../lib/d
 import { fetchMatrizEstadisticaPlantel } from '../lib/dataEstadisticaPlantel.js';
 import { matrizPorParalelo, totalesMatriz, resumenPorJornada } from '../lib/estadisticaPlantel.js';
 import { limpiar, pctAsist } from '../lib/plantelesReales.js';
+import AccesoMasivoDocentes from './AccesoMasivoDocentes.jsx';
 
 const fmtPct = v => (v === null || v === undefined ? '—' : `${String(v).replace('.', ',')} %`);
 
@@ -90,6 +91,7 @@ export default function PanelPlantelGlobal({ plantelId, onVolver }) {
   const [errores, setErrores] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [busq, setBusq] = useState('');
+  const [darAcceso, setDarAcceso] = useState(false);
 
   const cargar = async () => {
     setCargando(true); setErrores([]); setR(null); setCal(null); setAmie(null);
@@ -233,7 +235,14 @@ export default function PanelPlantelGlobal({ plantelId, onVolver }) {
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>
-        <div className="ch"><h3>Plantilla de docentes ({r.docentes.length})</h3></div>
+        <div className="ch" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <h3>Plantilla de docentes ({r.docentes.length})</h3>
+          {r.docentes.some(d => d.activo && !d.acceso) && !r.plantel.es_demo && (
+            <button className="btn btn-primary btn-sm" onClick={() => setDarAcceso(true)} title="Crea el usuario y la contraseña temporal de los docentes que aún no tienen acceso y descarga el Excel">
+              🔑 Dar acceso a los {r.docentes.filter(d => d.activo && !d.acceso).length} docentes sin cuenta
+            </button>
+          )}
+        </div>
         <div className="cb">
           <input className="fc" style={{ marginBottom: 8 }} placeholder="Buscar por nombre, cargo o especialidad…" value={busq} onChange={e => setBusq(e.target.value)} />
           <div style={{ maxHeight: 420, overflow: 'auto' }}>
@@ -249,6 +258,13 @@ export default function PanelPlantelGlobal({ plantelId, onVolver }) {
           {docentes.length === 0 && <p style={{ fontSize: 13, color: 'var(--slate)' }}>Ningún docente coincide con la búsqueda.</p>}
         </div>
       </div>
+      {darAcceso && (
+        <AccesoMasivoDocentes
+          institucion={{ id: r.plantel.id, nombre: limpiar(r.plantel.nombre), amie: r.plantel.amie }}
+          onClose={() => setDarAcceso(false)}
+          onDone={() => { fetchResumenPlantelGlobal(plantelId).then(setR).catch(() => {}); }}   // refresco silencioso: no cierra la ventana donde se descarga el Excel
+        />
+      )}
     </div>
   );
 }
