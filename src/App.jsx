@@ -68,6 +68,7 @@ const MiPerfilFamilia = cargar(() => import('./pages/MiPerfilFamilia.jsx'));
 const MisEstudiantes = cargar(() => import('./pages/MisEstudiantes.jsx'));
 const Encadenamiento = cargar(() => import('./pages/Encadenamiento.jsx'));
 const Secretaria = cargar(() => import('./pages/Secretaria.jsx'));
+const PlantelDetalle = cargar(() => import('./pages/PlantelDetalle.jsx'));
 const Licencias = cargar(() => import('./pages/Licencias.jsx'));
 const Inasistencias = cargar(() => import('./pages/Inasistencias.jsx'));
 const PromocionMatriculas = cargar(() => import('./pages/PromocionMatriculas.jsx'));
@@ -130,6 +131,7 @@ function Gate() {
       <Route element={<Shell />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/instituciones" element={<Protegida path="/instituciones"><Planteles /></Protegida>} />
+        <Route path="/instituciones/:id" element={<Protegida path="/instituciones"><PlantelDetalle /></Protegida>} />
         <Route path="/roles-permisos" element={<Protegida path="/roles-permisos"><RolesPermisos /></Protegida>} />
         <Route path="/diagnostico" element={<Protegida path="/diagnostico"><Diagnostico /></Protegida>} />
         <Route path="/soporte-tic" element={<Protegida path="/soporte-tic"><SoporteTIC /></Protegida>} />

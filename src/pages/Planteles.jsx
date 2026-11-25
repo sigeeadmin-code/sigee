@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSession } from '../lib/SessionContext.jsx';
 import { supabase } from '../lib/supabase.js';
 import { fetchPlanteles, crearPlantel, actualizarPlantel, eliminarPlantel } from '../lib/data.js';
@@ -29,6 +30,7 @@ function generarPassword() {
 
 export default function Planteles() {
   const { profile } = useSession();
+  const navigate = useNavigate();
   const esSuperAdmin = profile.rolDb === 'super_admin';
 
   const [planteles, setPlanteles] = useState([]);
@@ -301,7 +303,7 @@ export default function Planteles() {
               </thead>
               <tbody>
                 {visibles.map(p => (
-                  <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => abrirEditar(p)}>
+                  <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/instituciones/${p.id}`)} title="Abrir el dashboard de este plantel">
                     <td><strong>{p.nombre}</strong></td>
                     <td>{p.amie || '—'}</td>
                     <td>{p.sostenimiento && <span className={'sost-badge ' + (SOST_CLASS[p.sostenimiento] || '')}>{SOST_LABEL[p.sostenimiento] || p.sostenimiento}</span>}</td>
@@ -312,7 +314,15 @@ export default function Planteles() {
                       <span className={'badge ' + (p.activo !== false ? 'b-ok' : 'b-muted')}>{p.activo !== false ? 'Activo' : 'Inactivo'}</span>
                       {p.finanzas_habilitado && <span className="badge b-info" style={{ marginLeft: 6 }}>Finanzas</span>}
                     </td>
-                    <td style={{ textAlign: 'right' }}>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                       <button className="btn btn-primary btn-sm" onClick={e => { e.stopPropagation(); navigate(`/instituciones/${p.id}`); }} title="Docentes, estudiantes, estadísticas AMIE, asistencia y alertas de calificaciones de este plantel">
+                         📊 Ver dashboard
+                       </button>
+                       {' '}
+                       <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); abrirEditar(p); }} title="Editar los datos del plantel">
+                         Editar
+                       </button>
+                       {' '}
                       <button
                         className="btn btn-ghost btn-sm"
                         disabled={exportandoId === p.id}
