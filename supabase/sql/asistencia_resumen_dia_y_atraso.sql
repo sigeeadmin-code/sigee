@@ -1,0 +1,12 @@
+-- Aplicado en Supabase como migraciones "asistencia_resumen_dia_y_atraso_inspeccion", "asistencia_resumen_dia_core_sin_temp" y
+-- "asistencia_ventana_por_franja" (26 nov 2026).
+--  · fn_asistencia_reglas (trigger de asistencia): se agregan 2 reglas.
+--      1) Un atraso que Inspección registró (con hora_llegada) no lo pisa el docente al volver a guardar su lista.
+--      2) Una falta o un atraso de un día anterior no vuelve a presente (solo super_admin; queda en auditoría).
+--  · resumen_dia_docentes(p_institucion) → jsonb: por docente, sus clases de hoy (franjas, estado registrada/en_curso/pendiente/sin_registro,
+--    presentes/ausentes/atrasos/justificados, lista de ausentes y de atrasos con hora). Roles: super_admin, admin_plantel, secretario,
+--    inspector_general, supervisor_plantel (el Vicerrector/supervisor lo ve como información).
+--  · marcar_atraso_inspeccion(p_asistencia_ids) → SOLO inspector_general: pasa de AUSENTE a ATRASO, solo el mismo día y solo mientras la
+--    hora actual cae dentro de una franja de ESA materia; la hora de llegada la pone el servidor. No hay camino de vuelta a presente.
+--  · Funciones núcleo (_resumen_dia_core, _marcar_atraso_core) reciben fecha y hora para poder probarlas; no se exponen a ningún rol.
+-- (El texto de las funciones está en las migraciones aplicadas.)

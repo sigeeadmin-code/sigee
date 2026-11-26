@@ -209,6 +209,20 @@ export async function fetchResumenPlantelGlobal(institucionId) {
   return data;
 }
 
+/** Resumen de hoy por docente (clases, estado, ausentes y atrasos) para Inspección y administración. */
+export async function fetchResumenDiaDocentes(institucionId = null) {
+  const { data, error } = await supabase.rpc('resumen_dia_docentes', { p_institucion: institucionId });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+/** Inspector General: pasa de ausente a atraso (hora puesta por el servidor), solo el mismo día y dentro de la hora de esa clase. */
+export async function marcarAtrasoInspeccion(asistenciaIds) {
+  const { data, error } = await supabase.rpc('marcar_atraso_inspeccion', { p_asistencia_ids: asistenciaIds });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
 /** Clases del horario ya terminadas y sin ningún registro de asistencia (función clases_sin_asistencia). */
 export async function fetchClasesSinAsistencia(desde, hasta, institucionId = null) {
   const { data, error } = await supabase.rpc('clases_sin_asistencia', { p_desde: desde, p_hasta: hasta, p_institucion: institucionId });
@@ -2428,7 +2442,7 @@ export async function buscarEstudiantesAsistencia(institucionId, consulta, { par
 export async function fetchFichaAsistencia(institucionId, estudianteId, desde, hasta) {
   const [clases, justificaciones, avisos, oficios, vinculos] = await Promise.all([
     paginarTodo(() => supabase.from('asistencia')
-      .select('id, fecha, estado, observacion, docente_materia(materias(nombre), docentes(nombres, apellidos))')
+      .select('id, fecha, estado, observacion, hora_llegada, docente_materia(materias(nombre), docentes(nombres, apellidos))')
       .eq('estudiante_id', estudianteId).gte('fecha', desde).lte('fecha', hasta).order('id')),
     supabase.from('justificaciones').select('id, fecha, motivo, estado, created_at').eq('estudiante_id', estudianteId).order('fecha', { ascending: false }).then(r => r.data || []),
     supabase.from('avisos_inasistencia').select('id, fecha, mensaje, canal, enviado_at').eq('estudiante_id', estudianteId).order('enviado_at', { ascending: false }).then(r => r.data || []),
@@ -2440,7 +2454,7 @@ export async function fetchFichaAsistencia(institucionId, estudianteId, desde, h
   const correoRep = reps.map(r => String(r.email || '').trim()).find(e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) || null;
   return {
     registros: clases.map(c => ({
-      fecha: c.fecha, estado: c.estado, observacion: c.observacion || '',
+      fecha: c.fecha, estado: c.estado, observacion: c.observacion || '', hora: c.hora_llegada ? String(c.hora_llegada).slice(0, 5) : '',
       materia: c.docente_materia?.materias?.nombre || 'Sin materia',
       docente: c.docente_materia?.docentes ? `${c.docente_materia.docentes.nombres || ''} ${c.docente_materia.docentes.apellidos || ''}`.trim() : ''
     })),

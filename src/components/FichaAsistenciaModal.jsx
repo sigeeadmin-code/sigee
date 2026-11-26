@@ -3,7 +3,7 @@ import { useSession } from '../lib/SessionContext.jsx';
 import { fetchFichaAsistencia, fetchCalendario, justificarFalta, fetchVentanaFalta, registrarAviso, registrarOficiosEmitidos, marcarOficioEntregado, enviarOficioPorCorreo } from '../lib/data.js';
 import { resumenAnioLectivo, contarDiasLectivos } from '../lib/calendarioResumen.js';
 import OficioFaltasModal from './OficioFaltasModal.jsx';
-import { analizarFicha, mensajeWhatsApp, urlWhatsApp, telefonoEcuador, fechaCorta } from '../lib/fichaAsistencia.js';
+import { analizarFicha, textoEstadoClase, mensajeWhatsApp, urlWhatsApp, telefonoEcuador, fechaCorta } from '../lib/fichaAsistencia.js';
 import { rangoPeriodo, ETIQUETA_CLASE, UMBRALES_DEFECTO, umbralesValidos } from '../lib/asistenciaAnalisis.js';
 
 const PERIODOS = [['todo', 'Todo'], ['semana', 'Semana'], ['mes', 'Mes'], ['mes_anterior', 'Mes anterior'], ['custom', 'Personalizado']];
@@ -271,7 +271,7 @@ export default function FichaAsistenciaModal({ estudiante, onClose, puedeOficio 
                           <td><Pildora colores={COLOR_DIA[d.estado]} texto={COLOR_DIA[d.estado][2]} /></td>
                           <td style={{ fontSize: 12.5 }}>
                             {d.estado === 'presente' ? `Presente en las ${d.detalle.length} clases` : d.detalle.filter(x => x.estado !== 'presente').map((x, i) => (
-                              <span key={i} style={{ marginRight: 10, color: COLOR_ESTADO[x.estado] }}>{x.materia} <em>({x.estado})</em></span>))}
+                              <span key={i} style={{ marginRight: 10, color: COLOR_ESTADO[x.estado] }}>{x.materia} <em>({textoEstadoClase(x)})</em></span>))}
                             {d.estado !== 'presente' && d.detalle.some(x => x.estado === 'presente') && <span style={{ color: 'var(--slate)' }}>· presente en {d.detalle.filter(x => x.estado === 'presente').length}</span>}
                           </td>
                         </tr>))}

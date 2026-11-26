@@ -39,7 +39,7 @@ export function analizarFicha(registros, umbrales = UMBRALES_DEFECTO) {
   }
   const listaDias = [...porFecha.entries()].map(([fecha, rs]) => ({
     fecha, dia: diaSemana(fecha), estado: estadoDia(rs.map(r => r.estado)),
-    detalle: rs.map(r => ({ materia: r.materia || 'Sin materia', estado: r.estado, observacion: r.observacion || '' }))
+    detalle: rs.map(r => ({ materia: r.materia || 'Sin materia', estado: r.estado, observacion: r.observacion || '', hora: r.hora || '' }))
   })).sort((a, b) => b.fecha.localeCompare(a.fecha));
 
   // por día de la semana y por mes (solo cuentan días)
@@ -103,4 +103,12 @@ export function mensajeWhatsApp({ estudiante, representante, institucion, fechas
     `el/la estudiante ${estudiante.nombre}${estudiante.curso ? ` (${estudiante.curso})` : ''} registra ` +
     `${n === 1 ? 'una inasistencia injustificada el' : `${n} inasistencias injustificadas los días`} ${listaFechas(fechas)}. ` +
     `Le solicitamos presentar la justificación correspondiente a la brevedad. Gracias por su atención.`;
+}
+
+/** Texto del estado de una clase en la ficha: «atraso 07:25 · por Inspección» (la hora y quién lo registró cuando existen). */
+export function textoEstadoClase(x) {
+  let t = x.estado || '';
+  if (x.estado === 'atraso' && x.hora) t += ` ${x.hora}`;
+  if (x.estado === 'atraso' && /Inspecci[oó]n/i.test(x.observacion || '')) t += ' · por Inspección';
+  return t;
 }

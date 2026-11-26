@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
 import { fetchAnalisisAsistencia, registrarOficiosEmitidos } from '../lib/data.js';
 import FichaAsistenciaModal from '../components/FichaAsistenciaModal.jsx';
+import ResumenDiaDocentes from '../components/ResumenDiaDocentes.jsx';
 import OficioFaltasModal from '../components/OficioFaltasModal.jsx';
 import { descargarLibro, descargarCsv } from '../lib/exportLibro.js';
 import {
@@ -131,6 +132,8 @@ export default function AnalisisAsistencia() {
           <button className="btn btn-primary" onClick={() => setOficio(conOficio)} disabled={!conOficio.length} title="Un oficio por cada estudiante con faltas injustificadas en la lista actual">📄 Oficios ({conOficio.length})</button>
         </div>
       </div>
+
+      <ResumenDiaDocentes />
 
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="cb" style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>

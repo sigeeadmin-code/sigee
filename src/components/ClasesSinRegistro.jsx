@@ -161,7 +161,7 @@ export function AvisoClasesSinRegistro() {
             ? '✅ Todas las clases de hoy que ya terminaron tienen asistencia.'
             : <><strong>{n.length}</strong> clase{n.length === 1 ? '' : 's'} de hoy sin asistencia ({docentes} docente{docentes === 1 ? '' : 's'}).</>}
         </div>
-        <Link to="/asistencia" className="btn btn-secondary btn-sm">Ver clases sin registro</Link>
+        <Link to="/analisis-asistencia" className="btn btn-secondary btn-sm">Ver hoy por docente</Link>
       </div>
     </div>
   );

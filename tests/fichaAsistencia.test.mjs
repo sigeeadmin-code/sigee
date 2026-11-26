@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { analizarFicha, coincideBusqueda, palabraClave, telefonoEcuador, urlWhatsApp, listaFechas, mensajeWhatsApp, sinTildes } from '../src/lib/fichaAsistencia.js';
+import { textoEstadoClase, analizarFicha, coincideBusqueda, palabraClave, telefonoEcuador, urlWhatsApp, listaFechas, mensajeWhatsApp, sinTildes } from '../src/lib/fichaAsistencia.js';
 
 // Septiembre 2026: 1 martes. 3 jueves, 4 viernes, 7 lunes, 8 martes.
 const R = (fecha, materia, estado) => ({ fecha, materia, estado, docente: 'Prof. ' + materia });
@@ -83,5 +83,10 @@ assert.match(m1, /registra una inasistencia injustificada el 03\/09\/2026/);
 const m2 = mensajeWhatsApp({ estudiante: { nombre: 'X' }, representante: null, institucion: null, fechas: ['2026-09-03', '2026-09-04'] });
 assert.match(m2, /Estimado\(a\) representante/);
 assert.match(m2, /2 inasistencias injustificadas los días 03\/09\/2026 y 04\/09\/2026/);
+
+// --- Atraso registrado por Inspección: la ficha muestra la hora y quién lo registró
+assert.equal(textoEstadoClase({ estado: 'atraso', hora: '07:25', observacion: 'Atraso registrado por Inspección a las 07:25' }), 'atraso 07:25 · por Inspección');
+assert.equal(textoEstadoClase({ estado: 'atraso', hora: '', observacion: '' }), 'atraso');
+assert.equal(textoEstadoClase({ estado: 'ausente', hora: '07:25', observacion: '' }), 'ausente');
 
 console.log('OK fichaAsistencia: todas las pruebas pasaron');
