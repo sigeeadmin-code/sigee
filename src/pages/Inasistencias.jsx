@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSession } from '../lib/SessionContext.jsx';
-import { fetchInasistencias, registrarAviso, fetchFichaAsistencia, registrarOficiosEmitidos, enviarOficioPorCorreo } from '../lib/data.js';
+import { fetchInasistencias, registrarAviso, fetchFichaAsistencia, registrarOficiosEmitidos, enviarOficioPorCorreo, fetchEstadoCorreo } from '../lib/data.js';
+import AvisoCorreoModal from '../components/AvisoCorreoModal.jsx';
 import OficioFaltasModal from '../components/OficioFaltasModal.jsx';
 import { analizarFicha } from '../lib/fichaAsistencia.js';
 
@@ -14,7 +15,7 @@ function linkWhatsapp(telefono, nombreAlumno, fecha) {
 }
 
 export default function Inasistencias() {
-  const { profile, institucion } = useSession();
+  const { profile, institucion, demo } = useSession();
   const institucionId = institucion?.id;
   const [dias, setDias] = useState(7);
   const [filtro, setFiltro] = useState('pendientes'); // pendientes | avisadas | todas
@@ -24,6 +25,8 @@ export default function Inasistencias() {
   const [toast, setToast] = useState(null);
   const [oficio, setOficio] = useState(null);   // { alumnos, periodo } mientras el modal del oficio está abierto
   const [armando, setArmando] = useState(null);
+  const [correoItem, setCorreoItem] = useState(null);     // fila para la que se abre el aviso por correo
+  const [correoOk, setCorreoOk] = useState(null);         // ¿el servidor tiene activado el envío de correo?
 
   const cargar = useCallback(async () => {
     if (!institucionId) return;
@@ -34,6 +37,7 @@ export default function Inasistencias() {
   }, [institucionId, dias]);
 
   useEffect(() => { cargar(); }, [cargar]);
+  useEffect(() => { fetchEstadoCorreo().then(r => setCorreoOk(!!r?.configurado)).catch(() => setCorreoOk(null)); }, []);
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 3000); return () => clearTimeout(t); }, [toast]);
 
   async function marcarAvisado(item) {
@@ -142,6 +146,11 @@ export default function Inasistencias() {
                           onClick={() => abrirWhatsappYMarcar(item)}>
                           <span className="ti ti-brand-whatsapp" /> Avisar
                         </button>
+                        <button className="btn btn-primary btn-sm" disabled={!item.correoRep || enviando === item.asistenciaId}
+                          onClick={() => setCorreoItem(item)}
+                          title={item.correoRep ? 'Envía un aviso corto de esta inasistencia al correo del representante' : 'El representante no tiene un correo registrado'}>
+                          <span className="ti ti-mail" /> Correo
+                        </button>
                         <button className="btn btn-ghost btn-sm" disabled={enviando === item.asistenciaId}
                           onClick={() => marcarAvisado(item)} title="Ya lo avisé por otro medio (llamada, en persona)">
                           Marcar avisado
@@ -159,6 +168,19 @@ export default function Inasistencias() {
       {oficio && <OficioFaltasModal alumnos={oficio.alumnos} institucion={institucion} periodo={oficio.periodo} onClose={() => setOficio(null)} onRegistrar={registrarOficio} onEnviarCorreo={enviarOficioPorCorreo} />}
 
       {toast && <div className={'toast ' + (toast.tipo === 'ok' ? 'ok' : 'err')}>{toast.msg}</div>}
+      {correoItem && (
+        <AvisoCorreoModal
+          item={correoItem}
+          institucionNombre={institucion?.nombre}
+          demo={!!demo?.esDemo}
+          correoConfigurado={correoOk}
+          onClose={() => setCorreoItem(null)}
+          onEnviado={(it, r) => {
+            if (!r?.simulado) setItems(list => list.map(x => (x.estudianteId === it.estudianteId && x.fecha === it.fecha ? { ...x, avisado: true } : x)));
+            setToast({ tipo: 'ok', msg: r?.simulado ? 'Demostración: envío simulado.' : 'Correo enviado y aviso registrado.' });
+          }}
+        />
+      )}
     </div>
   );
 }

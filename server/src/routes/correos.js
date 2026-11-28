@@ -3,6 +3,7 @@ import { requireAuth, requireRole } from '../lib/auth.js';
 import { supabase } from '../lib/supabase.js';
 import { correoConfigurado, enviarCorreo, correoValido } from '../lib/correo.js';
 import { normalizarOficio, oficioAHtml, oficioATexto } from '../lib/oficioCorreo.js';
+import { procesarAviso } from '../lib/avisoInasistenciaServicio.js';
 
 export const correosRouter = Router();
 
@@ -61,6 +62,16 @@ correosRouter.post('/oficio', requireAuth, requireRole(...ROLES_OFICIO), async (
     if (eIns) console.error('[correos] enviado pero no se pudo registrar el oficio', eIns.message);
   }
   res.status(201).json({ enviado: true, destinos, registrado });
+});
+
+// POST /correos/aviso — aviso corto de inasistencia al representante (el equivalente al botón de WhatsApp).
+// body: { estudiante_id, fecha:'AAAA-MM-DD', reenviar?: boolean }. La lógica vive en lib/avisoInasistenciaServicio.js (con pruebas).
+correosRouter.post('/aviso', requireAuth, requireRole(...ROLES_OFICIO), async (req, res) => {
+  const r = await procesarAviso(
+    { supabase, correoConfigurado, enviarCorreo },
+    { body: req.body || {}, perfil: req.profile, usuario: req.user, demo: !!req.demo?.es_demo }
+  );
+  res.status(r.status).json(r.body);
 });
 
 const txt = v => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 200) : null);

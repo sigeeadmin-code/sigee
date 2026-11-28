@@ -2499,6 +2499,16 @@ export async function fetchHistorialAsistenciaEstudiante(institucionId, estudian
 }
 
 /** Envía por correo el oficio al representante (el servidor toma el destinatario de la base) y, si se pide, deja constancia. */
+/** ¿El servidor tiene activado el envío de correo? (no expone ninguna clave) */
+export async function fetchEstadoCorreo() {
+  return llamarBackend('GET', '/correos/estado');
+}
+
+/** Aviso corto de inasistencia por correo al representante. El servidor arma el texto y toma el destinatario de la base. */
+export async function enviarAvisoPorCorreo({ estudianteId, fecha, reenviar = false }) {
+  return llamarBackend('POST', '/correos/aviso', { estudiante_id: estudianteId, fecha, reenviar });
+}
+
 export async function enviarOficioPorCorreo({ estudianteId, oficio, registro }) {
   return llamarBackend('POST', '/correos/oficio', { estudiante_id: estudianteId, oficio, ...(registro ? { registro } : {}) });
 }
